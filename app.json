@@ -37,7 +37,13 @@
           }
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow TummyTracker to use the camera to scan product barcodes."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

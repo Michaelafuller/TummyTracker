@@ -1,17 +1,22 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 
 import { Spacing } from '@/constants/theme';
 import { createLogEntry } from '@/db/repository';
 import type { BuiltLogEntry } from '@/features/logging/formModel';
 import { LogEntryForm } from '@/features/logging/LogEntryForm';
+import { usePrefillStore } from '@/features/logging/prefillStore';
 
 export default function NewEntryScreen() {
   const router = useRouter();
-  // Phase 1c passes a scanned barcode through to pre-fill the entry.
-  const { barcode } = useLocalSearchParams<{ barcode?: string }>();
+  // The barcode scanner (Phase 1c) drops prefill here before navigating in.
+  const [prefill] = useState(() => usePrefillStore.getState().prefill);
+  const clearPrefill = usePrefillStore((state) => state.clearPrefill);
   const [submitting, setSubmitting] = useState(false);
+
+  // Consume the prefill once so a later manual "Add entry" starts blank.
+  useEffect(() => () => clearPrefill(), [clearPrefill]);
 
   async function handleSubmit(entry: BuiltLogEntry) {
     setSubmitting(true);
@@ -26,7 +31,7 @@ export default function NewEntryScreen() {
   return (
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <LogEntryForm
-        initial={barcode ? { barcode } : undefined}
+        initial={prefill ?? undefined}
         onSubmit={handleSubmit}
         submitLabel="Save entry"
         submitting={submitting}

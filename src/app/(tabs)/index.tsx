@@ -22,14 +22,27 @@ export default function HomeScreen() {
           </ThemedText>
         </ThemedView>
 
-        <Link href="/entry/new" asChild>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Add an entry"
-            style={[styles.cta, { backgroundColor: theme.text }]}>
-            <ThemedText style={[styles.ctaLabel, { color: theme.background }]}>+ Add entry</ThemedText>
-          </Pressable>
-        </Link>
+        <ThemedView style={styles.actions}>
+          <Link href="/scan" asChild>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Scan a barcode"
+              style={[styles.cta, { backgroundColor: theme.text }]}>
+              <ThemedText style={[styles.ctaLabel, { color: theme.background }]}>
+                Scan barcode
+              </ThemedText>
+            </Pressable>
+          </Link>
+
+          <Link href="/entry/new" asChild>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Add an entry manually"
+              style={[styles.secondaryCta, { backgroundColor: theme.backgroundElement }]}>
+              <ThemedText style={styles.ctaLabel}>+ Add manually</ThemedText>
+            </Pressable>
+          </Link>
+        </ThemedView>
       </SafeAreaView>
     </ThemedView>
   );
@@ -55,7 +68,15 @@ const styles = StyleSheet.create({
   subtitle: {
     textAlign: 'center',
   },
+  actions: {
+    gap: Spacing.three,
+  },
   cta: {
+    borderRadius: Spacing.three,
+    paddingVertical: Spacing.three,
+    alignItems: 'center',
+  },
+  secondaryCta: {
     borderRadius: Spacing.three,
     paddingVertical: Spacing.three,
     alignItems: 'center',

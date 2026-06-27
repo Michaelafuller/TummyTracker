@@ -1,0 +1,107 @@
+// Pure mapping of an Open Food Facts API response to our nutrition shape
+// (BUILD_PLAN.md §1c). No network here — `features/barcode/api.ts` does the fetch
+// and hands the parsed JSON to `mapOffResponse`. Keeping this pure makes it
+// fixture-testable.
+
+import type { LogEntryFormState, NutritionInputs } from '@/features/logging/formModel';
+import { NUTRITION_FIELDS } from '@/lib/validation';
+
+export interface OffNutrition {
+  calories: number | null;
+  fatG: number | null;
+  carbsG: number | null;
+  proteinG: number | null;
+  fiberG: number | null;
+  sugarG: number | null;
+  sodiumMg: number | null;
+}
+
+export interface OffProduct {
+  barcode: string;
+  found: boolean;
+  name: string | null;
+  nutrition: OffNutrition;
+}
+
+/** Coerce an unknown value to a finite, non-negative number, or null. */
+function num(value: unknown): number | null {
+  const n = typeof value === 'string' ? Number(value) : value;
+  if (typeof n !== 'number' || !Number.isFinite(n) || n < 0) return null;
+  return n;
+}
+
+function round(value: number | null, decimals: number): number | null {
+  if (value == null) return null;
+  const factor = 10 ** decimals;
+  return Math.round(value * factor) / factor;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+}
+
+const EMPTY_NUTRITION: OffNutrition = {
+  calories: null,
+  fatG: null,
+  carbsG: null,
+  proteinG: null,
+  fiberG: null,
+  sugarG: null,
+  sodiumMg: null,
+};
+
+/**
+ * Map a raw OFF `/api/v2/product/{barcode}.json` response to an OffProduct.
+ * Uses per-100g nutriments. Sodium is reported in grams by OFF and converted to
+ * milligrams (falling back to salt/2.5 when sodium is absent).
+ */
+export function mapOffResponse(barcode: string, json: unknown): OffProduct {
+  const root = asRecord(json);
+  const found = num(root.status) === 1 || root.status === 1;
+  if (!found) {
+    return { barcode, found: false, name: null, nutrition: { ...EMPTY_NUTRITION } };
+  }
+
+  const product = asRecord(root.product);
+  const nutriments = asRecord(product.nutriments);
+
+  const nameRaw = product.product_name;
+  const name = typeof nameRaw === 'string' && nameRaw.trim().length > 0 ? nameRaw.trim() : null;
+
+  let sodiumMg = num(nutriments['sodium_100g']);
+  if (sodiumMg != null) {
+    sodiumMg = sodiumMg * 1000; // grams → mg
+  } else {
+    const saltG = num(nutriments['salt_100g']);
+    sodiumMg = saltG != null ? (saltG / 2.5) * 1000 : null;
+  }
+
+  const nutrition: OffNutrition = {
+    calories: round(num(nutriments['energy-kcal_100g']), 0),
+    fatG: round(num(nutriments['fat_100g']), 1),
+    carbsG: round(num(nutriments['carbohydrates_100g']), 1),
+    proteinG: round(num(nutriments['proteins_100g']), 1),
+    fiberG: round(num(nutriments['fiber_100g']), 1),
+    sugarG: round(num(nutriments['sugars_100g']), 1),
+    sodiumMg: round(sodiumMg, 0),
+  };
+
+  return { barcode, found: true, name, nutrition };
+}
+
+function nutritionToInputs(nutrition: OffNutrition): NutritionInputs {
+  return NUTRITION_FIELDS.reduce((acc, field) => {
+    const value = nutrition[field];
+    acc[field] = value == null ? '' : String(value);
+    return acc;
+  }, {} as NutritionInputs);
+}
+
+/** Convert a looked-up product into form prefill state for the manual entry form. */
+export function offProductToFormState(product: OffProduct): Partial<LogEntryFormState> {
+  return {
+    name: product.name ?? '',
+    barcode: product.barcode,
+    nutrition: nutritionToInputs(product.nutrition),
+  };
+}
