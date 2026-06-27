@@ -1,5 +1,5 @@
 import { Link } from 'expo-router';
-import { Pressable, StyleSheet } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -52,16 +52,25 @@ export default function HomeScreen() {
             </Pressable>
           </Link>
 
-          <Link href="/settings" asChild>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Reminder settings"
-              style={styles.linkRow}>
-              <ThemedText type="link" themeColor="textSecondary">
-                Reminders
-              </ThemedText>
-            </Pressable>
-          </Link>
+          <View style={styles.links}>
+            <Link href="/insights" asChild>
+              <Pressable accessibilityRole="button" accessibilityLabel="Insights" style={styles.linkRow}>
+                <ThemedText type="link" themeColor="textSecondary">
+                  Insights
+                </ThemedText>
+              </Pressable>
+            </Link>
+            <Link href="/settings" asChild>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Reminder settings"
+                style={styles.linkRow}>
+                <ThemedText type="link" themeColor="textSecondary">
+                  Reminders
+                </ThemedText>
+              </Pressable>
+            </Link>
+          </View>
         </ThemedView>
       </SafeAreaView>
     </ThemedView>
@@ -104,6 +113,11 @@ const styles = StyleSheet.create({
   ctaLabel: {
     fontSize: 18,
     fontWeight: 600,
+  },
+  links: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: Spacing.five,
   },
   linkRow: {
     alignItems: 'center',

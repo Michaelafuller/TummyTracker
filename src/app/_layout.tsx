@@ -17,6 +17,7 @@ export default function RootLayout() {
           <Stack.Screen name="entry/[id]" options={{ title: 'Edit entry' }} />
           <Stack.Screen name="scan" options={{ title: 'Scan barcode', presentation: 'modal' }} />
           <Stack.Screen name="settings" options={{ title: 'Reminders', presentation: 'modal' }} />
+          <Stack.Screen name="insights" options={{ title: 'Insights', presentation: 'modal' }} />
         </Stack>
       </AppProviders>
     </ThemeProvider>

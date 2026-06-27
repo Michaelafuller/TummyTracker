@@ -8,6 +8,7 @@ import { Spacing } from '@/constants/theme';
 import { LOG_ENTRY_TYPES, MEAL_SLOTS, type MealSlot } from '@/db/schema';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDateInput, formatTimeInput } from '@/lib/datetime';
+import { NUTRITION_LABELS } from '@/lib/nutrition';
 import { MAX_NOTES_LENGTH, NUTRITION_FIELDS, type NutritionField } from '@/lib/validation';
 import { SentimentSelector } from '@/features/sentiment/SentimentSelector';
 import {
@@ -18,17 +19,7 @@ import {
   type LogEntryFormState,
 } from './formModel';
 
-const NUTRITION_LABELS: Record<NutritionField, string> = {
-  calories: 'Calories',
-  fatG: 'Fat (g)',
-  carbsG: 'Carbs (g)',
-  proteinG: 'Protein (g)',
-  fiberG: 'Fiber (g)',
-  sugarG: 'Sugar (g)',
-  sodiumMg: 'Sodium (mg)',
-};
-
-const TYPE_OPTIONS = LOG_ENTRY_TYPES.map((value) => ({
+const TYPE_OPTIONS = LOG_ENTRY_TYPES.filter((value) => value !== 'bowel_movement').map((value) => ({
   value,
   label: value[0].toUpperCase() + value.slice(1),
 }));
