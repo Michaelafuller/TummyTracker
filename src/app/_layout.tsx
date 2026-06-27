@@ -13,6 +13,7 @@ export default function RootLayout() {
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="entry/new" options={{ title: 'Add entry', presentation: 'modal' }} />
+          <Stack.Screen name="entry/[id]" options={{ title: 'Edit entry' }} />
           <Stack.Screen name="scan" options={{ title: 'Scan barcode', presentation: 'modal' }} />
         </Stack>
       </AppProviders>

@@ -2,9 +2,9 @@
 // form and produces either a validated entry payload or per-field errors. Keeping
 // this logic React-free is where the test leverage lives (CLAUDE.md §2/§8).
 
-import type { LogEntryType, MealSlot } from '@/db/schema';
-import type { SentimentValue } from '@/features/sentiment/scale';
-import { parseDateTime } from '@/lib/datetime';
+import type { LogEntry, LogEntryType, MealSlot } from '@/db/schema';
+import { isSentimentValue, type SentimentValue } from '@/features/sentiment/scale';
+import { formatDateInput, formatTimeInput, parseDateTime } from '@/lib/datetime';
 import { parseOptionalNumber } from '@/lib/number';
 import { NUTRITION_FIELDS, type NutritionField, validateNotes } from '@/lib/validation';
 
@@ -58,6 +58,27 @@ export function emptyNutritionInputs(): NutritionInputs {
     acc[field] = '';
     return acc;
   }, {} as NutritionInputs);
+}
+
+/** Hydrate the form state from a persisted entry (used by the edit screen). */
+export function logEntryToFormState(entry: LogEntry): LogEntryFormState {
+  const nutrition = NUTRITION_FIELDS.reduce((acc, field) => {
+    const value = entry[field];
+    acc[field] = value == null ? '' : String(value);
+    return acc;
+  }, {} as NutritionInputs);
+
+  return {
+    type: entry.type,
+    name: entry.name,
+    mealSlot: entry.mealSlot,
+    dateInput: formatDateInput(entry.loggedAt),
+    timeInput: formatTimeInput(entry.loggedAt),
+    sentiment: isSentimentValue(entry.sentiment) ? entry.sentiment : null,
+    notes: entry.notes ?? '',
+    nutrition,
+    barcode: entry.barcode,
+  };
 }
 
 /** Validate the raw form state and build the entry payload when everything is valid. */

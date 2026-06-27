@@ -1,0 +1,81 @@
+import {
+  entryDateKeys,
+  filterEntriesInRange,
+  getPeriodRange,
+  groupEntriesByDay,
+} from '../journal';
+
+const at = (y: number, m: number, d: number, h = 12, min = 0) =>
+  new Date(y, m - 1, d, h, min).getTime();
+
+describe('getPeriodRange', () => {
+  const anchor = at(2026, 6, 24); // Wed 2026-06-24
+
+  it('day mode covers exactly that calendar day', () => {
+    const { start, end } = getPeriodRange(anchor, 'day');
+    expect(start).toBe(at(2026, 6, 24, 0, 0));
+    expect(end).toBe(at(2026, 6, 25, 0, 0));
+  });
+
+  it('week mode covers Sunday..Saturday containing the anchor', () => {
+    const { start, end } = getPeriodRange(anchor, 'week');
+    expect(start).toBe(at(2026, 6, 21, 0, 0)); // Sunday
+    expect(end).toBe(at(2026, 6, 28, 0, 0)); // next Sunday
+  });
+
+  it('month mode covers the whole calendar month', () => {
+    const { start, end } = getPeriodRange(anchor, 'month');
+    expect(start).toBe(at(2026, 6, 1, 0, 0));
+    expect(end).toBe(at(2026, 7, 1, 0, 0));
+  });
+});
+
+describe('filterEntriesInRange', () => {
+  const entries = [
+    { loggedAt: at(2026, 6, 24, 8) },
+    { loggedAt: at(2026, 6, 25, 9) },
+    { loggedAt: at(2026, 6, 27, 9) },
+  ];
+
+  it('keeps entries within the half-open range', () => {
+    const range = getPeriodRange(at(2026, 6, 24), 'day');
+    expect(filterEntriesInRange(entries, range)).toHaveLength(1);
+  });
+
+  it('excludes the exact end boundary', () => {
+    const range = { start: at(2026, 6, 24, 0, 0), end: at(2026, 6, 25, 0, 0) };
+    const onBoundary = [{ loggedAt: at(2026, 6, 25, 0, 0) }];
+    expect(filterEntriesInRange(onBoundary, range)).toHaveLength(0);
+  });
+});
+
+describe('groupEntriesByDay', () => {
+  it('groups by day, newest day and newest entry first', () => {
+    const entries = [
+      { id: 'a', loggedAt: at(2026, 6, 24, 8) },
+      { id: 'b', loggedAt: at(2026, 6, 24, 20) },
+      { id: 'c', loggedAt: at(2026, 6, 25, 9) },
+    ];
+    const groups = groupEntriesByDay(entries);
+    expect(groups.map((g) => g.key)).toEqual(['2026-06-25', '2026-06-24']);
+    expect(groups[1].entries.map((e) => e.id)).toEqual(['b', 'a']);
+  });
+
+  it('does not mutate the input array', () => {
+    const entries = [{ loggedAt: at(2026, 6, 24, 8) }, { loggedAt: at(2026, 6, 25, 9) }];
+    const before = [...entries];
+    groupEntriesByDay(entries);
+    expect(entries).toEqual(before);
+  });
+});
+
+describe('entryDateKeys', () => {
+  it('returns unique day keys', () => {
+    const entries = [
+      { loggedAt: at(2026, 6, 24, 8) },
+      { loggedAt: at(2026, 6, 24, 20) },
+      { loggedAt: at(2026, 6, 25, 9) },
+    ];
+    expect(entryDateKeys(entries).sort()).toEqual(['2026-06-24', '2026-06-25']);
+  });
+});

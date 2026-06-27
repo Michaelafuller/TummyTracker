@@ -1,7 +1,9 @@
+import type { LogEntry } from '@/db/schema';
 import {
   buildLogEntry,
   emptyNutritionInputs,
   type LogEntryFormState,
+  logEntryToFormState,
 } from '../formModel';
 
 function baseState(overrides: Partial<LogEntryFormState> = {}): LogEntryFormState {
@@ -67,5 +69,53 @@ describe('buildLogEntry', () => {
     expect(result.valid).toBe(true);
     expect(result.entry?.sentiment).toBeNull();
     expect(result.entry?.barcode).toBe('0123456789012');
+  });
+});
+
+describe('logEntryToFormState (edit round-trip)', () => {
+  const entry: LogEntry = {
+    id: 'abc',
+    type: 'snack',
+    mealSlot: null,
+    name: 'Almonds',
+    barcode: '0123456789012',
+    loggedAt: new Date(2026, 5, 27, 15, 5).getTime(),
+    sentiment: 3,
+    notes: 'a handful',
+    calories: 160,
+    fatG: 14,
+    carbsG: 6,
+    proteinG: 6,
+    fiberG: 3,
+    sugarG: 1,
+    sodiumMg: 0,
+    createdAt: 1,
+    updatedAt: 2,
+  };
+
+  it('hydrates form state and rebuilds to the same persisted values', () => {
+    const state = logEntryToFormState(entry);
+    expect(state.dateInput).toBe('2026-06-27');
+    expect(state.timeInput).toBe('15:05');
+    expect(state.nutrition.calories).toBe('160');
+    expect(state.sentiment).toBe(3);
+
+    const rebuilt = buildLogEntry(state);
+    expect(rebuilt.valid).toBe(true);
+    expect(rebuilt.entry).toMatchObject({
+      type: 'snack',
+      name: 'Almonds',
+      barcode: '0123456789012',
+      loggedAt: entry.loggedAt,
+      sentiment: 3,
+      notes: 'a handful',
+      calories: 160,
+      sodiumMg: 0,
+    });
+  });
+
+  it('coerces an out-of-range stored sentiment to null', () => {
+    const state = logEntryToFormState({ ...entry, sentiment: 9 });
+    expect(state.sentiment).toBeNull();
   });
 });
