@@ -65,3 +65,23 @@ export function parseDateTime(dateInput: string, timeInput: string): ParsedDateT
 
   return { ms: d.getTime() };
 }
+
+export interface ClockTime {
+  hour: number;
+  minute: number;
+}
+
+/** Format an hour/minute as 'HH:MM'. */
+export function formatClock(hour: number, minute: number): string {
+  return `${pad2(hour)}:${pad2(minute)}`;
+}
+
+/** Parse an 'HH:MM' clock time (00:00–23:59) to { hour, minute }, or null. */
+export function parseClockTime(input: string): ClockTime | null {
+  const match = TIME_RE.exec(input.trim());
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (hour > 23 || minute > 59) return null;
+  return { hour, minute };
+}

@@ -4,10 +4,14 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { Spacing } from '@/constants/theme';
 import { useDatabaseMigrations } from '@/db/migrate';
+import { configureNotificationHandler } from '@/features/notifications/service';
 import { ThemedText } from './themed-text';
 
 // One QueryClient for the app lifetime (react-query is used for the barcode lookup).
 const queryClient = new QueryClient();
+
+// Foreground reminders show as a banner.
+configureNotificationHandler();
 
 function Centered({ children }: { children: ReactNode }) {
   return <View style={styles.centered}>{children}</View>;

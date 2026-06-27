@@ -43,6 +43,12 @@
         {
           "cameraPermission": "Allow TummyTracker to use the camera to scan product barcodes."
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#208AEF"
+        }
       ]
     ],
     "experiments": {

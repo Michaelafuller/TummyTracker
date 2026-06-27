@@ -42,6 +42,17 @@ export default function HomeScreen() {
               <ThemedText style={styles.ctaLabel}>+ Add manually</ThemedText>
             </Pressable>
           </Link>
+
+          <Link href="/settings" asChild>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Reminder settings"
+              style={styles.linkRow}>
+              <ThemedText type="link" themeColor="textSecondary">
+                Reminders
+              </ThemedText>
+            </Pressable>
+          </Link>
         </ThemedView>
       </SafeAreaView>
     </ThemedView>
@@ -84,5 +95,9 @@ const styles = StyleSheet.create({
   ctaLabel: {
     fontSize: 18,
     fontWeight: 600,
+  },
+  linkRow: {
+    alignItems: 'center',
+    paddingVertical: Spacing.two,
   },
 });
