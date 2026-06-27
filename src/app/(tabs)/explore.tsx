@@ -14,6 +14,8 @@ import { formatDateInput } from '@/lib/datetime';
 import {
   type CalendarMode,
   entryDateKeys,
+  type EntryTypeFilter,
+  filterByEntryType,
   filterEntriesInRange,
   getPeriodRange,
 } from '@/lib/journal';
@@ -24,30 +26,39 @@ const MODE_OPTIONS = [
   { value: 'month' as const, label: 'Month' },
 ];
 
+const FILTER_OPTIONS = [
+  { value: 'all' as const, label: 'All' },
+  { value: 'food' as const, label: 'Food' },
+  { value: 'bm' as const, label: 'BM' },
+];
+
 export default function BrowseScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const entries = useAllEntries();
 
   const [mode, setMode] = useState<CalendarMode>('day');
+  const [filter, setFilter] = useState<EntryTypeFilter>('all');
   const [selectedDate, setSelectedDate] = useState(() => formatDateInput(Date.now()));
 
   const anchorMs = useMemo(() => new Date(`${selectedDate}T00:00:00`).getTime(), [selectedDate]);
 
+  const typeFiltered = useMemo(() => filterByEntryType(entries, filter), [entries, filter]);
+
   const visibleEntries = useMemo(
-    () => filterEntriesInRange(entries, getPeriodRange(anchorMs, mode)),
-    [entries, anchorMs, mode],
+    () => filterEntriesInRange(typeFiltered, getPeriodRange(anchorMs, mode)),
+    [typeFiltered, anchorMs, mode],
   );
 
   const markedDates = useMemo(() => {
     const marks: Record<string, { marked?: boolean; selected?: boolean; selectedColor?: string }> =
       {};
-    for (const key of entryDateKeys(entries)) {
+    for (const key of entryDateKeys(typeFiltered)) {
       marks[key] = { marked: true };
     }
     marks[selectedDate] = { ...marks[selectedDate], selected: true, selectedColor: theme.text };
     return marks;
-  }, [entries, selectedDate, theme.text]);
+  }, [typeFiltered, selectedDate, theme.text]);
 
   return (
     <ThemedView style={styles.container}>
@@ -62,6 +73,12 @@ export default function BrowseScreen() {
           options={MODE_OPTIONS}
           value={mode}
           onChange={(value) => value && setMode(value)}
+        />
+
+        <SegmentedControl
+          options={FILTER_OPTIONS}
+          value={filter}
+          onChange={(value) => value && setFilter(value)}
         />
 
         <Calendar

@@ -84,3 +84,15 @@ export function groupEntriesByDay<T extends { loggedAt: number }>(
 export function entryDateKeys<T extends { loggedAt: number }>(entries: readonly T[]): string[] {
   return Array.from(new Set(entries.map((e) => formatDateInput(e.loggedAt))));
 }
+
+export type EntryTypeFilter = 'all' | 'food' | 'bm';
+
+/** Filter entries to all, just food (meal/snack), or just bowel movements. */
+export function filterByEntryType<T extends { type: string }>(
+  entries: readonly T[],
+  filter: EntryTypeFilter,
+): T[] {
+  if (filter === 'all') return [...entries];
+  if (filter === 'bm') return entries.filter((e) => e.type === 'bowel_movement');
+  return entries.filter((e) => e.type !== 'bowel_movement');
+}

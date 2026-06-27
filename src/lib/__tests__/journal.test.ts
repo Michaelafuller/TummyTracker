@@ -1,5 +1,6 @@
 import {
   entryDateKeys,
+  filterByEntryType,
   filterEntriesInRange,
   getPeriodRange,
   groupEntriesByDay,
@@ -66,6 +67,26 @@ describe('groupEntriesByDay', () => {
     const before = [...entries];
     groupEntriesByDay(entries);
     expect(entries).toEqual(before);
+  });
+});
+
+describe('filterByEntryType', () => {
+  const entries = [
+    { type: 'meal' },
+    { type: 'snack' },
+    { type: 'bowel_movement' },
+  ];
+
+  it('all returns everything', () => {
+    expect(filterByEntryType(entries, 'all')).toHaveLength(3);
+  });
+
+  it('food returns meals and snacks only', () => {
+    expect(filterByEntryType(entries, 'food').map((e) => e.type)).toEqual(['meal', 'snack']);
+  });
+
+  it('bm returns bowel movements only', () => {
+    expect(filterByEntryType(entries, 'bm').map((e) => e.type)).toEqual(['bowel_movement']);
   });
 });
 

@@ -7,6 +7,8 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import type { LogEntry } from '@/db/schema';
 import { deleteLogEntry, getLogEntry, updateLogEntry } from '@/db/repository';
+import { BmForm } from '@/features/bm/BmForm';
+import { bmEntryToFormState, type BuiltBmEntry } from '@/features/bm/formModel';
 import type { BuiltLogEntry } from '@/features/logging/formModel';
 import { logEntryToFormState } from '@/features/logging/formModel';
 import { LogEntryForm } from '@/features/logging/LogEntryForm';
@@ -30,7 +32,7 @@ export default function EditEntryScreen() {
     };
   }, [id]);
 
-  async function handleSubmit(updated: BuiltLogEntry) {
+  async function handleSubmit(updated: BuiltLogEntry | BuiltBmEntry) {
     setSubmitting(true);
     try {
       await updateLogEntry(id, updated);
@@ -75,12 +77,21 @@ export default function EditEntryScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      <LogEntryForm
-        initial={logEntryToFormState(entry)}
-        onSubmit={handleSubmit}
-        submitLabel="Save changes"
-        submitting={submitting}
-      />
+      {entry.type === 'bowel_movement' ? (
+        <BmForm
+          initial={bmEntryToFormState(entry)}
+          onSubmit={handleSubmit}
+          submitLabel="Save changes"
+          submitting={submitting}
+        />
+      ) : (
+        <LogEntryForm
+          initial={logEntryToFormState(entry)}
+          onSubmit={handleSubmit}
+          submitLabel="Save changes"
+          submitting={submitting}
+        />
+      )}
       <View style={styles.deleteWrapper}>
         <Pressable
           accessibilityRole="button"

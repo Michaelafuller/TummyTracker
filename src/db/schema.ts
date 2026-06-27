@@ -2,9 +2,12 @@
 // Timestamps are stored as Unix epoch milliseconds (integers).
 import { integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
-/** What kind of thing was logged. Phase 2 adds `'bowel_movement'` via a migration. */
-export const LOG_ENTRY_TYPES = ['meal', 'snack'] as const;
+/** What kind of thing was logged. */
+export const LOG_ENTRY_TYPES = ['meal', 'snack', 'bowel_movement'] as const;
 export type LogEntryType = (typeof LOG_ENTRY_TYPES)[number];
+
+/** A logged type counts as "food" when it isn't a bowel movement. */
+export const FOOD_TYPES = ['meal', 'snack'] as const;
 
 /** Which part of the day a meal/snack belongs to (nullable). */
 export const MEAL_SLOTS = ['breakfast', 'lunch', 'dinner', 'snack'] as const;
@@ -20,6 +23,8 @@ export const logEntry = sqliteTable('log_entry', {
   loggedAt: integer('logged_at').notNull(),
   // 1–5 sentiment; nullable until rated. Can be set later (CLAUDE.md §6/§7).
   sentiment: integer('sentiment'),
+  // Bristol Stool Scale (1–7), only for bowel_movement entries; nullable otherwise.
+  bristolScale: integer('bristol_scale'),
   // Free text, max 200 chars — enforced in lib/validateNotes, not just the UI.
   notes: text('notes'),
   // Nutrition — all optional reals.

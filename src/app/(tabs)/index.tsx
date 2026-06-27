@@ -43,6 +43,15 @@ export default function HomeScreen() {
             </Pressable>
           </Link>
 
+          <Link href="/bm/new" asChild>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Log a bowel movement"
+              style={[styles.secondaryCta, { backgroundColor: theme.backgroundElement }]}>
+              <ThemedText style={styles.ctaLabel}>💩 Log bowel movement</ThemedText>
+            </Pressable>
+          </Link>
+
           <Link href="/settings" asChild>
             <Pressable
               accessibilityRole="button"

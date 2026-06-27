@@ -81,6 +81,7 @@ describe('logEntryToFormState (edit round-trip)', () => {
     barcode: '0123456789012',
     loggedAt: new Date(2026, 5, 27, 15, 5).getTime(),
     sentiment: 3,
+    bristolScale: null,
     notes: 'a handful',
     calories: 160,
     fatG: 14,

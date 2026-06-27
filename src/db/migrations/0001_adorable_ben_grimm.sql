@@ -1,0 +1,1 @@
+ALTER TABLE `log_entry` ADD `bristol_scale` integer;
