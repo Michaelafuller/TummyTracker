@@ -24,6 +24,11 @@
 - **EAS is config-only here.** `eas.json` + app identifiers are committed so the
   owner can `eas build` themselves. The agent never invokes EAS, never assumes a
   device. Device acceptance lives in `docs/ACCEPTANCE.md`.
+- **Component tests are async (RNTL v14).** `render(...)` and `fireEvent.*(...)`
+  return promises — `await` them and destructure queries from the awaited result
+  (the global `screen` proxy is unreliable under the jest-expo preset). CSS imports
+  are stubbed via `jest/style-mock.js`. Pure logic in `lib/` is the primary test
+  target; component tests cover interaction wiring.
 
 ## 1. What this project is
 

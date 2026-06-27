@@ -4,5 +4,8 @@ module.exports = {
   transformIgnorePatterns: [
     'node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|@tanstack/.*|drizzle-orm/.*))',
   ],
+  moduleNameMapper: {
+    '\\.css$': '<rootDir>/jest/style-mock.js',
+  },
   collectCoverageFrom: ['src/lib/**/*.{ts,tsx}', 'src/features/**/*.{ts,tsx}'],
 };

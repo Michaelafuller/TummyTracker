@@ -1,0 +1,124 @@
+// Pure form model for the manual-entry form. Takes the raw string state of the
+// form and produces either a validated entry payload or per-field errors. Keeping
+// this logic React-free is where the test leverage lives (CLAUDE.md §2/§8).
+
+import type { LogEntryType, MealSlot } from '@/db/schema';
+import type { SentimentValue } from '@/features/sentiment/scale';
+import { parseDateTime } from '@/lib/datetime';
+import { parseOptionalNumber } from '@/lib/number';
+import { NUTRITION_FIELDS, type NutritionField, validateNotes } from '@/lib/validation';
+
+export type NutritionInputs = Record<NutritionField, string>;
+
+export interface LogEntryFormState {
+  type: LogEntryType;
+  name: string;
+  mealSlot: MealSlot | null;
+  dateInput: string; // YYYY-MM-DD
+  timeInput: string; // HH:MM
+  sentiment: SentimentValue | null;
+  notes: string;
+  nutrition: NutritionInputs;
+  barcode: string | null;
+}
+
+/** The validated, ready-to-persist shape (no id/timestamps — the repo adds those). */
+export interface BuiltLogEntry {
+  type: LogEntryType;
+  name: string;
+  mealSlot: MealSlot | null;
+  barcode: string | null;
+  loggedAt: number;
+  sentiment: SentimentValue | null;
+  notes: string | null;
+  calories: number | null;
+  fatG: number | null;
+  carbsG: number | null;
+  proteinG: number | null;
+  fiberG: number | null;
+  sugarG: number | null;
+  sodiumMg: number | null;
+}
+
+export interface FormErrors {
+  name?: string;
+  loggedAt?: string;
+  notes?: string;
+  nutrition: Partial<Record<NutritionField, string>>;
+}
+
+export interface BuildResult {
+  valid: boolean;
+  entry?: BuiltLogEntry;
+  errors: FormErrors;
+}
+
+export function emptyNutritionInputs(): NutritionInputs {
+  return NUTRITION_FIELDS.reduce((acc, field) => {
+    acc[field] = '';
+    return acc;
+  }, {} as NutritionInputs);
+}
+
+/** Validate the raw form state and build the entry payload when everything is valid. */
+export function buildLogEntry(state: LogEntryFormState): BuildResult {
+  const errors: FormErrors = { nutrition: {} };
+
+  const name = state.name.trim();
+  if (name.length === 0) {
+    errors.name = 'Name is required.';
+  }
+
+  const parsedDate = parseDateTime(state.dateInput, state.timeInput);
+  if (parsedDate.ms == null) {
+    errors.loggedAt = parsedDate.error ?? 'Invalid date or time.';
+  }
+
+  const notesResult = validateNotes(state.notes);
+  if (!notesResult.valid) {
+    errors.notes = notesResult.error;
+  }
+
+  // Parse each nutrition field; collect parse errors and the numeric values.
+  const nutritionValues: Partial<Record<NutritionField, number | null>> = {};
+  for (const field of NUTRITION_FIELDS) {
+    const parsed = parseOptionalNumber(state.nutrition[field]);
+    if (parsed.error) {
+      errors.nutrition[field] = parsed.error;
+    } else if (parsed.value != null && parsed.value < 0) {
+      errors.nutrition[field] = `${field} cannot be negative.`;
+    } else {
+      nutritionValues[field] = parsed.value;
+    }
+  }
+
+  const valid =
+    !errors.name &&
+    !errors.loggedAt &&
+    !errors.notes &&
+    Object.keys(errors.nutrition).length === 0;
+
+  if (!valid) {
+    return { valid: false, errors };
+  }
+
+  const trimmedNotes = state.notes.trim();
+  const entry: BuiltLogEntry = {
+    type: state.type,
+    name,
+    mealSlot: state.mealSlot,
+    barcode: state.barcode,
+    loggedAt: parsedDate.ms as number,
+    sentiment: state.sentiment,
+    notes: trimmedNotes.length > 0 ? trimmedNotes : null,
+    calories: nutritionValues.calories ?? null,
+    fatG: nutritionValues.fatG ?? null,
+    carbsG: nutritionValues.carbsG ?? null,
+    proteinG: nutritionValues.proteinG ?? null,
+    fiberG: nutritionValues.fiberG ?? null,
+    sugarG: nutritionValues.sugarG ?? null,
+    sodiumMg: nutritionValues.sodiumMg ?? null,
+  };
+
+  return { valid: true, entry, errors };
+}
