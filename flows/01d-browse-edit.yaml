@@ -11,7 +11,8 @@ appId: com.tummytracker.app
 - runFlow: _helpers/seed-two-meals.yaml
 
 # --- Journal: verify entries grouped under today ---
-- tapOn: "Journal"
+- tapOn:
+    id: "tab-journal"
 - assertVisible: "Oatmeal"
 - assertVisible: "Pizza slice"
 
@@ -41,10 +42,10 @@ appId: com.tummytracker.app
 # Change from "very satisfied" to "neutral"
 - scrollUntilVisible:
     element:
-      text: "neutral"
+      id: "sentiment-3"
     direction: DOWN
 - tapOn:
-    text: "neutral"
+    id: "sentiment-3"
 
 - tapOn:
     text: "Save changes"

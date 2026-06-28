@@ -13,8 +13,10 @@ appId: com.tummytracker.app
 - runFlow: _helpers/seed-two-meals.yaml
 
 # Trigger useFocusEffect on Home (navigate away and back)
-- tapOn: "Journal"
-- tapOn: "Home"
+- tapOn:
+    id: "tab-journal"
+- tapOn:
+    id: "tab-home"
 - waitForAnimationToEnd
 
 # "Recent" section heading and chips should now be visible
@@ -38,7 +40,8 @@ appId: com.tummytracker.app
 - waitForAnimationToEnd
 
 # Journal now has two "Oatmeal" entries (original + the re-log)
-- tapOn: "Journal"
+- tapOn:
+    id: "tab-journal"
 - scrollUntilVisible:
     element:
       text: "Oatmeal"

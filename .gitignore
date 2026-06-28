@@ -44,3 +44,6 @@ example
 
 # expo export bundle check output (npm run bundle:check)
 .expo-bundle-check/
+
+# Maestro e2e debug output (npm run e2e:debug)
+maestro-debug/

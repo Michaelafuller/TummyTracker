@@ -9,8 +9,9 @@ appId: com.tummytracker.app
 - tapOn:
     text: "Entry name"
 - inputText: "Wheat Bread"
+- hideKeyboard
 - tapOn:
-    text: "very unhappy"
+    id: "sentiment-1"
 - scrollUntilVisible:
     element:
       text: "Save entry"
@@ -24,8 +25,9 @@ appId: com.tummytracker.app
 - tapOn:
     text: "Entry name"
 - inputText: "Wheat Bread"
+- hideKeyboard
 - tapOn:
-    text: "unhappy"
+    id: "sentiment-2"
 - scrollUntilVisible:
     element:
       text: "Save entry"
@@ -39,8 +41,9 @@ appId: com.tummytracker.app
 - tapOn:
     text: "Entry name"
 - inputText: "Wheat Bread"
+- hideKeyboard
 - tapOn:
-    text: "very unhappy"
+    id: "sentiment-1"
 - scrollUntilVisible:
     element:
       text: "Save entry"
@@ -54,8 +57,9 @@ appId: com.tummytracker.app
 - tapOn:
     text: "Entry name"
 - inputText: "Wheat Bread"
+- hideKeyboard
 - tapOn:
-    text: "unhappy"
+    id: "sentiment-2"
 - scrollUntilVisible:
     element:
       text: "Save entry"
@@ -69,8 +73,9 @@ appId: com.tummytracker.app
 - tapOn:
     text: "Entry name"
 - inputText: "Wheat Bread"
+- hideKeyboard
 - tapOn:
-    text: "very unhappy"
+    id: "sentiment-1"
 - scrollUntilVisible:
     element:
       text: "Save entry"
@@ -84,8 +89,9 @@ appId: com.tummytracker.app
 - tapOn:
     text: "Entry name"
 - inputText: "Rice Bowl"
+- hideKeyboard
 - tapOn:
-    text: "very satisfied"
+    id: "sentiment-5"
 - scrollUntilVisible:
     element:
       text: "Save entry"
@@ -99,8 +105,9 @@ appId: com.tummytracker.app
 - tapOn:
     text: "Entry name"
 - inputText: "Rice Bowl"
+- hideKeyboard
 - tapOn:
-    text: "very satisfied"
+    id: "sentiment-5"
 - scrollUntilVisible:
     element:
       text: "Save entry"

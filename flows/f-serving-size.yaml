@@ -54,13 +54,15 @@ appId: com.tummytracker.app
     text: "Save entry"
 - waitForAnimationToEnd
 
-- tapOn: "Journal"
+- tapOn:
+    id: "tab-journal"
 - assertVisible: "Avocado toast"
 
 # Persist across restart
 - stopApp
 - launchApp
-- tapOn: "Journal"
+- tapOn:
+    id: "tab-journal"
 - assertVisible: "Avocado toast"
 
 # Re-open and verify serving size field is present

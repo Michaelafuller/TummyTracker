@@ -28,6 +28,7 @@ export function SentimentSelector({ value, onChange, onClear }: SentimentSelecto
           return (
             <Pressable
               key={option.value}
+              testID={`sentiment-${option.value}`}
               onPress={() => onChange(option.value)}
               accessibilityRole="button"
               accessibilityLabel={option.label}

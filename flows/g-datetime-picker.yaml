@@ -48,7 +48,8 @@ appId: com.tummytracker.app
 - waitForAnimationToEnd
 
 # Re-open and verify date field still populated
-- tapOn: "Journal"
+- tapOn:
+    id: "tab-journal"
 - tapOn: "Date picker test"
 - waitForAnimationToEnd
 - assertVisible:

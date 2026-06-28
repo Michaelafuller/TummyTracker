@@ -62,7 +62,8 @@
     "bundle:check": "expo export --platform android --output-dir .expo-bundle-check",
     "db:generate": "drizzle-kit generate",
     "e2e": "maestro test flows/",
-    "e2e:flow": "maestro test"
+    "e2e:flow": "maestro test",
+    "e2e:debug": "maestro test --debug-output ./maestro-debug"
   },
   "private": true
 }

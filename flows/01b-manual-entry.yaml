@@ -14,12 +14,13 @@ appId: com.tummytracker.app
 - tapOn:
     text: "Entry name"
 - inputText: "Chicken salad"
+- hideKeyboard
 
 - tapOn:
     text: "Lunch"
 
 - tapOn:
-    text: "satisfied"
+    id: "sentiment-4"
 
 # Notes — 210 chars; maxLength=200 caps to 200/200
 - scrollUntilVisible:
@@ -76,11 +77,13 @@ appId: com.tummytracker.app
 - waitForAnimationToEnd
 
 # Verify in Journal
-- tapOn: "Journal"
+- tapOn:
+    id: "tab-journal"
 - assertVisible: "Chicken salad"
 
 # SQLite persistence: stop and relaunch without clearing state
 - stopApp
 - launchApp
-- tapOn: "Journal"
+- tapOn:
+    id: "tab-journal"
 - assertVisible: "Chicken salad"

@@ -22,14 +22,15 @@ appId: com.tummytracker.app
 
 # Sentiment
 - tapOn:
-    text: "satisfied"
+    id: "sentiment-4"
 
 # Save
 - tapOn: "Save"
 - waitForAnimationToEnd
 
 # --- Journal: BM renders distinctly ---
-- tapOn: "Journal"
+- tapOn:
+    id: "tab-journal"
 - assertVisible: "Bowel movement"
 
 # --- Filter: BM only ---
