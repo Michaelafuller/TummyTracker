@@ -9,6 +9,9 @@ import { FOOD_TYPES } from '@/db/schema';
 import { isSentimentValue } from '@/features/sentiment/scale';
 import { parseTagsJson } from '@/lib/ingredients';
 import { NUTRITION_FIELDS, type NutritionField } from '@/lib/validation';
+import { analyzeTemporalTriggers, type TemporalFinding } from './temporal';
+
+export type { TemporalFinding };
 
 export const MIN_NUTRIENT_SAMPLES = 4;
 export const MIN_GROUP_SIZE = 2;
@@ -187,6 +190,7 @@ export interface Insights {
   nutrientFindings: NutrientFinding[];
   foodFindings: FoodFinding[];
   ingredientFindings: TagFinding[];
+  temporalFindings: TemporalFinding[];
 }
 
 export function computeInsights(entries: readonly LogEntry[]): Insights {
@@ -195,5 +199,6 @@ export function computeInsights(entries: readonly LogEntry[]): Insights {
     nutrientFindings: analyzeNutrientSentiment(entries),
     foodFindings: analyzeFoodSentiment(entries),
     ingredientFindings: analyzeIngredientSentiment(entries),
+    temporalFindings: analyzeTemporalTriggers(entries),
   };
 }

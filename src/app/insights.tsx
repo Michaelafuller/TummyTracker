@@ -8,6 +8,7 @@ import {
   type FoodFinding,
   type NutrientFinding,
   type TagFinding,
+  type TemporalFinding,
 } from '@/features/analysis/insights';
 import { useAllEntries } from '@/features/logging/useEntries';
 import { useTheme } from '@/hooks/use-theme';
@@ -28,6 +29,15 @@ function ingredientSentence(finding: TagFinding): string {
   return `Average sentiment ${finding.avgSentiment} across ${finding.occurrences} meals containing this ingredient.`;
 }
 
+function temporalSentence(finding: TemporalFinding): string {
+  const pct = Math.round(finding.hitRate * 100);
+  const basePct = Math.round(finding.baseRate * 100);
+  return (
+    `${finding.hits} of ${finding.meals} meals with this ingredient were followed by a ` +
+    `rough outcome within 24 h (${pct}% vs ${basePct}% baseline).`
+  );
+}
+
 function Card({ title, body, sample }: { title: string; body: string; sample: string }) {
   const theme = useTheme();
   return (
@@ -43,8 +53,12 @@ function Card({ title, body, sample }: { title: string; body: string; sample: st
 
 export default function InsightsScreen() {
   const entries = useAllEntries();
-  const { summary, nutrientFindings, foodFindings, ingredientFindings } = computeInsights(entries);
-  const hasFindings = nutrientFindings.length > 0 || foodFindings.length > 0 || ingredientFindings.length > 0;
+  const { summary, nutrientFindings, foodFindings, ingredientFindings, temporalFindings } = computeInsights(entries);
+  const hasFindings =
+    nutrientFindings.length > 0 ||
+    foodFindings.length > 0 ||
+    ingredientFindings.length > 0 ||
+    temporalFindings.length > 0;
 
   return (
     <ThemedView style={styles.container}>
@@ -102,6 +116,24 @@ export default function InsightsScreen() {
                 title={finding.tag}
                 body={ingredientSentence(finding)}
                 sample={`Based on ${finding.occurrences} meals.`}
+              />
+            ))}
+          </View>
+        ) : null}
+
+        {temporalFindings.length > 0 ? (
+          <View style={styles.section}>
+            <ThemedText type="subtitle">Timing patterns</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              Ingredients more often followed by a rough outcome (bad BM, symptom, or poor rating)
+              within 24 hours. Observation only — not a diagnosis.
+            </ThemedText>
+            {temporalFindings.map((finding) => (
+              <Card
+                key={finding.tag}
+                title={finding.tag}
+                body={temporalSentence(finding)}
+                sample={`Based on ${finding.meals} meals.`}
               />
             ))}
           </View>

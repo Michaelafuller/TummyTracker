@@ -126,12 +126,13 @@ describe('summarize', () => {
 });
 
 describe('computeInsights', () => {
-  it('bundles summary, nutrient, food, and ingredient analyses', () => {
+  it('bundles summary, nutrient, food, ingredient, and temporal analyses', () => {
     const insights = computeInsights([makeEntry({ sentiment: 3 })]);
     expect(insights.summary.totalEntries).toBe(1);
     expect(insights.nutrientFindings).toEqual([]);
     expect(insights.foodFindings).toEqual([]);
     expect(insights.ingredientFindings).toEqual([]);
+    expect(insights.temporalFindings).toEqual([]);
   });
 });
 
