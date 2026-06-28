@@ -6,22 +6,32 @@ by surfacing a trigger, or by capturing the clean, consistent data that lets us.
 
 ## Development cycle
 
-Every feature follows a **three-session** pattern. Each step is a separate Claude
-session — no shared context, clean handoffs.
+Every feature follows a **plan → execute → test-plan → test-execute** loop (4 steps).
+Each step is a separate Claude session — no shared context, clean handoffs.
+**`docs/TEST_STRATEGY.md` is the canonical description of this loop** — read it if
+testing is involved; the table below is the summary.
 
 | # | Session | Model | Reads | Produces |
 |---|---------|-------|-------|----------|
-| 1 | **Plan** | Opus (`opusplan`) | `PROGRESS.md`, codebase, CLAUDE.md | `docs/HANDOFF.md` — next task fully specced |
-| 2 | **Execute** | Sonnet (Auto mode) | `docs/HANDOFF.md` | Code + tests committed, rungs green, Maestro flows updated, brief summary |
-| 3 | **Test** | Sonnet (Auto mode) | Session 2 summary + `docs/E2E.md` | `flows/results.xml` read → `docs/ACCEPTANCE.md` checkboxes updated |
+| 1 | **Plan** | Opus (`opusplan`) | `PROGRESS.md`, codebase, CLAUDE.md, `docs/RESULTS.md` | `docs/HANDOFF.md` — next task fully specced |
+| 2 | **Execute** | Sonnet (Auto mode) | `docs/HANDOFF.md` | Code + Jest tests committed, rungs green, brief summary |
+| 3 | **Test-plan** | Opus/Sonnet | Session 2 summary + `docs/E2E.md` | `docs/ACCEPTANCE.md` structure + a *test-backfill* `docs/HANDOFF.md` |
+| 4 | **Test-execute** | Sonnet (Auto mode) | test `HANDOFF.md` + `docs/E2E.md` | Maestro flows + `npm run e2e` run → `flows/results.xml` → `docs/RESULTS.md` → `ACCEPTANCE.md` boxes flipped |
+
+> **Why 4, not 3?** The original spec folded flow-authoring into Execute (step 2),
+> but the Execute session has no device and can't run flows — so flows got dropped
+> and features shipped half-tested (green rungs, no on-device coverage). Flow
+> authoring is now its own step (4). See `docs/TEST_STRATEGY.md §2`.
 
 **Why separate sessions?** Context is finite. Planning needs broad reasoning about the
 roadmap; execution needs deep codebase focus; testing needs fresh eyes to read failures
 objectively and update the checklist honestly.
 
 **Artifacts that bridge sessions:**
-- `docs/HANDOFF.md` — what Session 1 writes; what Session 2 reads first.
-- `docs/ACCEPTANCE.md` — the live record; Session 3 flips `[ ]` → `[x]` based on
+- `docs/HANDOFF.md` — single rolling handoff; what step 1/3 writes, step 2/4 reads first.
+- `docs/RESULTS.md` — human-readable Maestro run report from step 4; the **next** plan
+  session reads it first. (Distinct from the machine-readable `flows/results.xml`.)
+- `docs/ACCEPTANCE.md` — the live record; step 4 flips `[ ]` → `[x]` based on
   `flows/results.xml`.
 - `flows/results.xml` — JUnit XML from
   `maestro test flows/ --format junit --output flows/results.xml`.

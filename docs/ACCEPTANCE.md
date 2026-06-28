@@ -1,19 +1,24 @@
 # ACCEPTANCE.md — On-device checklist
 
-## Where this fits in the three-session cycle
+## Where this fits in the development cycle
 
-TummyTracker development runs as a repeating **plan → execute → test** loop,
-each step in a fresh Claude session with no shared context:
+TummyTracker development runs as a repeating **plan → execute → test-plan →
+test-execute** loop, each step in a fresh Claude session with no shared context.
+`docs/TEST_STRATEGY.md` is the canonical description; the summary:
 
 | # | Session | Model | Role |
 |---|---------|-------|------|
-| 1 | **Plan** | Opus (`opusplan`) | Reads `PROGRESS.md` + codebase → writes `docs/HANDOFF.md` |
-| 2 | **Execute** | Sonnet (Auto) | Reads `HANDOFF.md` → implements feature + Maestro flows → rungs green → writes brief summary |
-| 3 | **Test** | Sonnet (Auto) | Reads Session 2 summary + `docs/E2E.md` → runs `npm run e2e` on Pixel 5 → reads `flows/results.xml` → updates this file |
+| 1 | **Plan** | Opus (`opusplan`) | Reads `PROGRESS.md` + `docs/RESULTS.md` + codebase → writes `docs/HANDOFF.md` |
+| 2 | **Execute** | Sonnet (Auto) | Reads `HANDOFF.md` → implements feature + Jest tests → rungs green → writes brief summary |
+| 3 | **Test-plan** | Opus/Sonnet | Reads Session 2 summary + `docs/E2E.md` → updates this file's structure + writes a *test-backfill* `HANDOFF.md` |
+| 4 | **Test-execute** | Sonnet (Auto) | Reads test `HANDOFF.md` + `docs/E2E.md` → writes Maestro flows → runs `npm run e2e` on Pixel 5 → reads `flows/results.xml` → writes `docs/RESULTS.md` → flips `[ ]`→`[x]` below |
+
+> Flow authoring is **step 4**, not bundled into Execute (step 2) — the Execute
+> session has no device to run flows on. See `docs/TEST_STRATEGY.md §2`.
 
 **Automated items** — marked `· auto` below — are driven by Maestro and updated by
-Session 3 without human intervention. See `docs/E2E.md` for the full flow map
-and Session 3 protocol.
+the **test-execute** session (step 4) without human intervention. See `docs/E2E.md`
+for the full flow map and run protocol.
 
 **Manual items** — marked `· manual` — need the owner's eyes or hands (camera,
 notification timing, visual contrast). They stay `[ ]` until you verify them.
@@ -39,14 +44,15 @@ adb reverse tcp:8081 tcp:8081   # tunnel Metro over USB (corporate Wi-Fi often b
 (`eas.json` profiles are committed. Claude never runs EAS — those commands touch
 your account and device.)
 
-## How Session 3 updates this file
+## How the test-execute session (step 4) updates this file
 
 ```bash
 maestro test flows/ --format junit --output flows/results.xml
 ```
 
-Session 3 reads `flows/results.xml`. Each passing `<testcase>` flips `[ ]` → `[x]`
-for the matching item below. Failures get a one-line note. Manual items stay `[ ]`.
+The test-execute session reads `flows/results.xml`. Each passing `<testcase>` flips
+`[ ]` → `[x]` for the matching item below. Failures get a one-line note and go in
+`docs/RESULTS.md`. Manual items stay `[ ]`.
 
 ---
 

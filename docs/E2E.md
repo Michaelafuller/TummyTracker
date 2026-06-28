@@ -70,6 +70,22 @@ maestro test flows/ --format junit --output flows/results.xml
 | H — recent foods quick-add | `flows/h-recent-foods.yaml` | ✅ Automated |
 | I — export/import buttons, no crash | `flows/i-backup.yaml` | ⚠️ Partial (file content + import round-trip: manual) |
 
+### Planned — backfill in progress (current `docs/HANDOFF.md`)
+
+These features shipped with Jest tests but no Maestro flow. Flows are specced in
+the current `HANDOFF.md`; status flips to ✅ once the test-execute session runs them.
+
+| ACCEPTANCE.md item | Flow file | Status |
+|---|---|---|
+| A — saturated fat persists (manual path) | `flows/ab-satfat-ingredients.yaml` | 🔜 Planned |
+| B — ingredient capture persists on reopen | `flows/ab-satfat-ingredients.yaml` | 🔜 Planned |
+| C — symptom log, render, filter, edit reload | `flows/c-symptom-logging.yaml` | 🔜 Planned |
+| D — "Ingredients you react to" insight | `flows/d-ingredient-insights.yaml` | 🔜 Planned (verify manual ingredients are tagged) |
+| E — "Timing patterns" / summary counts | `flows/e-temporal-insights.yaml` | 🔜 Planned (⚠️ summary auto; Timing patterns timing-dependent → manual) |
+| 1d — day/week/month + collapse calendar | `flows/journal-calendar.yaml` | 🔜 Planned |
+| Nav — 4 bottom tabs reachable | `flows/nav-tabs.yaml` | 🔜 Planned |
+| Settings — offline toggle + sections | `flows/settings-smoke.yaml` | 🔜 Planned (offline-mode value: manual) |
+
 **Manual items that stay on your desk:**
 1. Real barcode scan on a physical product
 2. Notification fires at the configured time
@@ -79,9 +95,11 @@ maestro test flows/ --format junit --output flows/results.xml
 
 ---
 
-## Session 3 protocol (how Claude updates ACCEPTANCE.md)
+## Test-execute protocol (how Claude updates ACCEPTANCE.md)
 
-After a feature is built and the three rungs are green, Session 3 runs:
+> This is **step 4** of the development loop (see `docs/TEST_STRATEGY.md`). After a
+> feature is built (step 2) and its flows are authored (step 4a), the test-execute
+> session (step 4b) runs:
 
 ```bash
 # 1. Install the fresh JS bundle (no native rebuild needed for JS-only changes)
@@ -101,6 +119,9 @@ flow file. A `<failure>` element means the flow failed. Claude then:
 - Flips `[ ]` → `[x]` in ACCEPTANCE.md for each passing flow
 - Adds a failure note (with the flow step that failed) for each failing flow
 - Leaves the 5 manual items as `[ ]` with a note: "manual — see E2E.md"
+- Writes `docs/RESULTS.md` — the human-readable run report (per-flow result,
+  what was fixed, what stays manual, findings for the next planning session).
+  See `docs/TEST_STRATEGY.md §3` for the template.
 
 ---
 
