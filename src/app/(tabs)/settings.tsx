@@ -16,6 +16,7 @@ import {
   type RemindersState,
 } from '@/features/notifications/model';
 import { disableReminder, enableReminder, getReminders } from '@/features/notifications/service';
+import { usePrefsStore } from '@/features/prefs/prefsStore';
 import { formatClock, parseClockTime } from '@/lib/datetime';
 import { entriesToJson, parseBackupJson } from '@/lib/backup';
 import { useTheme } from '@/hooks/use-theme';
@@ -33,6 +34,8 @@ function timeInputsFrom(state: RemindersState): TimeInputs {
 export default function SettingsScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const offlineMode = usePrefsStore((s) => s.offlineMode);
+  const setOfflineMode = usePrefsStore((s) => s.setOfflineMode);
   const [reminders, setReminders] = useState<RemindersState>(DEFAULT_REMINDERS);
   const [timeInputs, setTimeInputs] = useState<TimeInputs>(() => timeInputsFrom(DEFAULT_REMINDERS));
   const [loading, setLoading] = useState(true);
@@ -155,6 +158,7 @@ export default function SettingsScreen() {
         ]}>
         <ThemedText type="subtitle">Settings</ThemedText>
 
+        {/* Data section */}
         <ThemedText type="smallBold">Data</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
           Your journal lives only on this device. Export a backup before switching phones.
@@ -180,6 +184,7 @@ export default function SettingsScreen() {
 
         <View style={styles.divider} />
 
+        {/* Reminders section */}
         <ThemedText type="smallBold">Reminders</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
           Scheduled reminders to log meals and rate how they sat with you. Nothing leaves your
@@ -210,6 +215,28 @@ export default function SettingsScreen() {
             </FormField>
           </View>
         ))}
+
+        <View style={styles.divider} />
+
+        {/* App section */}
+        <ThemedText type="smallBold">App</ThemedText>
+
+        <View style={styles.row}>
+          <View style={styles.rowHeader}>
+            <View style={styles.rowLabel}>
+              <ThemedText type="smallBold">Offline mode</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                Disables Open Food Facts lookups. Barcode scans fall back to manual entry. No
+                external calls are made.
+              </ThemedText>
+            </View>
+            <Switch
+              value={offlineMode}
+              onValueChange={setOfflineMode}
+              accessibilityLabel="Offline mode"
+            />
+          </View>
+        </View>
       </ScrollView>
     </ThemedView>
   );
@@ -235,6 +262,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: Spacing.three,
+  },
+  rowLabel: {
+    flex: 1,
+    gap: Spacing.one,
   },
   divider: {
     height: StyleSheet.hairlineWidth,
