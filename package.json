@@ -40,6 +40,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@testing-library/react-native": "^14.0.1",
     "@types/jest": "~29.5.14",
     "@types/node": "^26.0.1",
@@ -63,7 +64,8 @@
     "db:generate": "drizzle-kit generate",
     "e2e": "maestro test flows/",
     "e2e:flow": "maestro test",
-    "e2e:debug": "maestro test --debug-output ./maestro-debug"
+    "e2e:debug": "maestro test --debug-output ./maestro-debug",
+    "generate:icons": "node scripts/generate-icons.mjs"
   },
   "private": true
 }
