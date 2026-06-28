@@ -6,12 +6,14 @@
 
 import type { LogEntry } from '@/db/schema';
 import { isSentimentValue } from '@/features/sentiment/scale';
+import { parseTagsJson } from '@/lib/ingredients';
 import { NUTRITION_FIELDS, type NutritionField } from '@/lib/validation';
 
 export const MIN_NUTRIENT_SAMPLES = 4;
 export const MIN_GROUP_SIZE = 2;
 export const SENTIMENT_MARGIN = 0.5;
 export const MIN_FOOD_OCCURRENCES = 3;
+export const MIN_TAG_OCCURRENCES = 3;
 export const LOW_SENTIMENT_MAX = 2.5;
 
 function mean(values: number[]): number {
@@ -118,6 +120,43 @@ export function analyzeFoodSentiment(entries: readonly LogEntry[]): FoodFinding[
   return findings.sort((a, b) => a.avgSentiment - b.avgSentiment || b.occurrences - a.occurrences);
 }
 
+export interface TagFinding {
+  tag: string;
+  avgSentiment: number;
+  occurrences: number;
+}
+
+/**
+ * Ingredient/allergen/additive tags that appear in food entries which you tend to
+ * rate poorly. Groups rated food entries by normalized tag (from tagsJson), gates
+ * on MIN_TAG_OCCURRENCES, and surfaces tags where the average sentiment is at or
+ * below LOW_SENTIMENT_MAX. Same shape and philosophy as analyzeFoodSentiment.
+ */
+export function analyzeIngredientSentiment(entries: readonly LogEntry[]): TagFinding[] {
+  const byTag = new Map<string, { sentiments: number[] }>();
+
+  for (const entry of entries) {
+    const sentiment = ratedSentiment(entry);
+    if (!isFood(entry) || sentiment == null) continue;
+    for (const tag of parseTagsJson(entry.tagsJson)) {
+      const group = byTag.get(tag) ?? { sentiments: [] };
+      group.sentiments.push(sentiment);
+      byTag.set(tag, group);
+    }
+  }
+
+  const findings: TagFinding[] = [];
+  for (const [tag, group] of byTag.entries()) {
+    if (group.sentiments.length < MIN_TAG_OCCURRENCES) continue;
+    const avg = mean(group.sentiments);
+    if (avg <= LOW_SENTIMENT_MAX) {
+      findings.push({ tag, avgSentiment: round1(avg), occurrences: group.sentiments.length });
+    }
+  }
+
+  return findings.sort((a, b) => a.avgSentiment - b.avgSentiment || b.occurrences - a.occurrences);
+}
+
 export interface InsightsSummary {
   totalEntries: number;
   foodEntries: number;
@@ -144,6 +183,7 @@ export interface Insights {
   summary: InsightsSummary;
   nutrientFindings: NutrientFinding[];
   foodFindings: FoodFinding[];
+  ingredientFindings: TagFinding[];
 }
 
 export function computeInsights(entries: readonly LogEntry[]): Insights {
@@ -151,5 +191,6 @@ export function computeInsights(entries: readonly LogEntry[]): Insights {
     summary: summarize(entries),
     nutrientFindings: analyzeNutrientSentiment(entries),
     foodFindings: analyzeFoodSentiment(entries),
+    ingredientFindings: analyzeIngredientSentiment(entries),
   };
 }

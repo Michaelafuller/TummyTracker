@@ -7,6 +7,7 @@ import {
   computeInsights,
   type FoodFinding,
   type NutrientFinding,
+  type TagFinding,
 } from '@/features/analysis/insights';
 import { useAllEntries } from '@/features/logging/useEntries';
 import { useTheme } from '@/hooks/use-theme';
@@ -21,6 +22,10 @@ function nutrientSentence(finding: NutrientFinding): string {
 
 function foodSentence(finding: FoodFinding): string {
   return `${finding.name}: average sentiment ${finding.avgSentiment} across ${finding.occurrences} logs.`;
+}
+
+function ingredientSentence(finding: TagFinding): string {
+  return `Average sentiment ${finding.avgSentiment} across ${finding.occurrences} meals containing this ingredient.`;
 }
 
 function Card({ title, body, sample }: { title: string; body: string; sample: string }) {
@@ -38,8 +43,8 @@ function Card({ title, body, sample }: { title: string; body: string; sample: st
 
 export default function InsightsScreen() {
   const entries = useAllEntries();
-  const { summary, nutrientFindings, foodFindings } = computeInsights(entries);
-  const hasFindings = nutrientFindings.length > 0 || foodFindings.length > 0;
+  const { summary, nutrientFindings, foodFindings, ingredientFindings } = computeInsights(entries);
+  const hasFindings = nutrientFindings.length > 0 || foodFindings.length > 0 || ingredientFindings.length > 0;
 
   return (
     <ThemedView style={styles.container}>
@@ -83,6 +88,20 @@ export default function InsightsScreen() {
                 title={finding.name}
                 body={foodSentence(finding)}
                 sample={`Based on ${finding.occurrences} logs.`}
+              />
+            ))}
+          </View>
+        ) : null}
+
+        {ingredientFindings.length > 0 ? (
+          <View style={styles.section}>
+            <ThemedText type="subtitle">Ingredients you react to</ThemedText>
+            {ingredientFindings.map((finding) => (
+              <Card
+                key={finding.tag}
+                title={finding.tag}
+                body={ingredientSentence(finding)}
+                sample={`Based on ${finding.occurrences} meals.`}
               />
             ))}
           </View>

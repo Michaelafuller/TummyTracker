@@ -1,5 +1,6 @@
 import type { LogEntry } from '@/db/schema';
 import {
+  analyzeIngredientSentiment,
   analyzeFoodSentiment,
   analyzeNutrientSentiment,
   computeInsights,
@@ -122,10 +123,61 @@ describe('summarize', () => {
 });
 
 describe('computeInsights', () => {
-  it('bundles summary and both analyses', () => {
+  it('bundles summary, nutrient, food, and ingredient analyses', () => {
     const insights = computeInsights([makeEntry({ sentiment: 3 })]);
     expect(insights.summary.totalEntries).toBe(1);
     expect(insights.nutrientFindings).toEqual([]);
     expect(insights.foodFindings).toEqual([]);
+    expect(insights.ingredientFindings).toEqual([]);
+  });
+});
+
+describe('analyzeIngredientSentiment', () => {
+  // Arithmetic: gluten in 3 entries — sentiments 1, 2, 3 → avg 2.0, which is ≤ LOW_SENTIMENT_MAX (2.5)
+  it('surfaces a tag when it appears ≥ MIN_TAG_OCCURRENCES times with low avg sentiment', () => {
+    const entries = [
+      makeEntry({ sentiment: 1, tagsJson: '["gluten"]' }),
+      makeEntry({ sentiment: 2, tagsJson: '["gluten"]' }),
+      makeEntry({ sentiment: 3, tagsJson: '["gluten"]' }),
+    ];
+    const findings = analyzeIngredientSentiment(entries);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toEqual({ tag: 'gluten', avgSentiment: 2, occurrences: 3 });
+  });
+
+  it('returns nothing when a tag appears fewer than MIN_TAG_OCCURRENCES times', () => {
+    const entries = [
+      makeEntry({ sentiment: 1, tagsJson: '["gluten"]' }),
+      makeEntry({ sentiment: 2, tagsJson: '["gluten"]' }),
+    ];
+    expect(analyzeIngredientSentiment(entries)).toHaveLength(0);
+  });
+
+  it('returns nothing when avg sentiment is above LOW_SENTIMENT_MAX', () => {
+    const entries = [
+      makeEntry({ sentiment: 4, tagsJson: '["gluten"]' }),
+      makeEntry({ sentiment: 5, tagsJson: '["gluten"]' }),
+      makeEntry({ sentiment: 4, tagsJson: '["gluten"]' }),
+    ];
+    expect(analyzeIngredientSentiment(entries)).toHaveLength(0);
+  });
+
+  it('ignores unrated entries and bowel movement entries', () => {
+    const entries = [
+      makeEntry({ sentiment: null, tagsJson: '["gluten"]' }),
+      makeEntry({ type: 'bowel_movement', sentiment: 1, tagsJson: '["gluten"]' }),
+      makeEntry({ sentiment: 1, tagsJson: '["gluten"]' }),
+    ];
+    // Only one rated food entry with "gluten" — below the minimum
+    expect(analyzeIngredientSentiment(entries)).toHaveLength(0);
+  });
+
+  it('sorts results by avgSentiment ascending then occurrences descending', () => {
+    const gluten = [1, 2, 2].map((s) => makeEntry({ sentiment: s, tagsJson: '["gluten","dairy"]' }));
+    const dairy = [1, 1, 1, 2].map((s) => makeEntry({ sentiment: s, tagsJson: '["dairy"]' }));
+    const findings = analyzeIngredientSentiment([...gluten, ...dairy]);
+    // dairy avg = 1.3, gluten avg = 1.7 — dairy first
+    expect(findings[0].tag).toBe('dairy');
+    expect(findings[1].tag).toBe('gluten');
   });
 });
