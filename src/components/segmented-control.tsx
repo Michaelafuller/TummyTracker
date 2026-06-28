@@ -48,6 +48,7 @@ export function SegmentedControl<T extends string>({
             ]}>
             <ThemedText
               type={selected ? 'smallBold' : 'small'}
+              themeColor={selected ? undefined : 'textSecondary'}
               style={selected ? { color: theme.background } : undefined}>
               {option.label}
             </ThemedText>

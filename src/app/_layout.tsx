@@ -16,7 +16,17 @@ export default function RootLayout() {
           <Stack.Screen name="bm/new" options={{ title: 'Log bowel movement', presentation: 'modal' }} />
           <Stack.Screen name="symptom/new" options={{ title: 'Log symptom', presentation: 'modal' }} />
           <Stack.Screen name="entry/[id]" options={{ title: 'Edit entry' }} />
-          <Stack.Screen name="scan" options={{ title: 'Scan barcode', presentation: 'modal' }} />
+          <Stack.Screen
+            name="scan"
+            options={{
+              title: 'Scan barcode',
+              presentation: 'modal',
+              // Camera preview is always dark — keep the header legible against it.
+              headerStyle: { backgroundColor: '#000' },
+              headerTintColor: '#fff',
+              headerTitleStyle: { color: '#fff' },
+            }}
+          />
           <Stack.Screen name="settings" options={{ title: 'Reminders', presentation: 'modal' }} />
           <Stack.Screen name="insights" options={{ title: 'Insights', presentation: 'modal' }} />
         </Stack>

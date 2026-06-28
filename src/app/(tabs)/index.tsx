@@ -14,7 +14,7 @@ export default function HomeScreen() {
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
         <ThemedView style={styles.hero}>
-          <ThemedText type="title" style={styles.title}>
+          <ThemedText type="title" style={styles.title} numberOfLines={1} adjustsFontSizeToFit>
             TummyTracker
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary" style={styles.subtitle}>

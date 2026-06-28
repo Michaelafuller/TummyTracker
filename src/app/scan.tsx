@@ -1,7 +1,7 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View, Platform } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -71,6 +71,7 @@ export default function ScanScreen() {
         // Stop scanning once we have a code (handler becomes undefined).
         onBarcodeScanned={barcode ? undefined : ({ data }) => setBarcode(data)}
       />
+      {/* Non-interactive reticle + hint overlay */}
       <View style={styles.overlay} pointerEvents="none">
         <View style={styles.reticle} />
         <ThemedText style={styles.hint}>
@@ -78,6 +79,18 @@ export default function ScanScreen() {
         </ThemedText>
         {barcode ? <ActivityIndicator color="#fff" /> : null}
       </View>
+      {/* Manual-entry escape hatch — rendered in its own touchable layer */}
+      {!barcode && (
+        <View style={styles.manualButtonContainer} pointerEvents="box-none">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Enter product manually"
+            onPress={() => router.replace('/entry/new')}
+            style={styles.manualButton}>
+            <ThemedText style={styles.manualButtonLabel}>Enter manually</ThemedText>
+          </Pressable>
+        </View>
+      )}
     </View>
   );
 }
@@ -126,5 +139,28 @@ const styles = StyleSheet.create({
   hint: {
     color: '#fff',
     fontWeight: 600,
+  },
+  manualButtonContainer: {
+    position: 'absolute',
+    bottom: 48,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  manualButton: {
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    paddingHorizontal: Spacing.five,
+    paddingVertical: Spacing.three,
+    borderRadius: 999,
+    shadowColor: '#000',
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 6,
+  },
+  manualButtonLabel: {
+    color: '#000',
+    fontWeight: Platform.select({ android: 700 }) ?? 600,
+    fontSize: 15,
   },
 });
