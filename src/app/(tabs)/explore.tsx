@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
-import { Calendar } from 'react-native-calendars';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Calendar, CalendarProvider, WeekCalendar } from 'react-native-calendars';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SegmentedControl } from '@/components/segmented-control';
@@ -42,6 +42,7 @@ export default function BrowseScreen() {
   const [mode, setMode] = useState<CalendarMode>('day');
   const [filter, setFilter] = useState<EntryTypeFilter>('all');
   const [selectedDate, setSelectedDate] = useState(() => formatDateInput(Date.now()));
+  const [calendarExpanded, setCalendarExpanded] = useState(false);
 
   const anchorMs = useMemo(() => new Date(`${selectedDate}T00:00:00`).getTime(), [selectedDate]);
 
@@ -61,6 +62,27 @@ export default function BrowseScreen() {
     marks[selectedDate] = { ...marks[selectedDate], selected: true, selectedColor: theme.text };
     return marks;
   }, [typeFiltered, selectedDate, theme.text]);
+
+  const calendarTheme = {
+    calendarBackground: theme.background,
+    dayTextColor: theme.text,
+    monthTextColor: theme.text,
+    textSectionTitleColor: theme.textSecondary,
+    todayTextColor: theme.text,
+    selectedDayBackgroundColor: theme.text,
+    selectedDayTextColor: theme.background,
+    dotColor: theme.text,
+    arrowColor: theme.text,
+  };
+
+  // Key changes on theme or expanded/collapsed toggle so both calendar components
+  // remount with the correct selectedDate when the user switches views.
+  const calendarKey = `${theme.background}-${calendarExpanded ? 'month' : 'week'}`;
+
+  const monthLabel = new Date(`${selectedDate}T00:00:00`).toLocaleDateString(undefined, {
+    month: 'long',
+    year: 'numeric',
+  });
 
   return (
     <ThemedView style={styles.container}>
@@ -83,24 +105,40 @@ export default function BrowseScreen() {
           onChange={(value) => value && setFilter(value)}
         />
 
-        <Calendar
-          key={theme.background /* re-theme on scheme change */}
-          current={selectedDate}
-          onDayPress={(day) => setSelectedDate(day.dateString)}
-          markedDates={markedDates}
-          enableSwipeMonths
-          theme={{
-            calendarBackground: theme.background,
-            dayTextColor: theme.text,
-            monthTextColor: theme.text,
-            textSectionTitleColor: theme.textSecondary,
-            todayTextColor: theme.text,
-            selectedDayBackgroundColor: theme.text,
-            selectedDayTextColor: theme.background,
-            dotColor: theme.text,
-            arrowColor: theme.text,
-          }}
-        />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={calendarExpanded ? 'Collapse calendar' : 'Expand calendar'}
+          onPress={() => setCalendarExpanded((e) => !e)}
+          style={styles.calendarToggle}>
+          <ThemedText type="smallBold">{monthLabel}</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            {calendarExpanded ? '▲' : '▼'}
+          </ThemedText>
+        </Pressable>
+
+        {calendarExpanded ? (
+          <Calendar
+            key={`cal-${calendarKey}`}
+            current={selectedDate}
+            onDayPress={(day) => setSelectedDate(day.dateString)}
+            markedDates={markedDates}
+            enableSwipeMonths
+            theme={calendarTheme}
+          />
+        ) : (
+          <CalendarProvider
+            key={`week-provider-${calendarKey}`}
+            date={selectedDate}
+            onDateChanged={(d) => setSelectedDate(d)}>
+            <WeekCalendar
+              current={selectedDate}
+              onDayPress={(day) => setSelectedDate(day.dateString)}
+              markedDates={markedDates}
+              hideDayNames={false}
+              theme={calendarTheme}
+            />
+          </CalendarProvider>
+        )}
 
         <View style={styles.listWrapper}>
           <View style={styles.periodHeader}>
@@ -123,6 +161,12 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: Spacing.four,
     gap: Spacing.four,
+  },
+  calendarToggle: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: Spacing.two,
   },
   listWrapper: {
     marginTop: Spacing.two,
