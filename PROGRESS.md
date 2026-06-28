@@ -12,6 +12,7 @@ by surfacing a trigger, or by capturing the clean, consistent data that lets us.
 - **Flagship trio shipped** (saturated fat, ingredient/allergen capture, ingredient→sentiment
   correlation, symptom logging, temporal meal→outcome correlation) — all in `main`.
 - Health: **127 tests**, all three rungs + `npm run bundle:check` green, tree clean on `main`.
+- UAT signed off 2026-06-28 with three open UX issues (see UX backlog below).
 - Recent post-MVP fixes: dark-mode contrast, visible calendar toggle, `.sql` bundling.
 
 ### Completed since last handoff
@@ -60,6 +61,16 @@ Ranked by value-add to the north star. **Effort:** S (hours) · M (a session) ·
 | **Confidence labeling on insights** | Don't erode trust with noise; gate on sample size, flag low-confidence | S | keeps it simple (see decision #2) |
 | **Insights as a tab** | Currently a modal link; make it first-class | S | nav change |
 | **Doctor / dietitian PDF report** | Share a date range + insights with a pro (fits the app's own framing) | M | ⚠ `expo-print` |
+
+## UX backlog (surfaced in UAT 2026-06-28 — fix before next feature)
+
+| ID | Where | Symptom | Fix sketch |
+|----|-------|---------|------------|
+| UX-1 | `EntryRow` list row | Long entry names wrap or clip awkwardly | Enforce `numberOfLines={1}` + `ellipsizeMode="tail"` consistently; audit subtitle too |
+| UX-2 | Various | Theming inconsistencies (contrast, selected-state visibility in dark mode) | Audit all Pressable/selected backgrounds against `backgroundSelected` token; test dark + light |
+| UX-3 | `src/app/scan.tsx` | Camera shutter / action button invisible against the viewfinder | Use a high-contrast overlay button (white bg + shadow, or the `border` token ring) |
+
+These are S-effort fixes. Do them together as a single polish commit before the next Tier-0 sprint.
 
 ## Tier 3 — Quality of life
 

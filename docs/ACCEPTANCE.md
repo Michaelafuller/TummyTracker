@@ -57,6 +57,52 @@ account and device.)
 - [ ] Pre-existing entries still load after the migration.
 
 ## Phase 3 — Insights
-- [ ] With some seeded data, the Insights screen shows a sensible finding and its
+- [x] With some seeded data, the Insights screen shows a sensible finding and its
       supporting sample size.
-- [ ] Findings read as observations, never medical advice.
+- [x] Findings read as observations, never medical advice.
+
+---
+
+## Post-MVP · Sat fat + Flagship Trio  *(accepted 2026-06-28)*
+
+### A · Saturated fat
+- [x] Sat. fat (g) appears in the nutrition grid between Fat and Carbs.
+- [x] Entered value persists across app restart.
+- [x] Barcode scan pre-fills saturated fat when OFF has the value.
+- [x] Blank value saves without errors.
+
+### B · Ingredient capture
+- [x] Manual-entry form has "Ingredients (optional)" text area above the Nutrition section.
+- [x] Manually typed ingredients persist on re-open.
+- [x] Barcode scan pre-fills ingredients from OFF.
+- [x] Type selector shows Meal and Snack only (no Symptom/BM leak).
+
+### C · Symptom logging
+- [x] 🤢 Log symptom button present on Home screen.
+- [x] Symptom form opens as a modal with When, Symptom type (9 chips), Severity (1–5), Notes.
+- [x] All fields optional; saving with nothing selected produces an entry named "Symptom".
+- [x] Saving with a type produces the correct name (e.g. "Bloating").
+- [x] Symptom entries show 🤢 prefix and correct subtitle in the journal list.
+- [x] Journal Symptom filter works; Food filter excludes symptoms.
+- [x] Edit flow loads saved type and severity.
+- [x] Existing meal/BM entries unaffected.
+
+### D · Ingredient → sentiment correlation
+- [x] "Ingredients you react to" section appears in Insights when threshold is met.
+- [x] Cards cite average sentiment and number of meals.
+- [x] Well-rated tags do not appear.
+
+### E · Temporal meal → outcome correlation
+- [x] "Timing patterns" section appears in Insights when a tag's hit rate exceeds baseline.
+- [x] Card body quotes hit count, meal count, hit %, and baseline %.
+- [x] Tags where hit rate equals baseline are suppressed.
+- [x] Section carries "Observation only" framing.
+- [x] Insights summary correctly separates food / BM / symptom counts.
+
+### Known issues (open backlog — not blocking acceptance)
+
+| # | Where | Symptom |
+|---|-------|---------|
+| UX-1 | Entry list row | Long entry names wrap or clip awkwardly |
+| UX-2 | Various | Theming inconsistencies (contrast, selected-state visibility) |
+| UX-3 | Scan screen | The camera shutter / confirm button is hard to see against the viewfinder |
