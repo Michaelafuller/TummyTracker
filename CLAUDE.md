@@ -8,6 +8,9 @@
 > `docs/CLAUDE_CODE_WORKFLOW.md`). This root copy is the live, authoritative
 > version and may diverge from `docs/CLAUDE.md` where reality required it — see
 > §0 below for the running list of deviations.
+>
+> **Continuing the project?** Read `docs/HANDOFF.md` (current state, gotchas, the
+> next specced task) and `PROGRESS.md` (ranked roadmap) before starting.
 
 ---
 
