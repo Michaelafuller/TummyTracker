@@ -119,14 +119,17 @@ export function formatPeriodLabel(anchorMs: number, mode: CalendarMode): string 
   return `${MONTHS_LONG[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-export type EntryTypeFilter = 'all' | 'food' | 'bm';
+export type EntryTypeFilter = 'all' | 'food' | 'bm' | 'symptom';
 
-/** Filter entries to all, just food (meal/snack), or just bowel movements. */
+const FOOD_TYPES_SET = new Set(['meal', 'snack']);
+
+/** Filter entries to all, just food (meal/snack), bowel movements, or symptoms. */
 export function filterByEntryType<T extends { type: string }>(
   entries: readonly T[],
   filter: EntryTypeFilter,
 ): T[] {
   if (filter === 'all') return [...entries];
   if (filter === 'bm') return entries.filter((e) => e.type === 'bowel_movement');
-  return entries.filter((e) => e.type !== 'bowel_movement');
+  if (filter === 'symptom') return entries.filter((e) => e.type === 'symptom');
+  return entries.filter((e) => FOOD_TYPES_SET.has(e.type));
 }

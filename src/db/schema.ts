@@ -3,7 +3,7 @@
 import { integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 /** What kind of thing was logged. */
-export const LOG_ENTRY_TYPES = ['meal', 'snack', 'bowel_movement'] as const;
+export const LOG_ENTRY_TYPES = ['meal', 'snack', 'bowel_movement', 'symptom'] as const;
 export type LogEntryType = (typeof LOG_ENTRY_TYPES)[number];
 
 /** A logged type counts as "food" when it isn't a bowel movement. */
@@ -25,6 +25,10 @@ export const logEntry = sqliteTable('log_entry', {
   sentiment: integer('sentiment'),
   // Bristol Stool Scale (1–7), only for bowel_movement entries; nullable otherwise.
   bristolScale: integer('bristol_scale'),
+  // Symptom type string (e.g. 'bloating') — only for symptom entries; null otherwise.
+  symptomType: text('symptom_type'),
+  // Severity 1–5 for symptom entries (1 = mild, 5 = very severe); null otherwise.
+  severity: integer('severity'),
   // Free text, max 200 chars — enforced in lib/validateNotes, not just the UI.
   notes: text('notes'),
   // Raw ingredient list from OFF or manual entry; tags derived from this + allergens/additives.

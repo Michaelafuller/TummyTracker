@@ -38,4 +38,12 @@ describe('migrations', () => {
     expect(sql).not.toMatch(/drop table/i);
     expect(sql).not.toMatch(/create table `log_entry`/i);
   });
+
+  it('0004 adds symptom_type and severity additively without dropping data', () => {
+    const sql = readMigration('0004');
+    expect(sql).toMatch(/alter table `log_entry` add `symptom_type`/i);
+    expect(sql).toMatch(/alter table `log_entry` add `severity`/i);
+    expect(sql).not.toMatch(/drop table/i);
+    expect(sql).not.toMatch(/create table `log_entry`/i);
+  });
 });

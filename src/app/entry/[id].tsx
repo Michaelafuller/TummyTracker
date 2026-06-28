@@ -12,6 +12,8 @@ import { bmEntryToFormState, type BuiltBmEntry } from '@/features/bm/formModel';
 import type { BuiltLogEntry } from '@/features/logging/formModel';
 import { logEntryToFormState } from '@/features/logging/formModel';
 import { LogEntryForm } from '@/features/logging/LogEntryForm';
+import { SymptomForm } from '@/features/symptoms/SymptomForm';
+import { symptomEntryToFormState, type BuiltSymptomEntry } from '@/features/symptoms/formModel';
 
 // undefined = still loading, null = not found.
 type LoadState = LogEntry | null | undefined;
@@ -32,7 +34,7 @@ export default function EditEntryScreen() {
     };
   }, [id]);
 
-  async function handleSubmit(updated: BuiltLogEntry | BuiltBmEntry) {
+  async function handleSubmit(updated: BuiltLogEntry | BuiltBmEntry | BuiltSymptomEntry) {
     setSubmitting(true);
     try {
       await updateLogEntry(id, updated);
@@ -80,6 +82,13 @@ export default function EditEntryScreen() {
       {entry.type === 'bowel_movement' ? (
         <BmForm
           initial={bmEntryToFormState(entry)}
+          onSubmit={handleSubmit}
+          submitLabel="Save changes"
+          submitting={submitting}
+        />
+      ) : entry.type === 'symptom' ? (
+        <SymptomForm
+          initial={symptomEntryToFormState(entry)}
           onSubmit={handleSubmit}
           submitLabel="Save changes"
           submitting={submitting}

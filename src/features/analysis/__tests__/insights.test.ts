@@ -18,6 +18,8 @@ function makeEntry(overrides: Partial<LogEntry>): LogEntry {
     loggedAt: 0,
     sentiment: null,
     bristolScale: null,
+    symptomType: null,
+    severity: null,
     notes: null,
     calories: null,
     fatG: null,
@@ -112,6 +114,7 @@ describe('summarize', () => {
       totalEntries: 4,
       foodEntries: 3,
       bmEntries: 1,
+      symptomEntries: 0,
       ratedEntries: 2,
       averageSentiment: 3,
     });

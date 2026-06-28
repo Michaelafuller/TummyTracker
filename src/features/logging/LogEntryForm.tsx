@@ -5,7 +5,7 @@ import { FormField, ThemedTextInput } from '@/components/form-fields';
 import { SegmentedControl } from '@/components/segmented-control';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
-import { LOG_ENTRY_TYPES, MEAL_SLOTS, type MealSlot } from '@/db/schema';
+import { FOOD_TYPES, MEAL_SLOTS, type MealSlot } from '@/db/schema';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDateInput, formatTimeInput } from '@/lib/datetime';
 import { NUTRITION_LABELS } from '@/lib/nutrition';
@@ -19,7 +19,7 @@ import {
   type LogEntryFormState,
 } from './formModel';
 
-const TYPE_OPTIONS = LOG_ENTRY_TYPES.filter((value) => value !== 'bowel_movement').map((value) => ({
+const TYPE_OPTIONS = FOOD_TYPES.map((value) => ({
   value,
   label: value[0].toUpperCase() + value.slice(1),
 }));

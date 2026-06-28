@@ -5,6 +5,7 @@
 // React-free and fixture-testable: this is where Phase 3's verification leverage is.
 
 import type { LogEntry } from '@/db/schema';
+import { FOOD_TYPES } from '@/db/schema';
 import { isSentimentValue } from '@/features/sentiment/scale';
 import { parseTagsJson } from '@/lib/ingredients';
 import { NUTRITION_FIELDS, type NutritionField } from '@/lib/validation';
@@ -31,7 +32,7 @@ function round1(value: number): number {
 }
 
 function isFood(entry: LogEntry): boolean {
-  return entry.type !== 'bowel_movement';
+  return (FOOD_TYPES as readonly string[]).includes(entry.type);
 }
 
 function ratedSentiment(entry: LogEntry): number | null {
@@ -161,6 +162,7 @@ export interface InsightsSummary {
   totalEntries: number;
   foodEntries: number;
   bmEntries: number;
+  symptomEntries: number;
   ratedEntries: number;
   averageSentiment: number | null;
 }
@@ -174,6 +176,7 @@ export function summarize(entries: readonly LogEntry[]): InsightsSummary {
     totalEntries: entries.length,
     foodEntries: entries.filter(isFood).length,
     bmEntries: entries.filter((e) => e.type === 'bowel_movement').length,
+    symptomEntries: entries.filter((e) => e.type === 'symptom').length,
     ratedEntries: ratedValues.length,
     averageSentiment: ratedValues.length > 0 ? round1(mean(ratedValues)) : null,
   };

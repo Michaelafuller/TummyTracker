@@ -84,6 +84,8 @@ describe('logEntryToFormState (edit round-trip)', () => {
     loggedAt: new Date(2026, 5, 27, 15, 5).getTime(),
     sentiment: 3,
     bristolScale: null,
+    symptomType: null,
+    severity: null,
     notes: 'a handful',
     calories: 160,
     fatG: 14,

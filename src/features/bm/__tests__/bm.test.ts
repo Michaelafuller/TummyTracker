@@ -69,6 +69,8 @@ describe('buildBmEntry', () => {
       loggedAt: new Date(2026, 5, 27, 7, 45).getTime(),
       sentiment: 2,
       bristolScale: 6,
+      symptomType: null,
+      severity: null,
       notes: 'urgent',
       calories: null,
       fatG: null,

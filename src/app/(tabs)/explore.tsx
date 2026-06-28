@@ -31,6 +31,7 @@ const FILTER_OPTIONS = [
   { value: 'all' as const, label: 'All' },
   { value: 'food' as const, label: 'Food' },
   { value: 'bm' as const, label: 'BM' },
+  { value: 'symptom' as const, label: 'Symptom' },
 ];
 
 export default function BrowseScreen() {

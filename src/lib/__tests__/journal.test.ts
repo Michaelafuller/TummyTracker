@@ -95,10 +95,11 @@ describe('filterByEntryType', () => {
     { type: 'meal' },
     { type: 'snack' },
     { type: 'bowel_movement' },
+    { type: 'symptom' },
   ];
 
   it('all returns everything', () => {
-    expect(filterByEntryType(entries, 'all')).toHaveLength(3);
+    expect(filterByEntryType(entries, 'all')).toHaveLength(4);
   });
 
   it('food returns meals and snacks only', () => {
@@ -107,6 +108,10 @@ describe('filterByEntryType', () => {
 
   it('bm returns bowel movements only', () => {
     expect(filterByEntryType(entries, 'bm').map((e) => e.type)).toEqual(['bowel_movement']);
+  });
+
+  it('symptom returns symptoms only', () => {
+    expect(filterByEntryType(entries, 'symptom').map((e) => e.type)).toEqual(['symptom']);
   });
 });
 

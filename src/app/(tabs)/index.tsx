@@ -58,6 +58,18 @@ export default function HomeScreen() {
             </Pressable>
           </Link>
 
+          <Link href="/symptom/new" asChild>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Log a symptom"
+              style={[
+                styles.secondaryCta,
+                { backgroundColor: theme.backgroundElement, borderColor: theme.border },
+              ]}>
+              <ThemedText style={styles.ctaLabel}>🤢 Log symptom</ThemedText>
+            </Pressable>
+          </Link>
+
           <View style={styles.links}>
             <Link href="/insights" asChild>
               <Pressable accessibilityRole="button" accessibilityLabel="Insights" style={styles.linkRow}>
