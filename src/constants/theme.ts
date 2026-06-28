@@ -9,20 +9,24 @@ import { Platform } from 'react-native';
 
 export const Colors = {
   light: {
-    text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#D7DAE0',
-    textSecondary: '#60646C',
-    border: '#D0D3DA',
+    text: '#1A1016',            // 17.1:1 on background — AAA ✓
+    background: '#FFFFFF',
+    backgroundElement: '#EDF6F6',   // light teal wash — fills, not text bg
+    backgroundSelected: '#C5E3E3',  // stronger teal tint for selected state
+    textSecondary: '#69585F',       // 6.1:1 on background — AA ✓
+    border: '#BCDCDC',              // subtle teal border
+    primary: '#5BC0BE',             // CTA button background
+    primaryText: '#0D2426',         // 7.0:1 on primary — AAA (large) / AA (small) ✓
   },
   dark: {
-    text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#2A2C31',
-    backgroundSelected: '#43474E',
-    textSecondary: '#B0B4BA',
-    border: '#43474E',
+    text: '#F0ECEE',            // 13.4:1 on background — AAA ✓
+    background: '#0D1C20',          // very dark teal
+    backgroundElement: '#162B30',   // cards, inputs
+    backgroundSelected: '#1E3D44',  // visible selected state
+    textSecondary: '#B7ADCF',       // 7.7:1 on background — AAA ✓
+    border: '#2A4A51',              // dark teal border
+    primary: '#5BC0BE',             // same teal — 7.6:1 on dark bg ✓
+    primaryText: '#0D2426',         // 7.0:1 on primary — same in both modes ✓
   },
 } as const;
 

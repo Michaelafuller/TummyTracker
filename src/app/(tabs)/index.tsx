@@ -60,8 +60,8 @@ export default function HomeScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Scan a barcode"
-                style={[styles.cta, { backgroundColor: theme.text }]}>
-                <ThemedText style={[styles.ctaLabel, { color: theme.background }]}>
+                style={[styles.cta, { backgroundColor: theme.primary }]}>
+                <ThemedText style={[styles.ctaLabel, { color: theme.primaryText }]}>
                   Scan barcode
                 </ThemedText>
               </Pressable>
