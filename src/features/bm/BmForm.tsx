@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { DateTimeField } from '@/components/date-time-field';
 import { FormField, ThemedTextInput } from '@/components/form-fields';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
@@ -49,40 +50,13 @@ export function BmForm({ initial, onSubmit, submitLabel = 'Save', submitting = f
 
   return (
     <View style={styles.form}>
-      <FormField label="When" error={errors.loggedAt}>
-        <View style={styles.dateRow}>
-          <ThemedTextInput
-            value={state.dateInput}
-            onChangeText={(value) => set('dateInput', value)}
-            placeholder="YYYY-MM-DD"
-            accessibilityLabel="Date logged"
-            autoCapitalize="none"
-            style={styles.flex}
-          />
-          <ThemedTextInput
-            value={state.timeInput}
-            onChangeText={(value) => set('timeInput', value)}
-            placeholder="HH:MM"
-            accessibilityLabel="Time logged"
-            autoCapitalize="none"
-            style={styles.timeInput}
-          />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Set to now"
-            onPress={() => {
-              const now = Date.now();
-              setState((prev) => ({
-                ...prev,
-                dateInput: formatDateInput(now),
-                timeInput: formatTimeInput(now),
-              }));
-            }}
-            style={[styles.nowButton, { backgroundColor: theme.backgroundElement }]}>
-            <ThemedText type="smallBold">Now</ThemedText>
-          </Pressable>
-        </View>
-      </FormField>
+      <DateTimeField
+        dateInput={state.dateInput}
+        timeInput={state.timeInput}
+        onDateChange={(v) => set('dateInput', v)}
+        onTimeChange={(v) => set('timeInput', v)}
+        error={errors.loggedAt}
+      />
 
       <FormField label="Bristol type (optional)">
         <BristolSelector
@@ -129,24 +103,6 @@ export function BmForm({ initial, onSubmit, submitLabel = 'Save', submitting = f
 const styles = StyleSheet.create({
   form: {
     gap: Spacing.four,
-  },
-  flex: {
-    flex: 1,
-  },
-  dateRow: {
-    flexDirection: 'row',
-    gap: Spacing.two,
-    alignItems: 'center',
-  },
-  timeInput: {
-    width: 96,
-  },
-  nowButton: {
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.two,
-    minHeight: 44,
-    justifyContent: 'center',
   },
   submit: {
     borderRadius: Spacing.three,

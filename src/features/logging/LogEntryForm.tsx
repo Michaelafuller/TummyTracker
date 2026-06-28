@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { DateTimeField } from '@/components/date-time-field';
 import { FormField, ThemedTextInput } from '@/components/form-fields';
+import { formatDateInput, formatTimeInput } from '@/lib/datetime';
 import { SegmentedControl } from '@/components/segmented-control';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { FOOD_TYPES, MEAL_SLOTS, type MealSlot } from '@/db/schema';
 import { useTheme } from '@/hooks/use-theme';
-import { formatDateInput, formatTimeInput } from '@/lib/datetime';
 import { NUTRITION_LABELS, scaleNutrition } from '@/lib/nutrition';
 import { MAX_NOTES_LENGTH, NUTRITION_FIELDS, type NutritionField } from '@/lib/validation';
 import { SentimentSelector } from '@/features/sentiment/SentimentSelector';
@@ -135,40 +136,13 @@ export function LogEntryForm({
         />
       </FormField>
 
-      <FormField label="When" error={errors.loggedAt}>
-        <View style={styles.dateRow}>
-          <ThemedTextInput
-            value={state.dateInput}
-            onChangeText={(value) => set('dateInput', value)}
-            placeholder="YYYY-MM-DD"
-            accessibilityLabel="Date logged"
-            autoCapitalize="none"
-            style={styles.flex}
-          />
-          <ThemedTextInput
-            value={state.timeInput}
-            onChangeText={(value) => set('timeInput', value)}
-            placeholder="HH:MM"
-            accessibilityLabel="Time logged"
-            autoCapitalize="none"
-            style={styles.timeInput}
-          />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Set to now"
-            onPress={() => {
-              const now = Date.now();
-              setState((prev) => ({
-                ...prev,
-                dateInput: formatDateInput(now),
-                timeInput: formatTimeInput(now),
-              }));
-            }}
-            style={[styles.nowButton, { backgroundColor: theme.backgroundElement }]}>
-            <ThemedText type="smallBold">Now</ThemedText>
-          </Pressable>
-        </View>
-      </FormField>
+      <DateTimeField
+        dateInput={state.dateInput}
+        timeInput={state.timeInput}
+        onDateChange={(v) => set('dateInput', v)}
+        onTimeChange={(v) => set('timeInput', v)}
+        error={errors.loggedAt}
+      />
 
       <FormField label="How did it sit with you?">
         <SentimentSelector
@@ -250,24 +224,6 @@ export function LogEntryForm({
 const styles = StyleSheet.create({
   form: {
     gap: Spacing.four,
-  },
-  flex: {
-    flex: 1,
-  },
-  dateRow: {
-    flexDirection: 'row',
-    gap: Spacing.two,
-    alignItems: 'center',
-  },
-  timeInput: {
-    width: 96,
-  },
-  nowButton: {
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.two,
-    minHeight: 44,
-    justifyContent: 'center',
   },
   sectionHeading: {
     marginBottom: -Spacing.two,
