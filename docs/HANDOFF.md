@@ -1,7 +1,7 @@
 # HANDOFF.md — for the next session
 
 Read this first, then `CLAUDE.md` (the constitution) and `PROGRESS.md` (the ranked
-roadmap). This doc gets you productive fast and specs the next two tasks.
+roadmap). This doc gets you productive fast and specs the next task.
 
 ---
 
@@ -11,12 +11,12 @@ TummyTracker is a **local-first food-sensitivity journal** (Expo SDK 56 / RN 0.8
 React 19 / TS 6 / npm, Node 25). MVP (Phases 0–3) and the full **flagship trio** are
 **shipped and running on a Pixel 5** via an EAS `preview` APK.
 
-- 127 tests · all rungs + `bundle:check` green · `main` is clean.
-- UAT signed off 2026-06-28 with three known UX issues logged in `docs/ACCEPTANCE.md`.
+- **151 tests** · all rungs + `bundle:check` green · `main` is clean.
+- **Tier-0 sprint complete (2026-06-28):** UX polish + serving-size scaling + native
+  date/time picker + recent-foods quick-add + backup/export-import all committed.
 
-**Next up (two tasks in order):**
-1. **UX polish sprint** — fix the three UAT backlog items before adding any new feature.
-2. **Tier-0 dependency sprint** — native date picker · serving-size scaling · recent/favorites · backup/export.
+**Next up:** `PROGRESS.md` Tier-1 — **Trigger watchlist / elimination mode** is the
+highest-value remaining item. See NEXT TASK below.
 
 ---
 
@@ -28,7 +28,7 @@ React 19 / TS 6 / npm, Node 25). MVP (Phases 0–3) and the full **flagship trio
 - **Get it on device:** `eas build --profile preview --platform android` → download APK →
   `adb install -r app.apk` over USB. (Corporate Wi-Fi blocks Metro; USB sidesteps it.)
 - One logical change per commit; scoped imperative messages; end with
-  `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>`.
+  `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
 - Model routing: Opus to plan/review, Sonnet to build, Haiku for mechanical edits.
 
 ---
@@ -40,8 +40,9 @@ React 19 / TS 6 / npm, Node 25). MVP (Phases 0–3) and the full **flagship trio
   fixture-tested — that's the verification leverage. UI components stay thin.
 - **Data:** `src/db/schema.ts` is the source of truth → `npm run db:generate` emits a
   migration into `src/db/migrations/` → applied at runtime by `src/db/migrate.ts`.
-  All DB access goes through `src/db/repository.ts`. Current schema has 5 migrations
-  (0000–0004); any future schema change gets migration 0005+.
+  All DB access goes through `src/db/repository.ts`. Current schema has **6 migrations
+  (0000–0005)**; any future schema change gets migration 0006+.
+  - 0005 added `serving_g` (real, nullable) to `log_entry`.
 - **Navigation:** root `Stack` in `src/app/_layout.tsx`; `(tabs)` group (Home = `index`,
   Journal = `explore`); modal routes `entry/new`, `entry/[id]`, `bm/new`, `symptom/new`,
   `scan`, `settings`, `insights`. All typed routes registered in `.expo/types/router.d.ts`
@@ -59,6 +60,16 @@ React 19 / TS 6 / npm, Node 25). MVP (Phases 0–3) and the full **flagship trio
 - **Insights pipeline:** `features/analysis/insights.ts` → `analyzeNutrientSentiment`,
   `analyzeFoodSentiment`, `analyzeIngredientSentiment`, and `analyzeTemporalTriggers`
   (from `features/analysis/temporal.ts`) are all bundled by `computeInsights`.
+- **Serving size:** `src/lib/nutrition.ts` has `scaleNutrition(per100g, servingG)`. The
+  `LogEntryForm` stores `nutritionBase` (per-100g base from OFF) in form state and
+  rescales on serving-size edits. `servingG` is persisted in `log_entry`.
+- **Recent quick-add:** `src/db/repository.ts` → `listRecentFoodEntries(limit)` —
+  returns most-recent distinct-by-name food entries; called from home screen on focus.
+- **Backup:** `src/lib/backup.ts` — `entriesToJson` / `parseBackupJson` (pure, unit-tested).
+  Settings screen uses `expo-file-system` new SDK 56 API (`File`/`Paths`) + `expo-sharing`.
+- **Date/time picker:** shared `src/components/date-time-field.tsx` wraps
+  `@react-native-community/datetimepicker`; wired into `LogEntryForm`, `BmForm`,
+  `SymptomForm`.
 
 ---
 
@@ -74,140 +85,70 @@ React 19 / TS 6 / npm, Node 25). MVP (Phases 0–3) and the full **flagship trio
 - **Expo typed routes:** when adding a new screen file, update `.expo/types/router.d.ts`
   with the new pathname in all three union members (`hrefInputParams`, `hrefOutputParams`,
   `href`). Otherwise `tsc` rejects `<Link href="/new-route">`.
-- **OFF nutriments are per-100g** — numbers land near the label but not exact (serving-
-  size scaling, Tier 0, will fix this).
+- **`expo-file-system` SDK 56 uses a new API:** the legacy `FileSystem.cacheDirectory`,
+  `FileSystem.writeAsStringAsync`, `FileSystem.readAsStringAsync` are NOT on the default
+  import. Use `import { File, Paths } from 'expo-file-system'` → `new File(Paths.cache,
+  'name.json')` → `file.write(text)` / `await file.text()` / `file.uri`. File picking is
+  `await File.pickFileAsync({ mimeTypes: ['application/json'] })` — no need for
+  `expo-document-picker`.
+- **`useColorScheme()` returns `null`** on initial render (not `'unspecified'`). The
+  `useTheme()` hook in `src/hooks/use-theme.ts` handles this: `scheme === 'dark' ? 'dark' : 'light'`.
+  Never pass the raw `scheme` as a `Colors` key or it will be `undefined`.
 - **Dark mode / theming:** preserve contrast via the `border` and `backgroundSelected`
   tokens. Selected states must be obviously distinct. Don't let a caller `style` override
-  themed colors. Three UAT theming issues are now in the backlog.
+  themed colors.
+- **OFF nutriments are per-100g** — the `serving_g` column + `scaleNutrition` handle this
+  now. `offProductToFormState` reads `serving_quantity` from the OFF product as the default.
 - **EAS/login behind a corporate proxy:** `NODE_EXTRA_CA_CERTS` for Node (login/build
   CLI), import the corp CA into the JDK `cacerts` for local Gradle. `adb install` over
   USB avoids the network entirely.
 
 ---
 
-## NEXT TASK 1 — UX polish sprint
+## NEXT TASK — Tier-1: Trigger watchlist / elimination mode
 
-Three issues found in UAT 2026-06-28. Fix all three in a single commit:
-`fix(ux): entry name overflow, scan button visibility, theming polish`
+This is the highest-value remaining item (see `PROGRESS.md` Tier-1). It directly enables
+the therapeutic use case: mark a suspected ingredient, track whether entries containing it
+correlate with worse outcomes.
 
-### UX-1 · Long entry names in EntryRow
+### Goal
 
-**File:** `src/features/logging/EntryRow.tsx`
+Let the user flag ingredients/foods they suspect are triggers. The app then:
+1. **Flags entries** in the journal that contain a watchlisted ingredient (visual indicator on `EntryRow`).
+2. **Reports in Insights** how watchlisted-ingredient entries compare to baseline (avg sentiment,
+   outcome rate from `analyzeTemporalTriggers`).
 
-`entry.name` is rendered with `numberOfLines={1}` already — but the subtitle line
-(`subtitle(entry)`) has no line clamp, and on some entries it wraps. Also audit that
-the name and subtitle use `ellipsizeMode="tail"`.
+### Approach (two phases, each its own commit)
 
-Fix:
-- Add `numberOfLines={1}` and `ellipsizeMode="tail"` to the subtitle `<ThemedText>`.
-- Verify the outer row flex layout can't force the body to overflow its `flex: 1` bounds.
+**Phase A — Watchlist data layer** `feat(watchlist): ingredient watchlist data model`
+- New table `watchlist_item` in `src/db/schema.ts`:
+  - `id` (uuid, pk)
+  - `term` (text, not null) — normalised ingredient term (lowercase, trimmed)
+  - `createdAt` (integer, ms epoch)
+- Migration 0006: `CREATE TABLE watchlist_item (...)`.
+- Repository functions in `src/db/repository.ts`: `listWatchlistItems()`, `addWatchlistItem(term)`,
+  `removeWatchlistItem(id)`.
+- Pure helper in `src/lib/watchlist.ts`: `entryMatchesWatchlist(entry, watchlistTerms: string[]): boolean`
+  — checks whether any term appears in `entry.tagsJson` (parsed) or `entry.ingredientsText`
+  (split by comma/space). Unit-test with fixture entries.
 
-### UX-2 · Theming inconsistencies
+**Phase B — UI wiring** `feat(watchlist): watchlist UI in Insights and EntryRow`
+- **Insights screen** (`src/app/insights.tsx`): add a "Watchlist" section above/alongside
+  existing insight cards. For each watchlisted term, show: entry count, avg sentiment vs baseline,
+  outcome rate if available. Reuse `analyzeTemporalTriggers` filtered to watchlisted entries.
+- **Add/remove watchlist terms**: a simple text-input + "Add" button in Settings (or a new
+  `/watchlist` screen — prefer Settings first, simpler navigation).
+- **EntryRow** (`src/features/logging/EntryRow.tsx`): show a small indicator (e.g. `⚠` or a
+  colored dot) when `entryMatchesWatchlist` returns true. Keep it subtle — this is a flag, not
+  an alarm.
+- Tests: `entryMatchesWatchlist` unit tests (already done in Phase A); update Insights screen
+  test for the new section; keep EntryRow test thin.
 
-**Files:** `src/app/scan.tsx` (or wherever the scan screen renders its UI) and any
-component where dark-mode selected / unselected contrast is insufficient.
+### Definition of done
 
-Audit approach:
-1. Read `src/app/scan.tsx` — are the overlay controls using `theme.text` /
-   `theme.backgroundElement` or hardcoded colors?
-2. Read `src/components/segmented-control.tsx` — does the unselected label use
-   `theme.textSecondary` or a hardcoded color?
-3. Swap to dark mode on the device and screenshot — use that to prioritise.
-
-Fix whatever is hardcoded to use the appropriate theme token.
-
-### UX-3 · Invisible scan button on camera viewfinder
-
-**File:** `src/app/scan.tsx`
-
-The shutter/confirm/action button for the barcode scanner sits on top of the live
-camera preview and becomes invisible (dark button on dark scene, or vice versa).
-
-Fix:
-- Give the button a high-contrast background: white circle with a light shadow, or a
-  border-radius pill using `Colors.light.background` / `'rgba(255,255,255,0.9)'`.
-- Add `shadowColor`, `shadowOpacity`, `elevation` so it lifts off the viewfinder.
-- No accessibility label change needed (it already has one), but confirm it.
-
-**Verification:** `npm run typecheck && lint && test` (no schema change → no
-`bundle:check` required). Then on-device, point the camera at a dark shelf and confirm
-the button is visible.
-
----
-
-## NEXT TASK 2 — Tier-0 dependency sprint
-
-Do these after UX-1/2/3 are committed. Each subtask below is one commit.
-
-> Before adding any `⚠ new dependency`, confirm the package with the owner (check
-> `CLAUDE.md §9`). The two items marked ⚠ below are pre-approved in principle but
-> need a `npm install` + `eas.json` note.
-
-### 2a · Serving-size scaling  *(no new dependency)*
-
-OFF returns nutrients per 100g. Let the user enter a serving size (g/ml) and scale
-all nutrition values accordingly before they land in the form.
-
-Touch points:
-- `src/lib/openFoodFacts.ts` — `offProductToFormState` could accept a `servingG`
-  parameter (default 100). `mapOffResponse` already has `serving_quantity` on the OFF
-  product — read it as the default serving size.
-- `src/features/barcode/` — after a successful lookup, show a "Serving size (g)"
-  editable field before confirming; the confirmed serving size scales the nutrition.
-- `src/lib/nutrition.ts` — pure `scaleNutrition(nutrition, servingG, per100g)` helper.
-- Tests: unit-test `scaleNutrition` with known values.
-
-Commit: `feat(barcode): serving-size scaling for OFF nutrition`
-
-### 2b · Native date/time picker  *(⚠ `@react-native-community/datetimepicker`)*
-
-Replace the manual `YYYY-MM-DD` / `HH:MM` text inputs in `LogEntryForm`, `BmForm`,
-and `SymptomForm` with the native picker. The `formatDateInput` / `formatTimeInput`
-helpers in `src/lib/datetime.ts` stay — they back the display string.
-
-Touch points:
-- All three `*Form.tsx` files: replace the date/time `ThemedTextInput` + Now button
-  with a `<DateTimePicker>` (or a Pressable that opens one as a modal).
-- `src/lib/datetime.ts` — `parseDateTime` can be simplified since the native picker
-  always returns a valid `Date`; keep it for the edit/backfill path (manual override).
-- Update all form tests — the UI interaction changes, but `buildLogEntry` /
-  `buildBmEntry` / `buildSymptomEntry` logic is unchanged and tests there stay green.
-
-Commit: `feat(ux): native date/time picker in all log forms`
-
-### 2c · Recent / Favorites quick-add  *(no new dependency)*
-
-One-tap re-log of a previously logged food entry. This is the #1 adherence driver —
-people eat the same things every day.
-
-Approach:
-- `src/db/repository.ts` — `listRecentFoodNames(limit = 10)`: `SELECT DISTINCT name,
-  MAX(logged_at)` from food-type entries, order by `MAX(logged_at) DESC`.
-- Home screen (`src/app/(tabs)/index.tsx`) — a "Recent" section below the CTAs,
-  rendered as a horizontal scroll of name chips. Tapping one opens `/entry/new` with
-  that name pre-filled (pass via query param or zustand).
-- The `LogEntryForm` already accepts `initial?: Partial<LogEntryFormState>`; just
-  pass `{ name: recentName }`.
-- Tests: unit-test the repository query with an in-memory Drizzle instance or a
-  fixture; keep component tests thin.
-
-Commit: `feat(logging): recent foods quick-add on home screen`
-
-### 2d · Backup / export + import  *(⚠ `expo-file-system` + `expo-sharing`)*
-
-Local-first = no cloud. Before asking users to log for months, protect their data.
-
-Approach:
-- **Export:** `src/lib/backup.ts` (pure) — `entriesToJson(entries)` / `entriesToCsv(entries)`.
-  A "Export data" button in Settings calls `listLogEntries()` → serialize → write to a
-  temp file with `expo-file-system` → share with `expo-sharing`.
-- **Import:** parse JSON (CSV is optional v1), validate each row's shape (reuse
-  `LogEntry` type), call `createLogEntry` for each row not already present (match on
-  `id`). Show a count summary: "Imported 42 entries (3 already existed)".
-- **Tests:** unit-test the serialization/parse roundtrip with a fixture. Device acceptance:
-  export → share to Files app → import from Files app → counts match.
-
-Commit: `feat(data): JSON backup export and import in Settings`
+`npm run typecheck && npm run lint && npm test` green after each commit. Migration 0006 is
+registered in `migrations.js` and the migrations test stays green. Run `bundle:check` after
+Phase A (schema change).
 
 ---
 
@@ -217,4 +158,4 @@ Commit: `feat(data): JSON backup export and import in Settings`
 - `PROGRESS.md` — ranked roadmap + resolved decisions.
 - `docs/BUILD_PLAN.md` — original phased spec.
 - `docs/ACCEPTANCE.md` — on-device checklist (flagship trio accepted 2026-06-28,
-  three UX issues noted).
+  UX polish + Tier-0 sprint accepted 2026-06-28).

@@ -11,9 +11,9 @@ by surfacing a trigger, or by capturing the clean, consistent data that lets us.
   correlation insights). Running on the Pixel 5 via an EAS `preview` APK.
 - **Flagship trio shipped** (saturated fat, ingredient/allergen capture, ingredient→sentiment
   correlation, symptom logging, temporal meal→outcome correlation) — all in `main`.
-- Health: **127 tests**, all three rungs + `npm run bundle:check` green, tree clean on `main`.
-- UAT signed off 2026-06-28 with three open UX issues (see UX backlog below).
-- Recent post-MVP fixes: dark-mode contrast, visible calendar toggle, `.sql` bundling.
+- **Tier-0 sprint complete (2026-06-28):** UX polish + serving-size + native date picker +
+  recent quick-add + backup/export-import all committed.
+- Health: **151 tests**, all three rungs + `npm run bundle:check` green, tree clean on `main`.
 
 ### Completed since last handoff
 
@@ -24,6 +24,11 @@ by surfacing a trigger, or by capturing the clean, consistent data that lets us.
 | `feat(analysis): ingredient/sentiment insights` | `analyzeIngredientSentiment` groups rated food entries by normalized tag, gates on MIN\_TAG\_OCCURRENCES=3; surfaced in Insights screen as "Ingredients you react to" |
 | `feat(symptoms): add symptom as a logged type` | 9 symptom types + severity 1–5 scale; SymptomForm, /symptom/new screen, home CTA, EntryRow, journal filter, edit-screen branch; migration 0004; `isFood()` fixed to FOOD\_TYPES allowlist |
 | `feat(analysis): temporal meal-to-outcome correlation` | `analyzeTemporalTriggers` — 24h windowed join; `isOutcome` covers bad BM, significant symptom, or low food sentiment; surfaced in Insights as "Timing patterns" |
+| `fix(ux): home title overflow, scan button visibility, theming polish` | Home title `adjustsFontSizeToFit`; `use-theme.ts` null-safe; segmented-control unselected label uses `textSecondary`; scan overlay "Enter manually" pill button; scan modal header themed dark |
+| `feat(barcode): serving-size scaling for OFF nutrition` | `scaleNutrition` pure helper; `serving_g` column (migration 0005); OFF `serving_quantity` read as default; serving-size field in `LogEntryForm` rescales nutrition live |
+| `feat(ux): native date/time picker in all log forms` | `DateTimeField` shared component wrapping `@react-native-community/datetimepicker`; wired into `LogEntryForm`, `BmForm`, `SymptomForm` |
+| `feat(logging): recent foods quick-add on home screen` | `listRecentFoodEntries` in repository; horizontal chip scroll on home; tap prefills full prior entry at current time |
+| `feat(data): JSON backup export and import in Settings` | `backup.ts` pure serialisation (19 tests); Export (File/Paths SDK 56 API + expo-sharing); Import (`File.pickFileAsync` + upsert-by-id) |
 
 ## How to read this
 
@@ -32,15 +37,15 @@ Ranked by value-add to the north star. **Effort:** S (hours) · M (a session) ·
 
 ---
 
-## Tier 0 — Foundations (cheap, do first; they unblock everything else)
+## Tier 0 — Foundations ✅ All complete
 
 | Item | Why it matters | Effort | Notes |
 |------|----------------|:--:|------|
-| ~~**Saturated fat field**~~ | ~~Common trigger-adjacent macro; completeness~~ | ~~S~~ | ✅ **Done** — migration 0002, lib, form, OFF map |
-| **Backup / export + import** (JSON/CSV) | Local-first = **no cloud**. Lose the phone, lose everything. Protect the data before asking for months of logging. | M | ⚠ likely `expo-file-system` + `expo-sharing` |
-| **Native date/time picker** | The text-field date entry is the app's weakest UX | S | ⚠ `@react-native-community/datetimepicker` |
-| **Serving-size scaling** | Scales OFF per-100g values → fixes the "close but never exact" numbers | S | pure math, no dep |
-| **Recent / Favorites quick-add** | People eat the same things; one-tap re-log. **Adherence = data = insights.** | M | no dep |
+| ~~**Saturated fat field**~~ | ~~Common trigger-adjacent macro; completeness~~ | ~~S~~ | ✅ migration 0002, lib, form, OFF map |
+| ~~**Backup / export + import**~~ | ~~Local-first = no cloud. Protect data.~~ | ~~M~~ | ✅ `backup.ts` + SDK 56 File/Paths + expo-sharing |
+| ~~**Native date/time picker**~~ | ~~Weakest UX: text-field date entry~~ | ~~S~~ | ✅ `DateTimeField` + `@react-native-community/datetimepicker` |
+| ~~**Serving-size scaling**~~ | ~~Scales OFF per-100g values~~ | ~~S~~ | ✅ `scaleNutrition`, migration 0005, `serving_g` persisted |
+| ~~**Recent / Favorites quick-add**~~ | ~~People eat the same things; one-tap re-log~~ | ~~M~~ | ✅ `listRecentFoodEntries` + home chip scroll |
 
 ## Tier 1 — The differentiator (this is the actual product)
 
@@ -62,15 +67,13 @@ Ranked by value-add to the north star. **Effort:** S (hours) · M (a session) ·
 | **Insights as a tab** | Currently a modal link; make it first-class | S | nav change |
 | **Doctor / dietitian PDF report** | Share a date range + insights with a pro (fits the app's own framing) | M | ⚠ `expo-print` |
 
-## UX backlog (surfaced in UAT 2026-06-28 — fix before next feature)
+## UX backlog ✅ All resolved (2026-06-28 polish commit)
 
-| ID | Where | Symptom | Fix sketch |
-|----|-------|---------|------------|
-| UX-1 | `EntryRow` list row | Long entry names wrap or clip awkwardly | Enforce `numberOfLines={1}` + `ellipsizeMode="tail"` consistently; audit subtitle too |
-| UX-2 | Various | Theming inconsistencies (contrast, selected-state visibility in dark mode) | Audit all Pressable/selected backgrounds against `backgroundSelected` token; test dark + light |
-| UX-3 | `src/app/scan.tsx` | Camera shutter / action button invisible against the viewfinder | Use a high-contrast overlay button (white bg + shadow, or the `border` token ring) |
-
-These are S-effort fixes. Do them together as a single polish commit before the next Tier-0 sprint.
+| ID | Where | Fix shipped |
+|----|-------|------------|
+| UX-1 | Home title | `adjustsFontSizeToFit` + `numberOfLines={1}` — title no longer wraps |
+| UX-2 | Theming | Segmented-control unselected label → `textSecondary`; `use-theme` null-safe |
+| UX-3 | Scan + Home | "Enter manually" pill on viewfinder; scan modal header themed dark; Home "Scan barcode" CTA visible in dark mode |
 
 ## Tier 3 — Quality of life
 
