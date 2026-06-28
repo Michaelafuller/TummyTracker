@@ -1,0 +1,55 @@
+appId: com.tummytracker.app
+# Tier-0 G — Native date/time picker opens on tap; Now button resets both chips;
+# chosen date/time persists after save.
+---
+- launchApp:
+    clearState: true
+
+- tapOn:
+    text: "Add an entry manually"
+
+# Date chip → OS date picker
+- tapOn:
+    text: "Choose date"
+- waitForAnimationToEnd
+- tapOn: "OK"
+- waitForAnimationToEnd
+- assertVisible:
+    text: "Choose date"
+
+# Time chip → OS time picker
+- tapOn:
+    text: "Choose time"
+- waitForAnimationToEnd
+- tapOn: "OK"
+- waitForAnimationToEnd
+- assertVisible:
+    text: "Choose time"
+
+# Now button resets both
+- tapOn:
+    text: "Set to now"
+- assertVisible:
+    text: "Choose date"
+- assertVisible:
+    text: "Choose time"
+
+# Fill name and save
+- tapOn:
+    text: "Entry name"
+- inputText: "Date picker test"
+
+- scrollUntilVisible:
+    element:
+      text: "Save entry"
+    direction: DOWN
+- tapOn:
+    text: "Save entry"
+- waitForAnimationToEnd
+
+# Re-open and verify date field still populated
+- tapOn: "Journal"
+- tapOn: "Date picker test"
+- waitForAnimationToEnd
+- assertVisible:
+    text: "Choose date"

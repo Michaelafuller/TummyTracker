@@ -1,0 +1,54 @@
+appId: com.tummytracker.app
+# Phase 1d — Browse and edit:
+#   - Entries grouped by day in Journal
+#   - Day / Week / Month calendar toggle
+#   - Open an entry, change its sentiment, save; verify the form accepted it
+---
+- launchApp:
+    clearState: true
+
+# Seed two entries
+- runFlow: _helpers/seed-two-meals.yaml
+
+# --- Journal: verify entries grouped under today ---
+- tapOn: "Journal"
+- assertVisible: "Oatmeal"
+- assertVisible: "Pizza slice"
+
+# --- Calendar mode toggle ---
+- tapOn: "Week"
+- waitForAnimationToEnd
+- assertVisible: "Oatmeal"
+
+- tapOn: "Month"
+- waitForAnimationToEnd
+- assertVisible: "Oatmeal"
+
+- tapOn: "Day"
+- waitForAnimationToEnd
+
+# --- Type filter ---
+- tapOn: "Food"
+- assertVisible: "Oatmeal"
+- assertVisible: "Pizza slice"
+
+- tapOn: "All"
+
+# --- Edit entry: open Oatmeal and change sentiment ---
+- tapOn: "Oatmeal"
+- waitForAnimationToEnd
+
+# Change from "very satisfied" to "neutral"
+- scrollUntilVisible:
+    element:
+      text: "neutral"
+    direction: DOWN
+- tapOn:
+    text: "neutral"
+
+- tapOn:
+    text: "Save changes"
+- waitForAnimationToEnd
+
+# Back in journal — edit completed without crashing
+- assertVisible: "Journal"

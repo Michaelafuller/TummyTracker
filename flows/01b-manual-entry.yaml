@@ -1,0 +1,86 @@
+appId: com.tummytracker.app
+# Phase 1b — Manual entry: full form fill, 200-char notes limit enforced,
+# entry persists across an app restart (SQLite round-trip).
+---
+- launchApp:
+    clearState: true
+
+- tapOn:
+    text: "Add an entry manually"
+- assertVisible:
+    text: "Entry name"
+
+# Core fields (above the fold)
+- tapOn:
+    text: "Entry name"
+- inputText: "Chicken salad"
+
+- tapOn:
+    text: "Lunch"
+
+- tapOn:
+    text: "satisfied"
+
+# Notes — 210 chars; maxLength=200 caps to 200/200
+- scrollUntilVisible:
+    element:
+      text: "Notes"
+    direction: DOWN
+- tapOn:
+    text: "Notes"
+- inputText: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+- assertVisible: "200/200"
+
+# Ingredients
+- scrollUntilVisible:
+    element:
+      text: "Ingredients"
+    direction: DOWN
+- tapOn:
+    text: "Ingredients"
+- inputText: "chicken, lettuce, tomato, olive oil"
+
+# Serving size
+- scrollUntilVisible:
+    element:
+      text: "Serving size in grams"
+    direction: DOWN
+- tapOn:
+    text: "Serving size in grams"
+- inputText: "250"
+
+# Nutrition fields
+- scrollUntilVisible:
+    element:
+      text: "Calories"
+    direction: DOWN
+- tapOn:
+    text: "Calories"
+- inputText: "320"
+
+- scrollUntilVisible:
+    element:
+      text: "Protein (g)"
+    direction: DOWN
+- tapOn:
+    text: "Protein (g)"
+- inputText: "28"
+
+# Save
+- scrollUntilVisible:
+    element:
+      text: "Save entry"
+    direction: DOWN
+- tapOn:
+    text: "Save entry"
+- waitForAnimationToEnd
+
+# Verify in Journal
+- tapOn: "Journal"
+- assertVisible: "Chicken salad"
+
+# SQLite persistence: stop and relaunch without clearing state
+- stopApp
+- launchApp
+- tapOn: "Journal"
+- assertVisible: "Chicken salad"

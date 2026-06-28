@@ -1,0 +1,53 @@
+appId: com.tummytracker.app
+# Phase 2 — Bowel-movement tracking:
+#   - Log a BM with Bristol type and sentiment
+#   - Renders distinctly (💩 prefix, "Bowel movement" subtitle) in Journal
+#   - BM filter shows only BMs; Food filter excludes BMs
+#   - Pre-existing food entries still load after migration (seeded here)
+---
+- launchApp:
+    clearState: true
+
+# Seed food entries to verify they coexist with BMs
+- runFlow: _helpers/seed-two-meals.yaml
+
+# --- Log a bowel movement ---
+- tapOn:
+    text: "Log a bowel movement"
+- waitForAnimationToEnd
+
+# Bristol type 4 = "Smooth, soft sausage"
+- tapOn:
+    text: "Type 4: Smooth, soft sausage"
+
+# Sentiment
+- tapOn:
+    text: "satisfied"
+
+# Save
+- tapOn: "Save"
+- waitForAnimationToEnd
+
+# --- Journal: BM renders distinctly ---
+- tapOn: "Journal"
+- assertVisible: "Bowel movement"
+
+# --- Filter: BM only ---
+- tapOn: "BM"
+- waitForAnimationToEnd
+- assertVisible: "Bowel movement"
+- assertNotVisible: "Oatmeal"
+- assertNotVisible: "Pizza slice"
+
+# --- Filter: Food only ---
+- tapOn: "Food"
+- waitForAnimationToEnd
+- assertVisible: "Oatmeal"
+- assertVisible: "Pizza slice"
+- assertNotVisible: "Bowel movement"
+
+# --- All filter: both present ---
+- tapOn: "All"
+- waitForAnimationToEnd
+- assertVisible: "Oatmeal"
+- assertVisible: "Bowel movement"

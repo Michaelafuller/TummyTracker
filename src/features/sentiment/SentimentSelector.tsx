@@ -30,7 +30,8 @@ export function SentimentSelector({ value, onChange, onClear }: SentimentSelecto
               key={option.value}
               onPress={() => onChange(option.value)}
               accessibilityRole="button"
-              accessibilityLabel={`${option.label} (${option.value} of 5)`}
+              accessibilityLabel={option.label}
+              accessibilityHint={`${option.value} of 5`}
               accessibilityState={{ selected }}
               style={[
                 styles.option,

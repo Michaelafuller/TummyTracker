@@ -1,0 +1,38 @@
+appId: com.tummytracker.app
+# Helper — adds "Oatmeal" (very satisfied) and "Pizza slice" (very unhappy).
+# Assumes the app is already running and the Home screen is visible.
+# Invoke via: runFlow: _helpers/seed-two-meals.yaml
+---
+- tapOn:
+    text: "Add an entry manually"
+- tapOn:
+    text: "Entry name"
+- inputText: "Oatmeal"
+- tapOn:
+    text: "Breakfast"
+- tapOn:
+    text: "very satisfied"
+- scrollUntilVisible:
+    element:
+      text: "Save entry"
+    direction: DOWN
+- tapOn:
+    text: "Save entry"
+- waitForAnimationToEnd
+
+- tapOn:
+    text: "Add an entry manually"
+- tapOn:
+    text: "Entry name"
+- inputText: "Pizza slice"
+- tapOn:
+    text: "Lunch"
+- tapOn:
+    text: "very unhappy"
+- scrollUntilVisible:
+    element:
+      text: "Save entry"
+    direction: DOWN
+- tapOn:
+    text: "Save entry"
+- waitForAnimationToEnd

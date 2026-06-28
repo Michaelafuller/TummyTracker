@@ -1,0 +1,28 @@
+appId: com.tummytracker.app
+# UX-3 — Scan screen: the close/back button is reachable (dark header),
+# the "Enter manually" escape-hatch button is visible over the camera viewfinder,
+# and the "Scan barcode" CTA on Home is present and tappable.
+# SKIP: visual contrast (button legibility against dark scene) requires human eyes.
+---
+- launchApp:
+    clearState: true
+    permissions:
+      camera: allow
+
+# Home-screen CTA is present
+- assertVisible:
+    text: "Scan a barcode"
+
+# Open scan screen
+- tapOn:
+    text: "Scan a barcode"
+- waitForAnimationToEnd
+
+# Hint text and manual-entry pill are both accessible
+- assertVisible: "Point at a product barcode"
+- assertVisible:
+    text: "Enter product manually"
+
+# Close / back (hardware back or nav back button)
+- back
+- assertVisible: "TummyTracker"

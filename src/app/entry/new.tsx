@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from 'react-native';
 
 import { Spacing } from '@/constants/theme';
 import { createLogEntry } from '@/db/repository';
@@ -29,18 +29,25 @@ export default function NewEntryScreen() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      <LogEntryForm
-        initial={prefill ?? undefined}
-        onSubmit={handleSubmit}
-        submitLabel="Save entry"
-        submitting={submitting}
-      />
-    </ScrollView>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <LogEntryForm
+          initial={prefill ?? undefined}
+          onSubmit={handleSubmit}
+          submitLabel="Save entry"
+          submitting={submitting}
+        />
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   content: {
     padding: Spacing.four,
     paddingBottom: Spacing.six,

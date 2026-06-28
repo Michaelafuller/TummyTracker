@@ -1,0 +1,10 @@
+appId: com.tummytracker.app
+# Phase 0 — App launches and the home screen renders.
+---
+- launchApp:
+    clearState: true
+- assertVisible: "TummyTracker"
+- assertVisible: "Scan barcode"
+- assertVisible: "+ Add manually"
+- assertVisible: "💩 Log bowel movement"
+- assertVisible: "🤢 Log symptom"

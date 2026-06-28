@@ -1,0 +1,48 @@
+appId: com.tummytracker.app
+# Tier-0 I — Backup export + import.
+# Verifies both buttons are present and tappable without crashing.
+# SKIP: OS share sheet content (system overlay — not in the app's accessibility tree)
+# SKIP: file picker interaction (system overlay)
+# SKIP: import-then-verify round-trip (requires file picker to choose a saved file)
+---
+- launchApp:
+    clearState: true
+
+# Seed some data so the export is non-trivial
+- runFlow: _helpers/seed-two-meals.yaml
+
+# Navigate to Settings / Reminders (accessibilityLabel from Home)
+- tapOn:
+    text: "Reminder settings"
+- waitForAnimationToEnd
+
+# Both data buttons are present
+- assertVisible:
+    text: "Export data"
+- assertVisible:
+    text: "Import data"
+
+# Tap Export — share sheet opens (we can't assert its contents, just no crash)
+- tapOn:
+    text: "Export data"
+- waitForAnimationToEnd
+
+# Dismiss share sheet with back
+- back
+- waitForAnimationToEnd
+
+# Settings screen still intact
+- assertVisible:
+    text: "Export data"
+
+# Tap Import — file picker opens (no crash)
+- tapOn:
+    text: "Import data"
+- waitForAnimationToEnd
+
+# Dismiss file picker
+- back
+- waitForAnimationToEnd
+
+- assertVisible:
+    text: "Import data"

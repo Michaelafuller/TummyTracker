@@ -1,0 +1,25 @@
+appId: com.tummytracker.app
+# Phase 3 — Insights: screen renders with seeded data and shows at least one
+# food finding ("Wheat Bread") with a sample-size citation ("across N logs").
+# NOTE: "Observation only" framing appears only when temporal data exists
+# (food entries followed by BM/symptom entries). That path requires physical
+# device timing and is left as a manual check per ACCEPTANCE.md.
+---
+- launchApp:
+    clearState: true
+
+- runFlow: _helpers/seed-meals-for-insights.yaml
+
+- tapOn:
+    text: "Insights"
+- waitForAnimationToEnd
+
+- assertVisible: "Insights"
+
+# Food finding should name the seeded food and cite a sample size
+- scrollUntilVisible:
+    element:
+      text: "Wheat Bread"
+    direction: DOWN
+- assertVisible: "Wheat Bread"
+- assertVisible: "across"

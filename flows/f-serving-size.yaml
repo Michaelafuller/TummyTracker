@@ -1,0 +1,74 @@
+appId: com.tummytracker.app
+# Tier-0 F — Serving-size field saves without crashing; entry persists across restart.
+# SKIP: barcode → serving_quantity default (camera required)
+# SKIP: live rescaling (needs nutritionBase from an OFF barcode scan)
+---
+- launchApp:
+    clearState: true
+
+- tapOn:
+    text: "Add an entry manually"
+- tapOn:
+    text: "Entry name"
+- inputText: "Avocado toast"
+
+- scrollUntilVisible:
+    element:
+      text: "Serving size in grams"
+    direction: DOWN
+- tapOn:
+    text: "Serving size in grams"
+- inputText: "150"
+
+- scrollUntilVisible:
+    element:
+      text: "Calories"
+    direction: DOWN
+- tapOn:
+    text: "Calories"
+- inputText: "280"
+
+- scrollUntilVisible:
+    element:
+      text: "Fat (g)"
+    direction: DOWN
+- tapOn:
+    text: "Fat (g)"
+- inputText: "14"
+
+# Serving size 0 should not crash
+- scrollUntilVisible:
+    element:
+      text: "Serving size in grams"
+    direction: DOWN
+- tapOn:
+    text: "Serving size in grams"
+- eraseText: 20
+- inputText: "0"
+
+- scrollUntilVisible:
+    element:
+      text: "Save entry"
+    direction: DOWN
+- tapOn:
+    text: "Save entry"
+- waitForAnimationToEnd
+
+- tapOn: "Journal"
+- assertVisible: "Avocado toast"
+
+# Persist across restart
+- stopApp
+- launchApp
+- tapOn: "Journal"
+- assertVisible: "Avocado toast"
+
+# Re-open and verify serving size field is present
+- tapOn: "Avocado toast"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "Serving size in grams"
+    direction: DOWN
+- assertVisible:
+    text: "Serving size in grams"

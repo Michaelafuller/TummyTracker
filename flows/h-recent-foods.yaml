@@ -1,0 +1,46 @@
+appId: com.tummytracker.app
+# Tier-0 H — Recent foods quick-add.
+#   - After logging meals, the "Recent" row appears on the Home screen
+#   - Tapping a chip opens the new-entry form pre-filled with that food's data
+#   - The date/time defaults to now (not the original log time)
+#   - Saving creates a new distinct entry
+#   - At most 10 chips shown (no duplicate names)
+---
+- launchApp:
+    clearState: true
+
+# Seed two meals
+- runFlow: _helpers/seed-two-meals.yaml
+
+# Trigger useFocusEffect on Home (navigate away and back)
+- tapOn: "Journal"
+- tapOn: "Home"
+- waitForAnimationToEnd
+
+# "Recent" section heading and chips should now be visible
+- assertVisible: "Recent"
+- assertVisible: "Oatmeal"
+- assertVisible: "Pizza slice"
+
+# Tap "Oatmeal" chip — opens prefilled new-entry form
+- tapOn:
+    text: "Re-log Oatmeal"
+- waitForAnimationToEnd
+
+# Form is open and pre-filled with the food's name
+- assertVisible:
+    text: "Save entry"
+- assertVisible: "Oatmeal"
+
+# Save the re-logged entry
+- tapOn:
+    text: "Save entry"
+- waitForAnimationToEnd
+
+# Journal now has two "Oatmeal" entries (original + the re-log)
+- tapOn: "Journal"
+- scrollUntilVisible:
+    element:
+      text: "Oatmeal"
+    direction: DOWN
+- assertVisible: "Oatmeal"

@@ -1,0 +1,28 @@
+appId: com.tummytracker.app
+# Phase 1c (partial) — Barcode screen manual-entry fallback.
+# The real-product scan requires physical camera hardware and cannot be automated.
+# This flow verifies the fallback path: scan screen opens → "Enter manually" is
+# visible and tappable → drops into the new-entry form.
+---
+- launchApp:
+    clearState: true
+    permissions:
+      camera: allow
+
+- tapOn:
+    text: "Scan a barcode"
+- waitForAnimationToEnd
+
+# Camera viewfinder + fallback button should both be visible
+- assertVisible: "Point at a product barcode"
+- assertVisible:
+    text: "Enter product manually"
+
+# Tap the fallback → should navigate to the new-entry form
+- tapOn:
+    text: "Enter product manually"
+- waitForAnimationToEnd
+- assertVisible:
+    text: "Entry name"
+
+# SKIP: scanning a real product barcode (camera hardware required)

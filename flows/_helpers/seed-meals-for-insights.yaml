@@ -1,0 +1,110 @@
+appId: com.tummytracker.app
+# Helper — seeds 5 "Wheat Bread" meals (low sentiment) + 2 "Rice Bowl" meals
+# (high sentiment) to trigger analyzeFoodSentiment.
+# Ingredients omitted to avoid scroll — food name alone is enough for food
+# sentiment analysis. Assumes app is running and Home screen is visible.
+---
+- tapOn:
+    text: "Add an entry manually"
+- tapOn:
+    text: "Entry name"
+- inputText: "Wheat Bread"
+- tapOn:
+    text: "very unhappy"
+- scrollUntilVisible:
+    element:
+      text: "Save entry"
+    direction: DOWN
+- tapOn:
+    text: "Save entry"
+- waitForAnimationToEnd
+
+- tapOn:
+    text: "Add an entry manually"
+- tapOn:
+    text: "Entry name"
+- inputText: "Wheat Bread"
+- tapOn:
+    text: "unhappy"
+- scrollUntilVisible:
+    element:
+      text: "Save entry"
+    direction: DOWN
+- tapOn:
+    text: "Save entry"
+- waitForAnimationToEnd
+
+- tapOn:
+    text: "Add an entry manually"
+- tapOn:
+    text: "Entry name"
+- inputText: "Wheat Bread"
+- tapOn:
+    text: "very unhappy"
+- scrollUntilVisible:
+    element:
+      text: "Save entry"
+    direction: DOWN
+- tapOn:
+    text: "Save entry"
+- waitForAnimationToEnd
+
+- tapOn:
+    text: "Add an entry manually"
+- tapOn:
+    text: "Entry name"
+- inputText: "Wheat Bread"
+- tapOn:
+    text: "unhappy"
+- scrollUntilVisible:
+    element:
+      text: "Save entry"
+    direction: DOWN
+- tapOn:
+    text: "Save entry"
+- waitForAnimationToEnd
+
+- tapOn:
+    text: "Add an entry manually"
+- tapOn:
+    text: "Entry name"
+- inputText: "Wheat Bread"
+- tapOn:
+    text: "very unhappy"
+- scrollUntilVisible:
+    element:
+      text: "Save entry"
+    direction: DOWN
+- tapOn:
+    text: "Save entry"
+- waitForAnimationToEnd
+
+- tapOn:
+    text: "Add an entry manually"
+- tapOn:
+    text: "Entry name"
+- inputText: "Rice Bowl"
+- tapOn:
+    text: "very satisfied"
+- scrollUntilVisible:
+    element:
+      text: "Save entry"
+    direction: DOWN
+- tapOn:
+    text: "Save entry"
+- waitForAnimationToEnd
+
+- tapOn:
+    text: "Add an entry manually"
+- tapOn:
+    text: "Entry name"
+- inputText: "Rice Bowl"
+- tapOn:
+    text: "very satisfied"
+- scrollUntilVisible:
+    element:
+      text: "Save entry"
+    direction: DOWN
+- tapOn:
+    text: "Save entry"
+- waitForAnimationToEnd

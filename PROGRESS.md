@@ -4,6 +4,33 @@
 calorie counting. Every item below is ranked by how much it serves that goal — either
 by surfacing a trigger, or by capturing the clean, consistent data that lets us.
 
+## Development cycle
+
+Every feature follows a **three-session** pattern. Each step is a separate Claude
+session — no shared context, clean handoffs.
+
+| # | Session | Model | Reads | Produces |
+|---|---------|-------|-------|----------|
+| 1 | **Plan** | Opus (`opusplan`) | `PROGRESS.md`, codebase, CLAUDE.md | `docs/HANDOFF.md` — next task fully specced |
+| 2 | **Execute** | Sonnet (Auto mode) | `docs/HANDOFF.md` | Code + tests committed, rungs green, Maestro flows updated, brief summary |
+| 3 | **Test** | Sonnet (Auto mode) | Session 2 summary + `docs/E2E.md` | `flows/results.xml` read → `docs/ACCEPTANCE.md` checkboxes updated |
+
+**Why separate sessions?** Context is finite. Planning needs broad reasoning about the
+roadmap; execution needs deep codebase focus; testing needs fresh eyes to read failures
+objectively and update the checklist honestly.
+
+**Artifacts that bridge sessions:**
+- `docs/HANDOFF.md` — what Session 1 writes; what Session 2 reads first.
+- `docs/ACCEPTANCE.md` — the live record; Session 3 flips `[ ]` → `[x]` based on
+  `flows/results.xml`.
+- `flows/results.xml` — JUnit XML from
+  `maestro test flows/ --format junit --output flows/results.xml`.
+
+**Gate before any EAS build:** `npm run bundle:check` (`expo export`) — the three rungs
+never run Metro so bundler/Babel bugs hide from them; this catches them.
+
+---
+
 ## Status
 
 - **MVP shipped — Phases 0–3** (scaffold + verification loop, manual & barcode entry,

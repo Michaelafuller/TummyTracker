@@ -1,0 +1,35 @@
+appId: com.tummytracker.app
+# Phase 1e — Reminders: toggle the breakfast reminder on; OS notification
+# permission prompt should appear (or be silently granted if already given).
+# Verifies the settings screen is functional and doesn't crash on toggle.
+# SKIP: cannot verify a notification fires at the scheduled time — that needs
+# real time to elapse on a physical device.
+---
+- launchApp:
+    clearState: true
+    permissions:
+      notifications: allow
+
+- tapOn:
+    text: "Reminder settings"
+- waitForAnimationToEnd
+
+# Reminder settings screen should be visible
+- assertVisible: "Export data"
+- assertVisible:
+    text: "breakfast reminder"
+
+# Toggle breakfast on — triggers enableReminder which requests permission
+- tapOn:
+    text: "breakfast reminder"
+- waitForAnimationToEnd
+
+# Screen should still be visible (no crash, no unexpected navigation)
+- assertVisible:
+    text: "breakfast reminder"
+
+# Verify time field is editable
+- tapOn:
+    text: "breakfast reminder time"
+- eraseText: 20
+- inputText: "08:00"
