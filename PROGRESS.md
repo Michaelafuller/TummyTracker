@@ -40,7 +40,11 @@ never run Metro so bundler/Babel bugs hide from them; this catches them.
   correlation, symptom logging, temporal meal→outcome correlation) — all in `main`.
 - **Tier-0 sprint complete (2026-06-28):** UX polish + serving-size + native date picker +
   recent quick-add + backup/export-import all committed.
-- Health: **151 tests**, all three rungs + `npm run bundle:check` green, tree clean on `main`.
+- **UI/UX sprint complete (2026-06-28):** accessible color palette, 4-tab nav (Insights +
+  Settings promoted), offline mode, collapsible calendar, programmatic icons — all committed.
+- Health: **154 tests**, all three rungs + `npm run bundle:check` green, tree clean on `main`.
+- **Pending:** test-coverage session — 11 new tests for `prefsStore`, `useOffLookup` offline
+  guard, and journal calendar toggle (see `docs/HANDOFF.md`).
 
 ### Completed since last handoff
 
@@ -56,6 +60,11 @@ never run Metro so bundler/Babel bugs hide from them; this catches them.
 | `feat(ux): native date/time picker in all log forms` | `DateTimeField` shared component wrapping `@react-native-community/datetimepicker`; wired into `LogEntryForm`, `BmForm`, `SymptomForm` |
 | `feat(logging): recent foods quick-add on home screen` | `listRecentFoodEntries` in repository; horizontal chip scroll on home; tap prefills full prior entry at current time |
 | `feat(data): JSON backup export and import in Settings` | `backup.ts` pure serialisation (19 tests); Export (File/Paths SDK 56 API + expo-sharing); Import (`File.pickFileAsync` + upsert-by-id) |
+| `feat(ui): new accessible color scheme with primary action token` | `Colors` rebrand to teal/mauve palette; `primary`/`primaryText` tokens (WCAG AA/AAA verified); fixes scan button visibility; null-safe `app-tabs` scheme check |
+| `feat(nav): insights and settings promoted to bottom tabs` | 4-tab bar (Home \| Journal \| Insights \| Settings); old modal routes removed; home Insights/Reminders links removed |
+| `feat(settings): offline mode toggle and settings layout reorganization` | `lib/prefs.ts` + `features/prefs/prefsStore.ts`; `useOffLookup` guarded by `enabled: !offlineMode`; Settings sectioned (Data / Reminders / App) |
+| `feat(journal): collapsible week/month calendar in Journal tab` | `WeekCalendar` default; expand toggle (`calendarExpanded`); `CalendarProvider` wrapping for week context; keyed remount on theme/toggle change |
+| `feat(assets): programmatic app and notification icons in new palette` | `@resvg/resvg-js` script; stomach silhouette icon in `#326771`/`#5BC0BE`; notification icon (96×96 monochrome); `app.json` notification config wired |
 
 ## How to read this
 
@@ -91,7 +100,7 @@ Ranked by value-add to the north star. **Effort:** S (hours) · M (a session) ·
 | **Trends / charts** (sentiment over time, BM regularity, intake) | Motivation + pattern spotting | M | ⚠ charting lib (e.g. `react-native-gifted-charts` or hand-rolled `react-native-svg`) |
 | **Per-food / ingredient drill-down** | Tap a finding → every instance + outcomes | S–M | no dep |
 | **Confidence labeling on insights** | Don't erode trust with noise; gate on sample size, flag low-confidence | S | keeps it simple (see decision #2) |
-| **Insights as a tab** | Currently a modal link; make it first-class | S | nav change |
+| ~~**Insights as a tab**~~ | ~~Currently a modal link; make it first-class~~ | ~~S~~ | ✅ Done — UI/UX sprint |
 | **Doctor / dietitian PDF report** | Share a date range + insights with a pro (fits the app's own framing) | M | ⚠ `expo-print` |
 
 ## UX backlog ✅ All resolved (2026-06-28 polish commit)
