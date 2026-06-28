@@ -41,3 +41,6 @@ example
 # generated native folders
 /ios
 /android
+
+# expo export bundle check output (npm run bundle:check)
+.expo-bundle-check/

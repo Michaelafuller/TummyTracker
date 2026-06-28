@@ -9,11 +9,18 @@ at any boundary you like).
 
 ```bash
 npm install              # if not already
-npx eas login            # your Expo account
-npx eas build --profile development --platform android
-# install the resulting .apk on the Pixel 5, then:
-npx expo start --dev-client
+npm run bundle:check     # runs `expo export` — same bundling EAS does; catches
+                         # Metro/Babel config bugs the test/typecheck/lint rungs miss
+eas login                # your Expo account (set NODE_EXTRA_CA_CERTS behind a proxy)
+eas build --profile preview --platform android   # standalone APK, runs offline
+# download the .apk, then over USB (no Wi-Fi/proxy needed):
+adb install -r path/to/app.apk
 ```
+
+For live-reload development instead of a standalone APK, build the `development`
+profile and run `npx expo start --dev-client`. On a corporate network the device
+often can't reach Metro over Wi-Fi — tunnel it over USB with
+`adb reverse tcp:8081 tcp:8081` then connect to `http://localhost:8081`.
 
 (`eas.json` profiles are committed. The agent never runs these — they touch your
 account and device.)

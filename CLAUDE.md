@@ -29,6 +29,12 @@
   (the global `screen` proxy is unreliable under the jest-expo preset). CSS imports
   are stubbed via `jest/style-mock.js`. Pure logic in `lib/` is the primary test
   target; component tests cover interaction wiring.
+- **The three rungs don't bundle the app — run `npm run bundle:check` before an EAS
+  build.** `tsc`/`lint`/`jest` never run Metro, so bundler/transform config bugs
+  slip past them (e.g. Drizzle's `.sql` imports needed `babel-plugin-inline-import`
+  in `babel.config.js` to be inlined as strings; without it the production bundle
+  failed parsing SQL as JS). `bundle:check` runs `expo export` — the same step EAS
+  does — and is the real gate before any cloud build.
 
 ## 1. What this project is
 
