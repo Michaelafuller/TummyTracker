@@ -99,10 +99,47 @@ account and device.)
 - [x] Section carries "Observation only" framing.
 - [x] Insights summary correctly separates food / BM / symptom counts.
 
-### Known issues (open backlog — not blocking acceptance)
+---
 
-| # | Where | Symptom |
-|---|-------|---------|
-| UX-1 | Entry list row | Long entry names wrap or clip awkwardly |
-| UX-2 | Various | Theming inconsistencies (contrast, selected-state visibility) |
-| UX-3 | Scan screen | The camera shutter / confirm button is hard to see against the viewfinder |
+## Post-MVP · UX polish sprint  *(2026-06-28)*
+
+### UX-1 · Home title wrapping
+- [ ] Open the app on any screen width — "TummyTracker" renders on one line (font shrinks to fit; the last "r" no longer wraps).
+
+### UX-2 · Theming
+- [ ] Segmented-control (journal filter): unselected chips are visibly lower-emphasis than the selected chip in **both** light and dark mode.
+- [ ] No transparent/invisible themed element visible in dark mode on the home or settings screens.
+
+### UX-3 · Scan screen
+- [ ] Scan screen header close/back button legible (dark header background, white tint).
+- [ ] "Enter manually" pill button visible on the live camera viewfinder — floats with shadow, not invisible against a dark scene.
+- [ ] "Scan barcode" primary CTA on the Home screen visible in dark mode (was transparent before the null-scheme fix).
+
+---
+
+## Post-MVP · Tier-0 sprint  *(2026-06-28)*
+
+### F · Serving-size scaling
+- [ ] Scan a barcode; if the product has a `serving_quantity`, the serving field defaults to it (not 100 g).
+- [ ] Edit the serving size field; all nutrition values rescale proportionally.
+- [ ] Serving size persists — reopen the entry and the value is unchanged.
+- [ ] Entering serving size 0 or blank does not crash; nutrition is left as-is.
+
+### G · Native date/time picker
+- [ ] Tap the date chip in any log form (meal, BM, symptom) — the OS native date picker appears.
+- [ ] Tap the time chip — the OS native time picker appears.
+- [ ] "Now" button sets both chips to the current date and time.
+- [ ] Chosen date/time persists after saving.
+
+### H · Recent foods quick-add
+- [ ] Log two different meals. Return to the Home screen — a "Recent" row of chips appears below the CTAs.
+- [ ] Tap a chip — the new-entry form opens pre-filled with that food's name, nutrition, ingredients, and notes; the date/time defaults to *now* (not the original log time).
+- [ ] Save the pre-filled entry — it appears as a new distinct entry in the journal.
+- [ ] The Recent row shows at most 10 distinct food names (no duplicates by name).
+
+### I · Backup export + import
+- [ ] Settings screen shows "Export data" and "Import data" buttons.
+- [ ] Tap Export — the OS share sheet appears offering the `tummytracker-backup.json` file. Save it to Files.
+- [ ] Open the saved JSON in a text editor — it contains all log entries with correct structure.
+- [ ] Clear app data (or install fresh). Tap Import → choose the JSON file → a summary dialog shows the import count.
+- [ ] After import, all entries appear in the journal exactly as before.

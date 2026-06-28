@@ -32,6 +32,11 @@
   (the global `screen` proxy is unreliable under the jest-expo preset). CSS imports
   are stubbed via `jest/style-mock.js`. Pure logic in `lib/` is the primary test
   target; component tests cover interaction wiring.
+- **`expo-file-system` SDK 56 uses a new API.** The legacy `FileSystem.cacheDirectory`,
+  `writeAsStringAsync`, `readAsStringAsync` are NOT on the default import. Use
+  `import { File, Paths } from 'expo-file-system'` → `new File(Paths.cache, 'name.json')`
+  → `file.write(text)` / `await file.text()` / `file.uri`. File picking:
+  `File.pickFileAsync({ mimeTypes: ['…'] })` — no `expo-document-picker` needed.
 - **The three rungs don't bundle the app — run `npm run bundle:check` before an EAS
   build.** `tsc`/`lint`/`jest` never run Metro, so bundler/transform config bugs
   slip past them (e.g. Drizzle's `.sql` imports needed `babel-plugin-inline-import`
@@ -79,6 +84,8 @@ to learn **autonomous, agentic coding workflows** with Claude Code. Therefore:
 | Notifications  | `expo-notifications` (**local scheduled** reminders) |
 | Calendar       | `expo-calendar` (native calendar interop)            |
 | Calendar UI    | `react-native-calendars` for day/week/month picker   |
+| Date/time pick | `@react-native-community/datetimepicker` (native OS picker) |
+| File export    | `expo-file-system` (SDK 56 `File`/`Paths` API) + `expo-sharing` |
 | Tests          | Jest (`jest-expo`) + `@testing-library/react-native` |
 | Lint/format    | `expo lint` (ESLint) + Prettier                      |
 | Builds         | EAS Build (dev/preview/production)                   |
