@@ -1,5 +1,5 @@
 {
-  "_comment_deps": "@react-native-community/datetimepicker@9.1.0 (Tier-0 2b, 2026-06-28)",
+  "_comment_deps": "@react-native-community/datetimepicker@9.1.0 (Tier-0 2b, 2026-06-28); expo-file-system@56.0.8 + expo-sharing@56.0.18 + expo-document-picker@56.0.4 (Tier-0 2d, 2026-06-28)",
   "cli": {
     "version": ">= 16.0.0",
     "appVersionSource": "remote"

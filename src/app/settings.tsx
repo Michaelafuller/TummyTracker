@@ -1,10 +1,13 @@
+import { File, Paths } from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, Switch, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Switch, View } from 'react-native';
 
 import { FormField, ThemedTextInput } from '@/components/form-fields';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { createLogEntry, getLogEntry, listLogEntries } from '@/db/repository';
 import {
   DEFAULT_REMINDERS,
   REMINDER_SLOTS,
@@ -13,6 +16,8 @@ import {
 } from '@/features/notifications/model';
 import { disableReminder, enableReminder, getReminders } from '@/features/notifications/service';
 import { formatClock, parseClockTime } from '@/lib/datetime';
+import { entriesToJson, parseBackupJson } from '@/lib/backup';
+import { useTheme } from '@/hooks/use-theme';
 
 type TimeInputs = Record<ReminderSlot, string>;
 
@@ -25,9 +30,11 @@ function timeInputsFrom(state: RemindersState): TimeInputs {
 }
 
 export default function SettingsScreen() {
+  const theme = useTheme();
   const [reminders, setReminders] = useState<RemindersState>(DEFAULT_REMINDERS);
   const [timeInputs, setTimeInputs] = useState<TimeInputs>(() => timeInputsFrom(DEFAULT_REMINDERS));
   const [loading, setLoading] = useState(true);
+  const [dataWorking, setDataWorking] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -79,6 +86,57 @@ export default function SettingsScreen() {
     }
   }
 
+  async function handleExport() {
+    setDataWorking(true);
+    try {
+      const entries = await listLogEntries();
+      const json = entriesToJson(entries);
+      const file = new File(Paths.cache, 'tummytracker-backup.json');
+      file.write(json);
+      const canShare = await Sharing.isAvailableAsync();
+      if (!canShare) {
+        Alert.alert('Sharing not available', 'Cannot share files on this device.');
+        return;
+      }
+      await Sharing.shareAsync(file.uri, { mimeType: 'application/json', dialogTitle: 'Save backup' });
+    } catch (e) {
+      Alert.alert('Export failed', e instanceof Error ? e.message : String(e));
+    } finally {
+      setDataWorking(false);
+    }
+  }
+
+  async function handleImport() {
+    setDataWorking(true);
+    try {
+      const picked = await File.pickFileAsync({ mimeTypes: ['application/json'] });
+      if (picked.canceled) return;
+      const text = await picked.result.text();
+      const parsed = parseBackupJson(text);
+      if (!parsed.ok) {
+        Alert.alert('Import failed', parsed.error);
+        return;
+      }
+      let imported = 0;
+      let skipped = 0;
+      for (const entry of parsed.entries) {
+        const existing = await getLogEntry(entry.id);
+        if (existing) {
+          skipped++;
+        } else {
+          const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...rest } = entry;
+          await createLogEntry(rest);
+          imported++;
+        }
+      }
+      Alert.alert('Import complete', `Imported ${imported} ${imported === 1 ? 'entry' : 'entries'} (${skipped} already existed).`);
+    } catch (e) {
+      Alert.alert('Import failed', e instanceof Error ? e.message : String(e));
+    } finally {
+      setDataWorking(false);
+    }
+  }
+
   if (loading) {
     return (
       <ThemedView style={styles.centered}>
@@ -93,6 +151,31 @@ export default function SettingsScreen() {
         Daily local reminders to log a meal and rate how it sat with you. Nothing leaves your
         device.
       </ThemedText>
+
+      <View style={styles.divider} />
+      <ThemedText type="smallBold">Data</ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        Your journal lives only on this device. Export a backup before switching phones.
+      </ThemedText>
+      <View style={styles.dataRow}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Export data"
+          disabled={dataWorking}
+          onPress={handleExport}
+          style={[styles.dataButton, { backgroundColor: theme.backgroundElement, borderColor: theme.border, opacity: dataWorking ? 0.5 : 1 }]}>
+          <ThemedText type="smallBold">Export data</ThemedText>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Import data"
+          disabled={dataWorking}
+          onPress={handleImport}
+          style={[styles.dataButton, { backgroundColor: theme.backgroundElement, borderColor: theme.border, opacity: dataWorking ? 0.5 : 1 }]}>
+          <ThemedText type="smallBold">Import data</ThemedText>
+        </Pressable>
+      </View>
+      <View style={styles.divider} />
 
       {REMINDER_SLOTS.map((slot) => (
         <View key={slot} style={styles.row}>
@@ -139,6 +222,21 @@ const styles = StyleSheet.create({
   rowHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'transparent',
+  },
+  dataRow: {
+    flexDirection: 'row',
+    gap: Spacing.three,
+  },
+  dataButton: {
+    flex: 1,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: Spacing.two,
+    paddingVertical: Spacing.two,
     alignItems: 'center',
   },
 });
