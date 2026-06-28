@@ -42,9 +42,7 @@ never run Metro so bundler/Babel bugs hide from them; this catches them.
   recent quick-add + backup/export-import all committed.
 - **UI/UX sprint complete (2026-06-28):** accessible color palette, 4-tab nav (Insights +
   Settings promoted), offline mode, collapsible calendar, programmatic icons — all committed.
-- Health: **154 tests**, all three rungs + `npm run bundle:check` green, tree clean on `main`.
-- **Pending:** test-coverage session — 11 new tests for `prefsStore`, `useOffLookup` offline
-  guard, and journal calendar toggle (see `docs/HANDOFF.md`).
+- Health: **165 tests**, all three rungs + `npm run bundle:check` green, tree clean on `main`.
 
 ### Completed since last handoff
 
