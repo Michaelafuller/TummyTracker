@@ -27,6 +27,10 @@ export const logEntry = sqliteTable('log_entry', {
   bristolScale: integer('bristol_scale'),
   // Free text, max 200 chars — enforced in lib/validateNotes, not just the UI.
   notes: text('notes'),
+  // Raw ingredient list from OFF or manual entry; tags derived from this + allergens/additives.
+  ingredientsText: text('ingredients_text'),
+  // JSON-encoded string[] of normalized tags (allergens + additives + tokenized words).
+  tagsJson: text('tags_json'),
   // Nutrition — all optional reals.
   calories: real('calories'),
   fatG: real('fat_g'),

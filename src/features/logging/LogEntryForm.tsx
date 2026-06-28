@@ -41,6 +41,8 @@ function defaultState(initial?: Partial<LogEntryFormState>): LogEntryFormState {
     notes: '',
     nutrition: emptyNutritionInputs(),
     barcode: null,
+    ingredientsText: '',
+    tagsJson: '',
     ...initial,
   };
 }
@@ -166,6 +168,16 @@ export function LogEntryForm({
           accessibilityLabel="Notes"
           multiline
           maxLength={MAX_NOTES_LENGTH}
+        />
+      </FormField>
+
+      <FormField label="Ingredients (optional)">
+        <ThemedTextInput
+          value={state.ingredientsText}
+          onChangeText={(value) => set('ingredientsText', value)}
+          placeholder="e.g. wheat, milk, sunflower oil"
+          accessibilityLabel="Ingredients"
+          multiline
         />
       </FormField>
 

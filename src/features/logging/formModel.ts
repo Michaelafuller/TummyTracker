@@ -5,6 +5,7 @@
 import type { LogEntry, LogEntryType, MealSlot } from '@/db/schema';
 import { isSentimentValue, type SentimentValue } from '@/features/sentiment/scale';
 import { formatDateInput, formatTimeInput, parseDateTime } from '@/lib/datetime';
+import { extractTags, parseTagsJson, serializeTags } from '@/lib/ingredients';
 import { parseOptionalNumber } from '@/lib/number';
 import { NUTRITION_FIELDS, type NutritionField, validateNotes } from '@/lib/validation';
 
@@ -20,6 +21,8 @@ export interface LogEntryFormState {
   notes: string;
   nutrition: NutritionInputs;
   barcode: string | null;
+  ingredientsText: string;
+  tagsJson: string; // pre-computed from OFF (allergens + additives + text); empty = compute on save
 }
 
 /** The validated, ready-to-persist shape (no id/timestamps — the repo adds those). */
@@ -39,6 +42,8 @@ export interface BuiltLogEntry {
   fiberG: number | null;
   sugarG: number | null;
   sodiumMg: number | null;
+  ingredientsText: string | null;
+  tagsJson: string | null;
 }
 
 export interface FormErrors {
@@ -79,6 +84,8 @@ export function logEntryToFormState(entry: LogEntry): LogEntryFormState {
     notes: entry.notes ?? '',
     nutrition,
     barcode: entry.barcode,
+    ingredientsText: entry.ingredientsText ?? '',
+    tagsJson: entry.tagsJson ?? '',
   };
 }
 
@@ -125,6 +132,19 @@ export function buildLogEntry(state: LogEntryFormState): BuildResult {
   }
 
   const trimmedNotes = state.notes.trim();
+  const trimmedIngredients = state.ingredientsText.trim();
+
+  // Use pre-computed OFF tags when supplied; otherwise tokenize from the text field.
+  const existingTags = parseTagsJson(state.tagsJson);
+  const finalTagsJson =
+    existingTags.length > 0
+      ? state.tagsJson
+      : trimmedIngredients.length > 0
+        ? serializeTags(
+            extractTags({ ingredientsText: trimmedIngredients, allergensTags: null, additivesTags: null }),
+          )
+        : null;
+
   const entry: BuiltLogEntry = {
     type: state.type,
     name,
@@ -141,6 +161,8 @@ export function buildLogEntry(state: LogEntryFormState): BuildResult {
     fiberG: nutritionValues.fiberG ?? null,
     sugarG: nutritionValues.sugarG ?? null,
     sodiumMg: nutritionValues.sodiumMg ?? null,
+    ingredientsText: trimmedIngredients.length > 0 ? trimmedIngredients : null,
+    tagsJson: finalTagsJson,
   };
 
   return { valid: true, entry, errors };

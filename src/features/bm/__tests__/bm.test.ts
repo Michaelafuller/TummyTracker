@@ -78,6 +78,8 @@ describe('buildBmEntry', () => {
       fiberG: null,
       sugarG: null,
       sodiumMg: null,
+      ingredientsText: null,
+      tagsJson: null,
       createdAt: 1,
       updatedAt: 2,
     } as LogEntry;

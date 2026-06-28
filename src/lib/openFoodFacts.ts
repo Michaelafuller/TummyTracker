@@ -4,6 +4,7 @@
 // fixture-testable.
 
 import type { LogEntryFormState, NutritionInputs } from '@/features/logging/formModel';
+import { extractTags, serializeTags } from '@/lib/ingredients';
 import { NUTRITION_FIELDS } from '@/lib/validation';
 
 export interface OffNutrition {
@@ -22,6 +23,8 @@ export interface OffProduct {
   found: boolean;
   name: string | null;
   nutrition: OffNutrition;
+  ingredientsText: string | null;
+  tags: string[];
 }
 
 /** Coerce an unknown value to a finite, non-negative number, or null. */
@@ -61,7 +64,7 @@ export function mapOffResponse(barcode: string, json: unknown): OffProduct {
   const root = asRecord(json);
   const found = num(root.status) === 1 || root.status === 1;
   if (!found) {
-    return { barcode, found: false, name: null, nutrition: { ...EMPTY_NUTRITION } };
+    return { barcode, found: false, name: null, nutrition: { ...EMPTY_NUTRITION }, ingredientsText: null, tags: [] };
   }
 
   const product = asRecord(root.product);
@@ -69,6 +72,18 @@ export function mapOffResponse(barcode: string, json: unknown): OffProduct {
 
   const nameRaw = product.product_name;
   const name = typeof nameRaw === 'string' && nameRaw.trim().length > 0 ? nameRaw.trim() : null;
+
+  const ingredientsTextRaw = product.ingredients_text;
+  const ingredientsText =
+    typeof ingredientsTextRaw === 'string' && ingredientsTextRaw.trim().length > 0
+      ? ingredientsTextRaw.trim()
+      : null;
+
+  const tags = extractTags({
+    ingredientsText,
+    allergensTags: product.allergens_tags,
+    additivesTags: product.additives_tags,
+  });
 
   let sodiumMg = num(nutriments['sodium_100g']);
   if (sodiumMg != null) {
@@ -89,7 +104,7 @@ export function mapOffResponse(barcode: string, json: unknown): OffProduct {
     sodiumMg: round(sodiumMg, 0),
   };
 
-  return { barcode, found: true, name, nutrition };
+  return { barcode, found: true, name, nutrition, ingredientsText, tags };
 }
 
 function nutritionToInputs(nutrition: OffNutrition): NutritionInputs {
@@ -106,5 +121,7 @@ export function offProductToFormState(product: OffProduct): Partial<LogEntryForm
     name: product.name ?? '',
     barcode: product.barcode,
     nutrition: nutritionToInputs(product.nutrition),
+    ingredientsText: product.ingredientsText ?? '',
+    tagsJson: serializeTags(product.tags),
   };
 }

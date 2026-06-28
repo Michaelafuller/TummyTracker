@@ -17,6 +17,8 @@ function baseState(overrides: Partial<LogEntryFormState> = {}): LogEntryFormStat
     notes: 'tasty',
     nutrition: emptyNutritionInputs(),
     barcode: null,
+    ingredientsText: '',
+    tagsJson: '',
     ...overrides,
   };
 }
@@ -91,6 +93,8 @@ describe('logEntryToFormState (edit round-trip)', () => {
     fiberG: 3,
     sugarG: 1,
     sodiumMg: 0,
+    ingredientsText: 'oats, water',
+    tagsJson: '["oats","water"]',
     createdAt: 1,
     updatedAt: 2,
   };
@@ -116,8 +120,39 @@ describe('logEntryToFormState (edit round-trip)', () => {
     });
   });
 
+  it('hydrates ingredientsText and tagsJson from the persisted entry', () => {
+    const state = logEntryToFormState(entry);
+    expect(state.ingredientsText).toBe('oats, water');
+    expect(state.tagsJson).toBe('["oats","water"]');
+  });
+
   it('coerces an out-of-range stored sentiment to null', () => {
     const state = logEntryToFormState({ ...entry, sentiment: 9 });
     expect(state.sentiment).toBeNull();
+  });
+});
+
+describe('buildLogEntry — ingredient tags', () => {
+  it('carries pre-computed OFF tagsJson through without re-tokenizing', () => {
+    const result = buildLogEntry(
+      baseState({ ingredientsText: 'wheat flour', tagsJson: '["gluten","wheat flour"]' }),
+    );
+    expect(result.valid).toBe(true);
+    expect(result.entry?.tagsJson).toBe('["gluten","wheat flour"]');
+  });
+
+  it('tokenizes ingredientsText when tagsJson is empty', () => {
+    const result = buildLogEntry(baseState({ ingredientsText: 'oats, honey', tagsJson: '' }));
+    expect(result.valid).toBe(true);
+    const tags = JSON.parse(result.entry?.tagsJson ?? '[]') as string[];
+    expect(tags).toContain('oats');
+    expect(tags).toContain('honey');
+  });
+
+  it('sets ingredientsText and tagsJson to null when both are empty', () => {
+    const result = buildLogEntry(baseState({ ingredientsText: '', tagsJson: '' }));
+    expect(result.valid).toBe(true);
+    expect(result.entry?.ingredientsText).toBeNull();
+    expect(result.entry?.tagsJson).toBeNull();
   });
 });

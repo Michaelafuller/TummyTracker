@@ -30,4 +30,12 @@ describe('migrations', () => {
     expect(sql).not.toMatch(/drop table/i);
     expect(sql).not.toMatch(/create table `log_entry`/i);
   });
+
+  it('0003 adds ingredients_text and tags_json additively without dropping data', () => {
+    const sql = readMigration('0003');
+    expect(sql).toMatch(/alter table `log_entry` add `ingredients_text`/i);
+    expect(sql).toMatch(/alter table `log_entry` add `tags_json`/i);
+    expect(sql).not.toMatch(/drop table/i);
+    expect(sql).not.toMatch(/create table `log_entry`/i);
+  });
 });
