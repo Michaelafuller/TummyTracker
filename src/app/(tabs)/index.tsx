@@ -1,6 +1,6 @@
 import { useFocusEffect, Link, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -103,25 +103,6 @@ export default function HomeScreen() {
               </Pressable>
             </Link>
 
-            <View style={styles.links}>
-              <Link href="/insights" asChild>
-                <Pressable accessibilityRole="button" accessibilityLabel="Insights" style={styles.linkRow}>
-                  <ThemedText type="link" themeColor="textSecondary">
-                    Insights
-                  </ThemedText>
-                </Pressable>
-              </Link>
-              <Link href="/settings" asChild>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Reminder settings"
-                  style={styles.linkRow}>
-                  <ThemedText type="link" themeColor="textSecondary">
-                    Reminders
-                  </ThemedText>
-                </Pressable>
-              </Link>
-            </View>
           </ThemedView>
 
           {recents.length > 0 && (
@@ -198,15 +179,6 @@ const styles = StyleSheet.create({
   ctaLabel: {
     fontSize: 18,
     fontWeight: 600,
-  },
-  links: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: Spacing.five,
-  },
-  linkRow: {
-    alignItems: 'center',
-    paddingVertical: Spacing.two,
   },
   recentSection: {
     gap: Spacing.two,

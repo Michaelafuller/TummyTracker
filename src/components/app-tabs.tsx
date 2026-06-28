@@ -47,6 +47,34 @@ export default function AppTabs() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="insights"
+        options={{
+          title: 'Insights',
+          tabBarLabel: 'Insights',
+          tabBarButtonTestID: 'tab-insights',
+          tabBarIcon: ({ color }) => (
+            <Image
+              source={require('@/assets/images/tabIcons/insights.png')}
+              style={[styles.icon, { tintColor: color }]}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="settings"
+        options={{
+          title: 'Settings',
+          tabBarLabel: 'Settings',
+          tabBarButtonTestID: 'tab-settings',
+          tabBarIcon: ({ color }) => (
+            <Image
+              source={require('@/assets/images/tabIcons/settings.png')}
+              style={[styles.icon, { tintColor: color }]}
+            />
+          ),
+        }}
+      />
     </Tabs>
   );
 }

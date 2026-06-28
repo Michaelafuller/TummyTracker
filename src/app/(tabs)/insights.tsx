@@ -1,8 +1,9 @@
 import { ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { BottomTabInset, Spacing } from '@/constants/theme';
 import {
   computeInsights,
   type FoodFinding,
@@ -53,6 +54,7 @@ function Card({ title, body, sample }: { title: string; body: string; sample: st
 
 export default function InsightsScreen() {
   const entries = useAllEntries();
+  const insets = useSafeAreaInsets();
   const { summary, nutrientFindings, foodFindings, ingredientFindings, temporalFindings } = computeInsights(entries);
   const hasFindings =
     nutrientFindings.length > 0 ||
@@ -62,7 +64,11 @@ export default function InsightsScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: insets.top + Spacing.three, paddingBottom: insets.bottom + BottomTabInset + Spacing.four },
+        ]}>
         <ThemedText type="small" themeColor="textSecondary">
           These are observations from your own logs — patterns, not medical advice. Talk to a
           professional about anything that concerns you.
@@ -158,8 +164,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    padding: Spacing.four,
-    paddingBottom: Spacing.six,
+    paddingHorizontal: Spacing.four,
     gap: Spacing.four,
   },
   summary: {

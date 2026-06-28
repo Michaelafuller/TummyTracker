@@ -1,12 +1,13 @@
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Switch, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FormField, ThemedTextInput } from '@/components/form-fields';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { BottomTabInset, Spacing } from '@/constants/theme';
 import { createLogEntry, getLogEntry, listLogEntries } from '@/db/repository';
 import {
   DEFAULT_REMINDERS,
@@ -31,6 +32,7 @@ function timeInputsFrom(state: RemindersState): TimeInputs {
 
 export default function SettingsScreen() {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const [reminders, setReminders] = useState<RemindersState>(DEFAULT_REMINDERS);
   const [timeInputs, setTimeInputs] = useState<TimeInputs>(() => timeInputsFrom(DEFAULT_REMINDERS));
   const [loading, setLoading] = useState(true);
@@ -73,7 +75,6 @@ export default function SettingsScreen() {
   async function commitTime(slot: ReminderSlot) {
     const time = parseClockTime(timeInputs[slot]);
     if (!time) {
-      // Revert to the last good value.
       setTimeInputs((prev) => ({
         ...prev,
         [slot]: formatClock(reminders[slot].hour, reminders[slot].minute),
@@ -147,60 +148,69 @@ export default function SettingsScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <ThemedText type="small" themeColor="textSecondary">
-        Daily local reminders to log a meal and rate how it sat with you. Nothing leaves your
-        device.
-      </ThemedText>
+      <ScrollView
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: insets.top + Spacing.three, paddingBottom: insets.bottom + BottomTabInset + Spacing.four },
+        ]}>
+        <ThemedText type="subtitle">Settings</ThemedText>
 
-      <View style={styles.divider} />
-      <ThemedText type="smallBold">Data</ThemedText>
-      <ThemedText type="small" themeColor="textSecondary">
-        Your journal lives only on this device. Export a backup before switching phones.
-      </ThemedText>
-      <View style={styles.dataRow}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Export data"
-          disabled={dataWorking}
-          onPress={handleExport}
-          style={[styles.dataButton, { backgroundColor: theme.backgroundElement, borderColor: theme.border, opacity: dataWorking ? 0.5 : 1 }]}>
-          <ThemedText type="smallBold">Export data</ThemedText>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Import data"
-          disabled={dataWorking}
-          onPress={handleImport}
-          style={[styles.dataButton, { backgroundColor: theme.backgroundElement, borderColor: theme.border, opacity: dataWorking ? 0.5 : 1 }]}>
-          <ThemedText type="smallBold">Import data</ThemedText>
-        </Pressable>
-      </View>
-      <View style={styles.divider} />
-
-      {REMINDER_SLOTS.map((slot) => (
-        <View key={slot} style={styles.row}>
-          <View style={styles.rowHeader}>
-            <ThemedText type="smallBold">{slot[0].toUpperCase() + slot.slice(1)}</ThemedText>
-            <Switch
-              value={reminders[slot].enabled}
-              onValueChange={(value) => toggle(slot, value)}
-              accessibilityLabel={`${slot} reminder`}
-            />
-          </View>
-          <FormField label="Time">
-            <ThemedTextInput
-              value={timeInputs[slot]}
-              onChangeText={(value) => setTimeInputs((prev) => ({ ...prev, [slot]: value }))}
-              onBlur={() => commitTime(slot)}
-              onSubmitEditing={() => commitTime(slot)}
-              placeholder="HH:MM"
-              accessibilityLabel={`${slot} reminder time`}
-              keyboardType="numbers-and-punctuation"
-              autoCapitalize="none"
-            />
-          </FormField>
+        <ThemedText type="smallBold">Data</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">
+          Your journal lives only on this device. Export a backup before switching phones.
+        </ThemedText>
+        <View style={styles.dataRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Export data"
+            disabled={dataWorking}
+            onPress={handleExport}
+            style={[styles.dataButton, { backgroundColor: theme.backgroundElement, borderColor: theme.border, opacity: dataWorking ? 0.5 : 1 }]}>
+            <ThemedText type="smallBold">Export data</ThemedText>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Import data"
+            disabled={dataWorking}
+            onPress={handleImport}
+            style={[styles.dataButton, { backgroundColor: theme.backgroundElement, borderColor: theme.border, opacity: dataWorking ? 0.5 : 1 }]}>
+            <ThemedText type="smallBold">Import data</ThemedText>
+          </Pressable>
         </View>
-      ))}
+
+        <View style={styles.divider} />
+
+        <ThemedText type="smallBold">Reminders</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">
+          Scheduled reminders to log meals and rate how they sat with you. Nothing leaves your
+          device.
+        </ThemedText>
+
+        {REMINDER_SLOTS.map((slot) => (
+          <View key={slot} style={styles.row}>
+            <View style={styles.rowHeader}>
+              <ThemedText type="smallBold">{slot[0].toUpperCase() + slot.slice(1)}</ThemedText>
+              <Switch
+                value={reminders[slot].enabled}
+                onValueChange={(value) => toggle(slot, value)}
+                accessibilityLabel={`${slot} reminder`}
+              />
+            </View>
+            <FormField label="Time">
+              <ThemedTextInput
+                value={timeInputs[slot]}
+                onChangeText={(value) => setTimeInputs((prev) => ({ ...prev, [slot]: value }))}
+                onBlur={() => commitTime(slot)}
+                onSubmitEditing={() => commitTime(slot)}
+                placeholder="HH:MM"
+                accessibilityLabel={`${slot} reminder time`}
+                keyboardType="numbers-and-punctuation"
+                autoCapitalize="none"
+              />
+            </FormField>
+          </View>
+        ))}
+      </ScrollView>
     </ThemedView>
   );
 }
@@ -208,7 +218,9 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: Spacing.four,
+  },
+  scrollContent: {
+    paddingHorizontal: Spacing.four,
     gap: Spacing.four,
   },
   centered: {

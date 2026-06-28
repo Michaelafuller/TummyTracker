@@ -27,8 +27,6 @@ export default function RootLayout() {
               headerTitleStyle: { color: '#fff' },
             }}
           />
-          <Stack.Screen name="settings" options={{ title: 'Reminders', presentation: 'modal' }} />
-          <Stack.Screen name="insights" options={{ title: 'Insights', presentation: 'modal' }} />
         </Stack>
       </AppProviders>
     </ThemeProvider>
