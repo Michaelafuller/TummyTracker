@@ -35,6 +35,8 @@ export const logEntry = sqliteTable('log_entry', {
   ingredientsText: text('ingredients_text'),
   // JSON-encoded string[] of normalized tags (allergens + additives + tokenized words).
   tagsJson: text('tags_json'),
+  // Serving size in grams/ml (from OFF serving_quantity or user entry); optional.
+  servingG: real('serving_g'),
   // Nutrition — all optional reals.
   calories: real('calories'),
   fatG: real('fat_g'),

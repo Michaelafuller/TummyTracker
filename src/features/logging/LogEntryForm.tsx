@@ -8,7 +8,7 @@ import { Spacing } from '@/constants/theme';
 import { FOOD_TYPES, MEAL_SLOTS, type MealSlot } from '@/db/schema';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDateInput, formatTimeInput } from '@/lib/datetime';
-import { NUTRITION_LABELS } from '@/lib/nutrition';
+import { NUTRITION_LABELS, scaleNutrition } from '@/lib/nutrition';
 import { MAX_NOTES_LENGTH, NUTRITION_FIELDS, type NutritionField } from '@/lib/validation';
 import { SentimentSelector } from '@/features/sentiment/SentimentSelector';
 import {
@@ -43,6 +43,8 @@ function defaultState(initial?: Partial<LogEntryFormState>): LogEntryFormState {
     barcode: null,
     ingredientsText: '',
     tagsJson: '',
+    servingG: '',
+    nutritionBase: null,
     ...initial,
   };
 }
@@ -75,6 +77,25 @@ export function LogEntryForm({
 
   function setNutrition(field: NutritionField, value: string) {
     setState((prev) => ({ ...prev, nutrition: { ...prev.nutrition, [field]: value } }));
+  }
+
+  function handleServingChange(value: string) {
+    setState((prev) => {
+      const parsed = Number(value);
+      if (prev.nutritionBase != null && value.trim() !== '' && parsed > 0 && Number.isFinite(parsed)) {
+        const scaled = scaleNutrition(prev.nutritionBase, parsed);
+        const nutrition = NUTRITION_FIELDS.reduce(
+          (acc, field) => {
+            const v = scaled[field];
+            acc[field] = v == null ? '' : String(v);
+            return acc;
+          },
+          {} as typeof prev.nutrition,
+        );
+        return { ...prev, servingG: value, nutrition };
+      }
+      return { ...prev, servingG: value };
+    });
   }
 
   async function handleSubmit() {
@@ -184,6 +205,16 @@ export function LogEntryForm({
       <ThemedText type="smallBold" style={styles.sectionHeading}>
         Nutrition (optional)
       </ThemedText>
+      <FormField label="Serving size (g)" hint={state.nutritionBase ? 'Editing rescales all values' : undefined}>
+        <ThemedTextInput
+          value={state.servingG}
+          onChangeText={handleServingChange}
+          placeholder="e.g. 150"
+          accessibilityLabel="Serving size in grams"
+          keyboardType="numeric"
+          inputMode="decimal"
+        />
+      </FormField>
       <View style={styles.nutritionGrid}>
         {NUTRITION_FIELDS.map((field) => (
           <View key={field} style={styles.nutritionCell}>

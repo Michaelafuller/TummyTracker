@@ -7,6 +7,7 @@ import { isSentimentValue, type SentimentValue } from '@/features/sentiment/scal
 import { formatDateInput, formatTimeInput, parseDateTime } from '@/lib/datetime';
 import { extractTags, parseTagsJson, serializeTags } from '@/lib/ingredients';
 import { parseOptionalNumber } from '@/lib/number';
+import type { NutritionValues } from '@/lib/nutrition';
 import { NUTRITION_FIELDS, type NutritionField, validateNotes } from '@/lib/validation';
 
 export type NutritionInputs = Record<NutritionField, string>;
@@ -23,6 +24,9 @@ export interface LogEntryFormState {
   barcode: string | null;
   ingredientsText: string;
   tagsJson: string; // pre-computed from OFF (allergens + additives + text); empty = compute on save
+  servingG: string; // serving size in grams; empty = not set
+  /** Per-100g base nutrition from OFF scan; null for manual entries. Used to rescale when servingG changes. */
+  nutritionBase: Partial<NutritionValues> | null;
 }
 
 /** The validated, ready-to-persist shape (no id/timestamps — the repo adds those). */
@@ -42,6 +46,7 @@ export interface BuiltLogEntry {
   fiberG: number | null;
   sugarG: number | null;
   sodiumMg: number | null;
+  servingG: number | null;
   ingredientsText: string | null;
   tagsJson: string | null;
 }
@@ -86,6 +91,8 @@ export function logEntryToFormState(entry: LogEntry): LogEntryFormState {
     barcode: entry.barcode,
     ingredientsText: entry.ingredientsText ?? '',
     tagsJson: entry.tagsJson ?? '',
+    servingG: entry.servingG != null ? String(entry.servingG) : '',
+    nutritionBase: null, // per-100g base not stored; rescaling unavailable in edit path
   };
 }
 
@@ -120,6 +127,11 @@ export function buildLogEntry(state: LogEntryFormState): BuildResult {
       nutritionValues[field] = parsed.value;
     }
   }
+
+  // Parse optional serving size; must be positive when provided.
+  const parsedServing = parseOptionalNumber(state.servingG);
+  const servingGValue =
+    parsedServing.value != null && parsedServing.value > 0 ? parsedServing.value : null;
 
   const valid =
     !errors.name &&
@@ -161,6 +173,7 @@ export function buildLogEntry(state: LogEntryFormState): BuildResult {
     fiberG: nutritionValues.fiberG ?? null,
     sugarG: nutritionValues.sugarG ?? null,
     sodiumMg: nutritionValues.sodiumMg ?? null,
+    servingG: servingGValue,
     ingredientsText: trimmedIngredients.length > 0 ? trimmedIngredients : null,
     tagsJson: finalTagsJson,
   };

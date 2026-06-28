@@ -28,6 +28,7 @@ function makeEntry(overrides: Partial<LogEntry>): LogEntry {
     fiberG: null,
     sugarG: null,
     sodiumMg: null,
+    servingG: null,
     ingredientsText: null,
     tagsJson: null,
     createdAt: 0,

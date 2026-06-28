@@ -1,0 +1,1 @@
+ALTER TABLE `log_entry` ADD `serving_g` real;

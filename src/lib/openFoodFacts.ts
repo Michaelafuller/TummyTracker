@@ -5,6 +5,7 @@
 
 import type { LogEntryFormState, NutritionInputs } from '@/features/logging/formModel';
 import { extractTags, serializeTags } from '@/lib/ingredients';
+import { scaleNutrition, type NutritionValues } from '@/lib/nutrition';
 import { NUTRITION_FIELDS } from '@/lib/validation';
 
 export interface OffNutrition {
@@ -23,6 +24,8 @@ export interface OffProduct {
   found: boolean;
   name: string | null;
   nutrition: OffNutrition;
+  /** OFF serving_quantity in grams/ml, or null when absent. */
+  servingG: number | null;
   ingredientsText: string | null;
   tags: string[];
 }
@@ -64,7 +67,7 @@ export function mapOffResponse(barcode: string, json: unknown): OffProduct {
   const root = asRecord(json);
   const found = num(root.status) === 1 || root.status === 1;
   if (!found) {
-    return { barcode, found: false, name: null, nutrition: { ...EMPTY_NUTRITION }, ingredientsText: null, tags: [] };
+    return { barcode, found: false, name: null, nutrition: { ...EMPTY_NUTRITION }, servingG: null, ingredientsText: null, tags: [] };
   }
 
   const product = asRecord(root.product);
@@ -104,10 +107,12 @@ export function mapOffResponse(barcode: string, json: unknown): OffProduct {
     sodiumMg: round(sodiumMg, 0),
   };
 
-  return { barcode, found: true, name, nutrition, ingredientsText, tags };
+  const servingG = num(product.serving_quantity);
+
+  return { barcode, found: true, name, nutrition, servingG, ingredientsText, tags };
 }
 
-function nutritionToInputs(nutrition: OffNutrition): NutritionInputs {
+function nutritionToInputs(nutrition: NutritionValues): NutritionInputs {
   return NUTRITION_FIELDS.reduce((acc, field) => {
     const value = nutrition[field];
     acc[field] = value == null ? '' : String(value);
@@ -117,10 +122,15 @@ function nutritionToInputs(nutrition: OffNutrition): NutritionInputs {
 
 /** Convert a looked-up product into form prefill state for the manual entry form. */
 export function offProductToFormState(product: OffProduct): Partial<LogEntryFormState> {
+  const servingG = product.servingG ?? 100;
+  const base: NutritionValues = { ...product.nutrition };
+  const scaled = servingG === 100 ? base : scaleNutrition(base, servingG);
   return {
     name: product.name ?? '',
     barcode: product.barcode,
-    nutrition: nutritionToInputs(product.nutrition),
+    nutrition: nutritionToInputs(scaled),
+    servingG: String(servingG),
+    nutritionBase: base,
     ingredientsText: product.ingredientsText ?? '',
     tagsJson: serializeTags(product.tags),
   };

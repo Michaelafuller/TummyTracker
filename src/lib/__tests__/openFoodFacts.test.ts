@@ -57,6 +57,16 @@ describe('mapOffResponse', () => {
     expect(product.name).toBeNull();
     expect(product.nutrition.fatG).toBeNull();
   });
+
+  it('reads serving_quantity from the product', () => {
+    const json = { status: 1, product: { product_name: 'Bar', serving_quantity: 40, nutriments: {} } };
+    expect(mapOffResponse('1', json).servingG).toBe(40);
+  });
+
+  it('returns servingG null when serving_quantity is absent', () => {
+    const json = { status: 1, product: { product_name: 'Loose', nutriments: {} } };
+    expect(mapOffResponse('1', json).servingG).toBeNull();
+  });
 });
 
 describe('offProductToFormState', () => {
@@ -80,5 +90,29 @@ describe('offProductToFormState', () => {
     expect(state.name).toBe('');
     expect(state.ingredientsText).toBe('');
     expect(state.tagsJson).toBe('[]');
+  });
+
+  it('scales nutrition by serving_quantity and exposes the per-100g base', () => {
+    const json = {
+      status: 1,
+      product: {
+        product_name: 'Bar',
+        serving_quantity: 40,
+        nutriments: { 'energy-kcal_100g': 500, 'fat_100g': 20 },
+      },
+    };
+    const state = offProductToFormState(mapOffResponse('1', json));
+    // 40g serving: 500 × 0.4 = 200 kcal, 20 × 0.4 = 8 g fat
+    expect(state.nutrition?.calories).toBe('200');
+    expect(state.nutrition?.fatG).toBe('8');
+    expect(state.servingG).toBe('40');
+    expect(state.nutritionBase?.calories).toBe(500);
+    expect(state.nutritionBase?.fatG).toBe(20);
+  });
+
+  it('defaults servingG to 100 when serving_quantity is absent (no scaling)', () => {
+    const state = offProductToFormState(mapOffResponse('3017620422003', found));
+    expect(state.servingG).toBe('100');
+    expect(state.nutrition?.calories).toBe('539'); // unchanged from per-100g
   });
 });

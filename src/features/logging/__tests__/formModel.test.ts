@@ -19,6 +19,8 @@ function baseState(overrides: Partial<LogEntryFormState> = {}): LogEntryFormStat
     barcode: null,
     ingredientsText: '',
     tagsJson: '',
+    servingG: '',
+    nutritionBase: null,
     ...overrides,
   };
 }
@@ -72,6 +74,17 @@ describe('buildLogEntry', () => {
     expect(result.entry?.sentiment).toBeNull();
     expect(result.entry?.barcode).toBe('0123456789012');
   });
+
+  it('parses a valid servingG and persists it', () => {
+    const result = buildLogEntry(baseState({ servingG: '150' }));
+    expect(result.valid).toBe(true);
+    expect(result.entry?.servingG).toBe(150);
+  });
+
+  it('sets servingG to null when the field is empty or zero', () => {
+    expect(buildLogEntry(baseState({ servingG: '' })).entry?.servingG).toBeNull();
+    expect(buildLogEntry(baseState({ servingG: '0' })).entry?.servingG).toBeNull();
+  });
 });
 
 describe('logEntryToFormState (edit round-trip)', () => {
@@ -95,6 +108,7 @@ describe('logEntryToFormState (edit round-trip)', () => {
     fiberG: 3,
     sugarG: 1,
     sodiumMg: 0,
+    servingG: 40,
     ingredientsText: 'oats, water',
     tagsJson: '["oats","water"]',
     createdAt: 1,
@@ -131,6 +145,16 @@ describe('logEntryToFormState (edit round-trip)', () => {
   it('coerces an out-of-range stored sentiment to null', () => {
     const state = logEntryToFormState({ ...entry, sentiment: 9 });
     expect(state.sentiment).toBeNull();
+  });
+
+  it('hydrates servingG from the persisted entry', () => {
+    const state = logEntryToFormState(entry);
+    expect(state.servingG).toBe('40');
+  });
+
+  it('sets servingG to empty string when null in the persisted entry', () => {
+    const state = logEntryToFormState({ ...entry, servingG: null });
+    expect(state.servingG).toBe('');
   });
 });
 
