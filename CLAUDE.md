@@ -27,6 +27,10 @@
 - **EAS is config-only here.** `eas.json` + app identifiers are committed so the
   owner can `eas build` themselves. The agent never invokes EAS, never assumes a
   device. Device acceptance lives in `docs/ACCEPTANCE.md`.
+- **`eas.json` has a strict schema — no unknown keys allowed.** Adding any field
+  outside the EAS spec (e.g. a `_comment_deps` annotation) causes `eas build` to
+  fail with "is not allowed". Document native deps in `CLAUDE.md §3` and commit
+  messages; never in `eas.json`.
 - **Component tests are async (RNTL v14).** `render(...)` and `fireEvent.*(...)`
   return promises — `await` them and destructure queries from the awaited result
   (the global `screen` proxy is unreliable under the jest-expo preset). CSS imports
