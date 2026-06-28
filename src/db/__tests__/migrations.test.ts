@@ -23,4 +23,11 @@ describe('migrations', () => {
     expect(sql).not.toMatch(/drop table/i);
     expect(sql).not.toMatch(/create table `log_entry`/i);
   });
+
+  it('0002 adds saturated_fat_g additively without dropping data', () => {
+    const sql = readMigration('0002');
+    expect(sql).toMatch(/alter table `log_entry` add `saturated_fat_g`/i);
+    expect(sql).not.toMatch(/drop table/i);
+    expect(sql).not.toMatch(/create table `log_entry`/i);
+  });
 });

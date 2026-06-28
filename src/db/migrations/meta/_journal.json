@@ -15,6 +15,13 @@
       "when": 1782599005260,
       "tag": "0001_adorable_ben_grimm",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1782614616155,
+      "tag": "0002_magical_lorna_dane",
+      "breakpoints": true
     }
   ]
 }

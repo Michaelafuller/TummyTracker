@@ -7,6 +7,7 @@
     "nutriments": {
       "energy-kcal_100g": 539,
       "fat_100g": 30.9,
+      "saturated-fat_100g": 10.6,
       "carbohydrates_100g": 57.5,
       "proteins_100g": 6.3,
       "fiber_100g": 0,

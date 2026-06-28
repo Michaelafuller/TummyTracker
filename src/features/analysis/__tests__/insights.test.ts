@@ -20,6 +20,7 @@ function makeEntry(overrides: Partial<LogEntry>): LogEntry {
     notes: null,
     calories: null,
     fatG: null,
+    saturatedFatG: null,
     carbsG: null,
     proteinG: null,
     fiberG: null,

@@ -10,6 +10,7 @@ describe('mapOffResponse', () => {
     expect(product.nutrition).toEqual({
       calories: 539,
       fatG: 30.9,
+      saturatedFatG: 10.6,
       carbsG: 57.5,
       proteinG: 6.3,
       fiberG: 0,
@@ -29,6 +30,16 @@ describe('mapOffResponse', () => {
     const json = { status: 1, product: { product_name: 'Salty', nutriments: { salt_100g: 2.5 } } };
     const product = mapOffResponse('1', json);
     expect(product.nutrition.sodiumMg).toBe(1000); // (2.5 / 2.5) g → 1000 mg
+  });
+
+  it('maps saturated fat from saturated-fat_100g', () => {
+    const json = { status: 1, product: { product_name: 'Butter', nutriments: { 'saturated-fat_100g': 50.3 } } };
+    expect(mapOffResponse('1', json).nutrition.saturatedFatG).toBe(50.3);
+  });
+
+  it('returns null for saturatedFatG when the field is absent', () => {
+    const json = { status: 1, product: { product_name: 'Apple', nutriments: {} } };
+    expect(mapOffResponse('1', json).nutrition.saturatedFatG).toBeNull();
   });
 
   it('is defensive against missing/garbage fields', () => {

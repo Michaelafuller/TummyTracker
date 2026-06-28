@@ -72,6 +72,7 @@ describe('buildBmEntry', () => {
       notes: 'urgent',
       calories: null,
       fatG: null,
+      saturatedFatG: null,
       carbsG: null,
       proteinG: null,
       fiberG: null,

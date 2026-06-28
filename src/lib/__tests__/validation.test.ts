@@ -23,6 +23,15 @@ describe('validateNotes', () => {
   });
 });
 
+describe('NUTRITION_FIELDS', () => {
+  it('includes saturatedFatG after fatG', () => {
+    const fatIdx = NUTRITION_FIELDS.indexOf('fatG');
+    const satIdx = NUTRITION_FIELDS.indexOf('saturatedFatG');
+    expect(satIdx).toBeGreaterThan(-1);
+    expect(satIdx).toBe(fatIdx + 1);
+  });
+});
+
 describe('validateNutrition', () => {
   it('accepts an empty object (all fields optional)', () => {
     expect(validateNutrition({})).toEqual({ valid: true, errors: {} });

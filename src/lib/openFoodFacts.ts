@@ -9,6 +9,7 @@ import { NUTRITION_FIELDS } from '@/lib/validation';
 export interface OffNutrition {
   calories: number | null;
   fatG: number | null;
+  saturatedFatG: number | null;
   carbsG: number | null;
   proteinG: number | null;
   fiberG: number | null;
@@ -43,6 +44,7 @@ function asRecord(value: unknown): Record<string, unknown> {
 const EMPTY_NUTRITION: OffNutrition = {
   calories: null,
   fatG: null,
+  saturatedFatG: null,
   carbsG: null,
   proteinG: null,
   fiberG: null,
@@ -79,6 +81,7 @@ export function mapOffResponse(barcode: string, json: unknown): OffProduct {
   const nutrition: OffNutrition = {
     calories: round(num(nutriments['energy-kcal_100g']), 0),
     fatG: round(num(nutriments['fat_100g']), 1),
+    saturatedFatG: round(num(nutriments['saturated-fat_100g']), 1),
     carbsG: round(num(nutriments['carbohydrates_100g']), 1),
     proteinG: round(num(nutriments['proteins_100g']), 1),
     fiberG: round(num(nutriments['fiber_100g']), 1),

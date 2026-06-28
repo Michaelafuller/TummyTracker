@@ -24,10 +24,11 @@ export function validateNotes(notes: string | null | undefined): ValidationResul
   return VALID;
 }
 
-/** The seven optional nutrition fields. All are non-negative finite numbers when present. */
+/** The eight optional nutrition fields. All are non-negative finite numbers when present. */
 export const NUTRITION_FIELDS = [
   'calories',
   'fatG',
+  'saturatedFatG',
   'carbsG',
   'proteinG',
   'fiberG',

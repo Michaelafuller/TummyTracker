@@ -33,6 +33,7 @@ export interface BuiltLogEntry {
   notes: string | null;
   calories: number | null;
   fatG: number | null;
+  saturatedFatG: number | null;
   carbsG: number | null;
   proteinG: number | null;
   fiberG: number | null;
@@ -134,6 +135,7 @@ export function buildLogEntry(state: LogEntryFormState): BuildResult {
     notes: trimmedNotes.length > 0 ? trimmedNotes : null,
     calories: nutritionValues.calories ?? null,
     fatG: nutritionValues.fatG ?? null,
+    saturatedFatG: nutritionValues.saturatedFatG ?? null,
     carbsG: nutritionValues.carbsG ?? null,
     proteinG: nutritionValues.proteinG ?? null,
     fiberG: nutritionValues.fiberG ?? null,

@@ -30,6 +30,7 @@ export const logEntry = sqliteTable('log_entry', {
   // Nutrition — all optional reals.
   calories: real('calories'),
   fatG: real('fat_g'),
+  saturatedFatG: real('saturated_fat_g'),
   carbsG: real('carbs_g'),
   proteinG: real('protein_g'),
   fiberG: real('fiber_g'),

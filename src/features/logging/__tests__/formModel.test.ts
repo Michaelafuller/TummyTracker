@@ -85,6 +85,7 @@ describe('logEntryToFormState (edit round-trip)', () => {
     notes: 'a handful',
     calories: 160,
     fatG: 14,
+    saturatedFatG: null,
     carbsG: 6,
     proteinG: 6,
     fiberG: 3,

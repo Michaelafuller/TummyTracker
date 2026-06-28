@@ -1,0 +1,1 @@
+ALTER TABLE `log_entry` ADD `saturated_fat_g` real;
