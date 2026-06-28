@@ -1,0 +1,26 @@
+appId: com.tummytracker.app
+# 1d / UI-UX — Journal calendar: day/week/month segmented toggle + collapse/expand.
+---
+- launchApp:
+    clearState: true
+- runFlow: _helpers/seed-two-meals.yaml
+- tapOn:
+    id: "tab-journal"
+- assertVisible: "Journal"
+
+# Mode toggle (SegmentedControl options: Day / Week / Month)
+- tapOn: "Month"
+- waitForAnimationToEnd
+- tapOn: "Week"
+- waitForAnimationToEnd
+- tapOn: "Day"
+- waitForAnimationToEnd
+
+# Calendar starts collapsed (shows WeekCalendar) with "Expand calendar" label
+- assertVisible: "Expand calendar"
+- tapOn: "Expand calendar"
+- waitForAnimationToEnd
+- assertVisible: "Collapse calendar"
+- tapOn: "Collapse calendar"
+- waitForAnimationToEnd
+- assertVisible: "Expand calendar"

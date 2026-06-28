@@ -70,21 +70,28 @@ maestro test flows/ --format junit --output flows/results.xml
 | H — recent foods quick-add | `flows/h-recent-foods.yaml` | ✅ Automated |
 | I — export/import buttons, no crash | `flows/i-backup.yaml` | ⚠️ Partial (file content + import round-trip: manual) |
 
-### Planned — backfill in progress (current `docs/HANDOFF.md`)
+### Backfill flows — authored; pending test-execute run on Pixel 5
 
-These features shipped with Jest tests but no Maestro flow. Flows are specced in
-the current `HANDOFF.md`; status flips to ✅ once the test-execute session runs them.
+These flows were authored in the Maestro backfill session. Status flips to ✅
+once the test-execute session runs `npm run e2e` and `flows/results.xml` confirms
+they pass. See `docs/RESULTS.md` (written by the test-execute session).
 
 | ACCEPTANCE.md item | Flow file | Status |
 |---|---|---|
-| A — saturated fat persists (manual path) | `flows/ab-satfat-ingredients.yaml` | 🔜 Planned |
-| B — ingredient capture persists on reopen | `flows/ab-satfat-ingredients.yaml` | 🔜 Planned |
-| C — symptom log, render, filter, edit reload | `flows/c-symptom-logging.yaml` | 🔜 Planned |
-| D — "Ingredients you react to" insight | `flows/d-ingredient-insights.yaml` | 🔜 Planned (verify manual ingredients are tagged) |
-| E — "Timing patterns" / summary counts | `flows/e-temporal-insights.yaml` | 🔜 Planned (⚠️ summary auto; Timing patterns timing-dependent → manual) |
-| 1d — day/week/month + collapse calendar | `flows/journal-calendar.yaml` | 🔜 Planned |
-| Nav — 4 bottom tabs reachable | `flows/nav-tabs.yaml` | 🔜 Planned |
-| Settings — offline toggle + sections | `flows/settings-smoke.yaml` | 🔜 Planned (offline-mode value: manual) |
+| A — saturated fat persists (manual path) | `flows/ab-satfat-ingredients.yaml` | ⏳ Authored |
+| B — ingredient capture persists on reopen | `flows/ab-satfat-ingredients.yaml` | ⏳ Authored |
+| C — symptom log, render, filter, edit reload | `flows/c-symptom-logging.yaml` | ⏳ Authored |
+| D — "Ingredients you react to" insight | `flows/d-ingredient-insights.yaml` | ⏳ Authored (manual ingredients ARE tagged — confirmed in formModel.ts) |
+| E — summary counts (food · BM · rated) | `flows/e-temporal-insights.yaml` | ⏳ Authored (⚠️ partial; "Timing patterns" is timing-dependent → manual) |
+| E — "Timing patterns" section | — | ❌ Manual (24h windowed join can't be constructed deterministically in clearState) |
+| 1d — day/week/month + collapse/expand calendar | `flows/journal-calendar.yaml` | ⏳ Authored |
+| Nav — 4 bottom tabs reachable | `flows/nav-tabs.yaml` | ⏳ Authored |
+| Settings — offline toggle + sections render | `flows/settings-smoke.yaml` | ⏳ Authored (smoke; offline-mode switch value is not assertable in Maestro → manual) |
+
+**Finding — label gap:** The Insights screen has no `"Insights"` subtitle heading (unlike
+Journal → `"Journal"` and Settings → `"Settings"`). `nav-tabs.yaml` uses `"Your journal so
+far"` instead. The test-execute session should note whether adding a subtitle would be
+worth a component edit in the next planning session.
 
 **Manual items that stay on your desk:**
 1. Real barcode scan on a physical product

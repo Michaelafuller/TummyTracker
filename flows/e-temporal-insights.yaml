@@ -1,0 +1,33 @@
+appId: com.tummytracker.app
+# E — Temporal insights (partial / best-effort):
+#   Assert the Insights summary counts render correctly after seeding food entries.
+#   "Timing patterns" requires a 24h windowed join between food and adverse outcome;
+#   that gap cannot be constructed deterministically in a clearState run without
+#   driving the native date/time picker for every entry — left as manual per spec.
+---
+- launchApp:
+    clearState: true
+# Seed food + BM entries to populate the summary line
+- runFlow: _helpers/seed-two-meals.yaml
+- tapOn:
+    text: "Log a bowel movement"
+- waitForAnimationToEnd
+- tapOn:
+    text: "Type 4: Smooth, soft sausage"
+- tapOn:
+    id: "sentiment-4"
+- tapOn: "Save"
+- waitForAnimationToEnd
+
+# Navigate to Insights
+- tapOn:
+    id: "tab-insights"
+- waitForAnimationToEnd
+# Summary heading is always rendered regardless of entry count
+- assertVisible: "Your journal so far"
+# Summary line: "<n> entries · <n> food · <n> BM · <n> rated"
+# "BM" appears in the summary line (unique on this screen — Journal filter chips
+# are on the Journal tab only)
+- assertVisible: "BM"
+# "food" appears in the summary line as well
+- assertVisible: "food"

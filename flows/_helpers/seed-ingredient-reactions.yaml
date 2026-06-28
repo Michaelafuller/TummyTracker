@@ -1,0 +1,65 @@
+appId: com.tummytracker.app
+# Helper — seeds 3 "Onion Dish" meals with sentiment 1 and "onion, garlic"
+# ingredients, each time building tagsJson via extractTags so "onion" and "garlic"
+# accumulate ≥ MIN_TAG_OCCURRENCES (3) in rated food entries.
+# Assumes app is already running and the Home screen is visible.
+---
+- tapOn: "Add an entry manually"
+- tapOn: "Entry name"
+- inputText: "Onion Dish"
+- hideKeyboard
+- tapOn:
+    id: "sentiment-1"
+- scrollUntilVisible:
+    element:
+      text: "Ingredients (optional)"
+    direction: DOWN
+- tapOn: "Ingredients"
+- inputText: "onion, garlic"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Save entry"
+    direction: DOWN
+- tapOn: "Save entry"
+- waitForAnimationToEnd
+
+- tapOn: "Add an entry manually"
+- tapOn: "Entry name"
+- inputText: "Onion Dish"
+- hideKeyboard
+- tapOn:
+    id: "sentiment-1"
+- scrollUntilVisible:
+    element:
+      text: "Ingredients (optional)"
+    direction: DOWN
+- tapOn: "Ingredients"
+- inputText: "onion, garlic"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Save entry"
+    direction: DOWN
+- tapOn: "Save entry"
+- waitForAnimationToEnd
+
+- tapOn: "Add an entry manually"
+- tapOn: "Entry name"
+- inputText: "Onion Dish"
+- hideKeyboard
+- tapOn:
+    id: "sentiment-1"
+- scrollUntilVisible:
+    element:
+      text: "Ingredients (optional)"
+    direction: DOWN
+- tapOn: "Ingredients"
+- inputText: "onion, garlic"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Save entry"
+    direction: DOWN
+- tapOn: "Save entry"
+- waitForAnimationToEnd

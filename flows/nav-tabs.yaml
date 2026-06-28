@@ -1,0 +1,30 @@
+appId: com.tummytracker.app
+# Nav — all four bottom tabs reachable without crash; each screen renders
+# its landmark content.
+# NOTE: Insights screen has no "Insights" subtitle heading (finding — see RESULTS.md).
+# "Your journal so far" is used instead as it is always rendered on that screen.
+---
+- launchApp:
+    clearState: true
+- assertVisible: "TummyTracker"
+
+- tapOn:
+    id: "tab-journal"
+# "Journal" is the subtitle rendered on the Journal screen content (explore.tsx:94)
+- assertVisible: "Journal"
+
+- tapOn:
+    id: "tab-insights"
+- waitForAnimationToEnd
+# Insights screen renders this bold heading unconditionally (insights.tsx:78)
+- assertVisible: "Your journal so far"
+
+- tapOn:
+    id: "tab-settings"
+- waitForAnimationToEnd
+# "Settings" is the subtitle rendered on the Settings screen (settings.tsx:159)
+- assertVisible: "Settings"
+
+- tapOn:
+    id: "tab-home"
+- assertVisible: "TummyTracker"

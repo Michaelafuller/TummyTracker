@@ -1,0 +1,28 @@
+appId: com.tummytracker.app
+# Settings — offline-mode toggle present + tappable (no crash); Data/Reminders/App
+# sections render. Switch on/off state is not asserted (not reliably queryable in
+# Maestro) — this is a no-crash smoke test only.
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    id: "tab-settings"
+- waitForAnimationToEnd
+- assertVisible: "Settings"
+- assertVisible: "Data"
+- assertVisible: "Reminders"
+- assertVisible: "App"
+- assertVisible: "Export data"
+- assertVisible: "Import data"
+- scrollUntilVisible:
+    element:
+      text: "Offline mode"
+    direction: DOWN
+# Tap the Switch (accessibilityLabel="Offline mode" on the Switch component)
+- tapOn: "Offline mode"
+- waitForAnimationToEnd
+# Toggle back — still no crash
+- tapOn: "Offline mode"
+- waitForAnimationToEnd
+# Confirm still on Settings screen with no redbox
+- assertVisible: "App"

@@ -1,0 +1,22 @@
+appId: com.tummytracker.app
+# D — "Ingredients you react to" insight:
+#   Seed ≥ 3 rated food entries sharing "onion" tag (MIN_TAG_OCCURRENCES = 3),
+#   navigate to Insights, assert the section and the tag card appear.
+#   NOTE: manual ingredients ARE tag-extracted (buildLogEntry calls extractTags
+#   when tagsJson is empty and ingredientsText is set — confirmed in formModel.ts).
+#   Tags are normalized to lowercase, so assert "onion" not "Onion".
+---
+- launchApp:
+    clearState: true
+- runFlow: _helpers/seed-ingredient-reactions.yaml
+- tapOn:
+    id: "tab-insights"
+- waitForAnimationToEnd
+- assertVisible: "Your journal so far"
+- scrollUntilVisible:
+    element:
+      text: "Ingredients you react to"
+    direction: DOWN
+- assertVisible: "Ingredients you react to"
+# The card title is finding.tag (lowercase) from analyzeIngredientSentiment
+- assertVisible: "onion"

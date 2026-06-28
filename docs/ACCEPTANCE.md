@@ -72,7 +72,7 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
 
 ## Phase 1d — Browse & edit
 - [ ] Entries are grouped by day. · auto `flows/01d-browse-edit.yaml`
-- [ ] Day / week / month calendar toggle works. · auto `flows/01d-browse-edit.yaml`
+- [ ] Day / week / month calendar toggle works. · auto `flows/01d-browse-edit.yaml` · auto `flows/journal-calendar.yaml` (toggle + collapse/expand)
 - [ ] Open a past entry, add/change its sentiment, save; the change sticks. · auto `flows/01d-browse-edit.yaml`
 
 ## Phase 1e — Reminders
@@ -96,13 +96,13 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
 
 ### A · Saturated fat
 - [x] Sat. fat (g) appears in the nutrition grid between Fat and Carbs.
-- [x] Entered value persists across app restart.
+- [x] Entered value persists across app restart. · auto `flows/ab-satfat-ingredients.yaml`
 - [x] Barcode scan pre-fills saturated fat when OFF has the value.
 - [x] Blank value saves without errors.
 
 ### B · Ingredient capture
 - [x] Manual-entry form has "Ingredients (optional)" text area above the Nutrition section.
-- [x] Manually typed ingredients persist on re-open.
+- [x] Manually typed ingredients persist on re-open. · auto `flows/ab-satfat-ingredients.yaml`
 - [x] Barcode scan pre-fills ingredients from OFF.
 - [x] Type selector shows Meal and Snack only (no Symptom/BM leak).
 
@@ -111,22 +111,22 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
 - [x] Symptom form opens as a modal with When, Symptom type (9 chips), Severity (1–5), Notes.
 - [x] All fields optional; saving with nothing selected produces an entry named "Symptom".
 - [x] Saving with a type produces the correct name (e.g. "Bloating").
-- [x] Symptom entries show 🤢 prefix and correct subtitle in the journal list.
-- [x] Journal Symptom filter works; Food filter excludes symptoms.
-- [x] Edit flow loads saved type and severity.
-- [x] Existing meal/BM entries unaffected.
+- [x] Symptom entries show 🤢 prefix and correct subtitle in the journal list. · auto `flows/c-symptom-logging.yaml`
+- [x] Journal Symptom filter works; Food filter excludes symptoms. · auto `flows/c-symptom-logging.yaml`
+- [x] Edit flow loads saved type and severity. · auto `flows/c-symptom-logging.yaml`
+- [x] Existing meal/BM entries unaffected. · auto `flows/c-symptom-logging.yaml`
 
 ### D · Ingredient → sentiment correlation
-- [x] "Ingredients you react to" section appears in Insights when threshold is met.
-- [x] Cards cite average sentiment and number of meals.
+- [x] "Ingredients you react to" section appears in Insights when threshold is met. · auto `flows/d-ingredient-insights.yaml`
+- [x] Cards cite average sentiment and number of meals. · auto `flows/d-ingredient-insights.yaml`
 - [x] Well-rated tags do not appear.
 
 ### E · Temporal meal → outcome correlation
-- [x] "Timing patterns" section appears in Insights when a tag's hit rate exceeds baseline.
+- [x] "Timing patterns" section appears in Insights when a tag's hit rate exceeds baseline. · manual (timing-dependent — 24h window can't be constructed deterministically in clearState)
 - [x] Card body quotes hit count, meal count, hit %, and baseline %.
 - [x] Tags where hit rate equals baseline are suppressed.
 - [x] Section carries "Observation only" framing.
-- [x] Insights summary correctly separates food / BM / symptom counts.
+- [x] Insights summary correctly separates food / BM / symptom counts. · auto `flows/e-temporal-insights.yaml` (partial — asserts "food" and "BM" text in summary line)
 
 ---
 
@@ -167,7 +167,7 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
 - [ ] The Recent row shows at most 10 distinct food names (no duplicates by name). · manual (count check)
 
 ### I · Backup export + import
-- [ ] Settings screen shows "Export data" and "Import data" buttons. · auto `flows/i-backup.yaml`
+- [ ] Settings screen shows "Export data" and "Import data" buttons. · auto `flows/i-backup.yaml` · auto `flows/settings-smoke.yaml`
 - [ ] Tap Export — the OS share sheet appears offering the `tummytracker-backup.json` file. Save it to Files. · auto `flows/i-backup.yaml` (no-crash only; file content is manual)
 - [ ] Open the saved JSON in a text editor — it contains all log entries with correct structure. · manual
 - [ ] Clear app data (or install fresh). Tap Import → choose the JSON file → a summary dialog shows the import count. · manual

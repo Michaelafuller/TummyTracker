@@ -1,0 +1,53 @@
+appId: com.tummytracker.app
+# Flagship C — Symptom logging:
+#   - Log a symptom (type chip + severity), save
+#   - Renders distinctly (🤢 prefix, "Symptom · Bloating · Severity 3") in Journal
+#   - Symptom filter shows only symptoms; Food filter excludes them
+#   - Edit flow reloads the saved type + severity
+---
+- launchApp:
+    clearState: true
+
+# Seed two food entries so the Food filter has something to keep
+# and the Symptom filter can exclude them.
+- runFlow: _helpers/seed-two-meals.yaml
+
+# --- Log a symptom ---
+- tapOn: "Log a symptom"
+- waitForAnimationToEnd
+- tapOn: "Bloating"
+- tapOn: "Severity 3: Significant"
+- tapOn: "Save"
+- waitForAnimationToEnd
+
+# --- Journal: symptom renders distinctly ---
+- tapOn:
+    id: "tab-journal"
+# Entry name is the symptom type label; row shows "🤢 Bloating"
+- assertVisible: "Bloating"
+# Subtitle: "Symptom · Bloating · Severity 3"
+- assertVisible: "Severity 3"
+
+# --- Filter: Symptom only ---
+- tapOn: "Symptom"
+- waitForAnimationToEnd
+- assertVisible: "Bloating"
+- assertNotVisible: "Oatmeal"
+- assertNotVisible: "Pizza slice"
+
+# --- Filter: Food excludes symptoms ---
+- tapOn: "Food"
+- waitForAnimationToEnd
+- assertVisible: "Oatmeal"
+- assertNotVisible: "Bloating"
+
+# --- Edit reloads saved type + severity ---
+- tapOn: "All"
+- waitForAnimationToEnd
+# Tap the Bloating row to open entry/[id] edit screen
+- tapOn: "Bloating"
+- waitForAnimationToEnd
+# SeveritySelector shows the selected severity label below the row of buttons;
+# the cell accessibilityLabel is "Severity 3: Significant" and the label text
+# "Significant" also renders as visible text when severity 3 is selected.
+- assertVisible: "Severity 3: Significant"
