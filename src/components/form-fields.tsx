@@ -35,17 +35,21 @@ export function FormField({ label, error, hint, children }: FormFieldProps) {
   );
 }
 
-export function ThemedTextInput(props: TextInputProps) {
+export function ThemedTextInput({ style, multiline, ...props }: TextInputProps) {
   const theme = useTheme();
   return (
     <TextInput
       placeholderTextColor={theme.textSecondary}
+      multiline={multiline}
+      {...props}
+      // Caller `style` (width/flex) is merged LAST but on top of the themed base,
+      // so per-field sizing can't strip the background/text colors (dark-mode fix).
       style={[
         styles.input,
-        { backgroundColor: theme.backgroundElement, color: theme.text },
-        props.multiline && styles.multiline,
+        { backgroundColor: theme.backgroundElement, color: theme.text, borderColor: theme.border },
+        multiline && styles.multiline,
+        style,
       ]}
-      {...props}
     />
   );
 }
@@ -61,6 +65,7 @@ const styles = StyleSheet.create({
   },
   input: {
     borderRadius: Spacing.two,
+    borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
     fontSize: 16,

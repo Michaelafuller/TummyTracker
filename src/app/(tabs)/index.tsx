@@ -38,7 +38,10 @@ export default function HomeScreen() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Add an entry manually"
-              style={[styles.secondaryCta, { backgroundColor: theme.backgroundElement }]}>
+              style={[
+                styles.secondaryCta,
+                { backgroundColor: theme.backgroundElement, borderColor: theme.border },
+              ]}>
               <ThemedText style={styles.ctaLabel}>+ Add manually</ThemedText>
             </Pressable>
           </Link>
@@ -47,7 +50,10 @@ export default function HomeScreen() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Log a bowel movement"
-              style={[styles.secondaryCta, { backgroundColor: theme.backgroundElement }]}>
+              style={[
+                styles.secondaryCta,
+                { backgroundColor: theme.backgroundElement, borderColor: theme.border },
+              ]}>
               <ThemedText style={styles.ctaLabel}>💩 Log bowel movement</ThemedText>
             </Pressable>
           </Link>
@@ -107,6 +113,7 @@ const styles = StyleSheet.create({
   },
   secondaryCta: {
     borderRadius: Spacing.three,
+    borderWidth: StyleSheet.hairlineWidth,
     paddingVertical: Spacing.three,
     alignItems: 'center',
   },

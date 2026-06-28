@@ -39,9 +39,18 @@ export function SegmentedControl<T extends string>({
             onPress={() => onChange(allowClear && selected ? null : option.value)}
             style={[
               styles.chip,
-              { backgroundColor: selected ? theme.backgroundSelected : theme.backgroundElement },
+              {
+                // Selected chips invert (filled with the text colour) so the active
+                // option is unmistakable in both light and dark themes.
+                backgroundColor: selected ? theme.text : theme.backgroundElement,
+                borderColor: selected ? theme.text : theme.border,
+              },
             ]}>
-            <ThemedText type={selected ? 'smallBold' : 'small'}>{option.label}</ThemedText>
+            <ThemedText
+              type={selected ? 'smallBold' : 'small'}
+              style={selected ? { color: theme.background } : undefined}>
+              {option.label}
+            </ThemedText>
           </Pressable>
         );
       })}
@@ -59,5 +68,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
     borderRadius: Spacing.four,
+    borderWidth: StyleSheet.hairlineWidth,
   },
 });

@@ -17,6 +17,7 @@ import {
   type EntryTypeFilter,
   filterByEntryType,
   filterEntriesInRange,
+  formatPeriodLabel,
   getPeriodRange,
 } from '@/lib/journal';
 
@@ -101,6 +102,12 @@ export default function BrowseScreen() {
         />
 
         <View style={styles.listWrapper}>
+          <View style={styles.periodHeader}>
+            <ThemedText type="smallBold">{formatPeriodLabel(anchorMs, mode)}</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              {visibleEntries.length} {visibleEntries.length === 1 ? 'entry' : 'entries'}
+            </ThemedText>
+          </View>
           <EntryList entries={visibleEntries} />
         </View>
       </ScrollView>
@@ -118,5 +125,11 @@ const styles = StyleSheet.create({
   },
   listWrapper: {
     marginTop: Spacing.two,
+    gap: Spacing.three,
+  },
+  periodHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
   },
 });

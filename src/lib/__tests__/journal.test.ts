@@ -2,6 +2,7 @@ import {
   entryDateKeys,
   filterByEntryType,
   filterEntriesInRange,
+  formatPeriodLabel,
   getPeriodRange,
   groupEntriesByDay,
 } from '../journal';
@@ -67,6 +68,25 @@ describe('groupEntriesByDay', () => {
     const before = [...entries];
     groupEntriesByDay(entries);
     expect(entries).toEqual(before);
+  });
+});
+
+describe('formatPeriodLabel', () => {
+  it('labels a day with weekday and date', () => {
+    expect(formatPeriodLabel(at(2026, 6, 27), 'day')).toBe('Sat, Jun 27');
+  });
+
+  it('labels a week as a date range (same month)', () => {
+    expect(formatPeriodLabel(at(2026, 6, 24), 'week')).toBe('Jun 21 – 27');
+  });
+
+  it('labels a cross-month week with both months', () => {
+    // Week containing 2026-07-01 → Sun Jun 28 .. Sat Jul 4
+    expect(formatPeriodLabel(at(2026, 7, 1), 'week')).toBe('Jun 28 – Jul 4');
+  });
+
+  it('labels a month with year', () => {
+    expect(formatPeriodLabel(at(2026, 6, 27), 'month')).toBe('June 2026');
   });
 });
 

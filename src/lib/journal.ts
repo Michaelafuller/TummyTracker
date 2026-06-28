@@ -85,6 +85,40 @@ export function entryDateKeys<T extends { loggedAt: number }>(entries: readonly 
   return Array.from(new Set(entries.map((e) => formatDateInput(e.loggedAt))));
 }
 
+const MONTHS_SHORT = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+const MONTHS_LONG = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+const WEEKDAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/**
+ * Human label for the period the calendar mode currently covers, e.g.
+ * "Fri, Jun 27" (day), "Jun 21 – 27" (week), "June 2026" (month). Drives a visible
+ * header so toggling Day/Week/Month has an obvious effect.
+ */
+export function formatPeriodLabel(anchorMs: number, mode: CalendarMode): string {
+  if (mode === 'day') {
+    const d = new Date(anchorMs);
+    return `${WEEKDAYS_SHORT[d.getDay()]}, ${MONTHS_SHORT[d.getMonth()]} ${d.getDate()}`;
+  }
+
+  if (mode === 'week') {
+    const range = getPeriodRange(anchorMs, mode);
+    const start = new Date(range.start);
+    const end = new Date(range.end - 1); // inclusive last day of the week
+    if (start.getMonth() === end.getMonth()) {
+      return `${MONTHS_SHORT[start.getMonth()]} ${start.getDate()} – ${end.getDate()}`;
+    }
+    return `${MONTHS_SHORT[start.getMonth()]} ${start.getDate()} – ${MONTHS_SHORT[end.getMonth()]} ${end.getDate()}`;
+  }
+
+  const d = new Date(anchorMs);
+  return `${MONTHS_LONG[d.getMonth()]} ${d.getFullYear()}`;
+}
+
 export type EntryTypeFilter = 'all' | 'food' | 'bm';
 
 /** Filter entries to all, just food (meal/snack), or just bowel movements. */

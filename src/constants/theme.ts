@@ -12,15 +12,17 @@ export const Colors = {
     text: '#000000',
     background: '#ffffff',
     backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
+    backgroundSelected: '#D7DAE0',
     textSecondary: '#60646C',
+    border: '#D0D3DA',
   },
   dark: {
     text: '#ffffff',
     background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
+    backgroundElement: '#2A2C31',
+    backgroundSelected: '#43474E',
     textSecondary: '#B0B4BA',
+    border: '#43474E',
   },
 } as const;
 
