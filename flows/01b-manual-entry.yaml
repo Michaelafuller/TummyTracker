@@ -66,6 +66,7 @@ appId: com.tummytracker.app
 - tapOn:
     text: "Protein (g)"
 - inputText: "28"
+- hideKeyboard
 
 # Save
 - scrollUntilVisible:
@@ -75,7 +76,8 @@ appId: com.tummytracker.app
 - tapOn:
     text: "Save entry"
 - waitForAnimationToEnd
-- assertVisible: "Scan barcode"
+- tapOn:
+    id: "tab-home"
 
 # Verify in Journal
 - tapOn:

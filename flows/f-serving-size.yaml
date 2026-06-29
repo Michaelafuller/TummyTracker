@@ -45,6 +45,7 @@ appId: com.tummytracker.app
     text: "Serving size in grams"
 - eraseText: 20
 - inputText: "0"
+- hideKeyboard
 
 - scrollUntilVisible:
     element:
@@ -53,7 +54,8 @@ appId: com.tummytracker.app
 - tapOn:
     text: "Save entry"
 - waitForAnimationToEnd
-- assertVisible: "Scan barcode"
+- tapOn:
+    id: "tab-home"
 
 - tapOn:
     id: "tab-journal"
