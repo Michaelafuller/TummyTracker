@@ -46,6 +46,7 @@ appId: com.tummytracker.app
 - tapOn:
     text: "Save entry"
 - waitForAnimationToEnd
+- waitForAnimationToEnd
 - tapOn:
     id: "tab-home"
 
