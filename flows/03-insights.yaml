@@ -22,4 +22,8 @@ appId: com.tummytracker.app
       text: "Wheat Bread"
     direction: DOWN
 - assertVisible: "Wheat Bread"
+- scrollUntilVisible:
+    element:
+      text: "across"
+    direction: DOWN
 - assertVisible: "across"

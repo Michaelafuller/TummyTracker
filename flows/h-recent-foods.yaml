@@ -29,10 +29,13 @@ appId: com.tummytracker.app
     text: "Re-log Oatmeal"
 - waitForAnimationToEnd
 
-# Form is open and pre-filled with the food's name
-- assertVisible:
-    text: "Save entry"
+# Form is open and pre-filled with the food's name (above fold confirms open)
 - assertVisible: "Oatmeal"
+- scrollUntilVisible:
+    element:
+      text: "Save entry"
+    direction: DOWN
+- assertVisible: "Save entry"
 
 # Save the re-logged entry
 - tapOn:

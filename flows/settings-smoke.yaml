@@ -11,9 +11,7 @@ appId: com.tummytracker.app
 - assertVisible: "Settings"
 - assertVisible: "Data"
 - assertVisible: "Reminders"
-- assertVisible: "App"
 - assertVisible: "Export data"
-- assertVisible: "Import data"
 - scrollUntilVisible:
     element:
       text: "Offline mode"

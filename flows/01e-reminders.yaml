@@ -11,7 +11,7 @@ appId: com.tummytracker.app
       notifications: allow
 
 - tapOn:
-    text: "Reminder settings"
+    id: "tab-settings"
 - waitForAnimationToEnd
 
 # Reminder settings screen should be visible

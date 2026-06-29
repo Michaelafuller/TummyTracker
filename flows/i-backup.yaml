@@ -11,9 +11,9 @@ appId: com.tummytracker.app
 # Seed some data so the export is non-trivial
 - runFlow: _helpers/seed-two-meals.yaml
 
-# Navigate to Settings / Reminders (accessibilityLabel from Home)
+# Navigate to Settings tab
 - tapOn:
-    text: "Reminder settings"
+    id: "tab-settings"
 - waitForAnimationToEnd
 
 # Both data buttons are present
