@@ -75,6 +75,7 @@ appId: com.tummytracker.app
 - tapOn:
     text: "Save entry"
 - waitForAnimationToEnd
+- assertVisible: "TummyTracker"
 
 # Verify in Journal
 - tapOn:

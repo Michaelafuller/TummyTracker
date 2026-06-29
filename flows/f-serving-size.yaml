@@ -53,6 +53,7 @@ appId: com.tummytracker.app
 - tapOn:
     text: "Save entry"
 - waitForAnimationToEnd
+- assertVisible: "TummyTracker"
 
 - tapOn:
     id: "tab-journal"

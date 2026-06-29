@@ -37,6 +37,7 @@ appId: com.tummytracker.app
     direction: DOWN
 - tapOn: "Save entry"
 - waitForAnimationToEnd
+- assertVisible: "TummyTracker"
 
 # --- Reopen via Journal ---
 - tapOn:
@@ -48,6 +49,6 @@ appId: com.tummytracker.app
 # is also provided by Jest unit tests for scaleNutrition / validateNutrition)
 - scrollUntilVisible:
     element:
-      text: "butter, cream"
+      text: "Ingredients (optional)"
     direction: DOWN
 - assertVisible: "butter, cream"

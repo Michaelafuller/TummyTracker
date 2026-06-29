@@ -47,6 +47,10 @@ appId: com.tummytracker.app
 - tapOn:
     id: "sentiment-3"
 
+- scrollUntilVisible:
+    element:
+      text: "Save changes"
+    direction: DOWN
 - tapOn:
     text: "Save changes"
 - waitForAnimationToEnd

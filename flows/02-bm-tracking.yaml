@@ -27,6 +27,7 @@ appId: com.tummytracker.app
 # Save
 - tapOn: "Save"
 - waitForAnimationToEnd
+- assertVisible: "TummyTracker"
 
 # --- Journal: BM renders distinctly ---
 - tapOn:

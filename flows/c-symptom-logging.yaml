@@ -19,6 +19,7 @@ appId: com.tummytracker.app
 - tapOn: "Severity 3: Significant"
 - tapOn: "Save"
 - waitForAnimationToEnd
+- assertVisible: "TummyTracker"
 
 # --- Journal: symptom renders distinctly ---
 - tapOn:

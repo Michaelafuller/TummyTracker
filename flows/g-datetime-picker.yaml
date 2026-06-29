@@ -46,6 +46,7 @@ appId: com.tummytracker.app
 - tapOn:
     text: "Save entry"
 - waitForAnimationToEnd
+- assertVisible: "TummyTracker"
 
 # Re-open and verify date field still populated
 - tapOn:
