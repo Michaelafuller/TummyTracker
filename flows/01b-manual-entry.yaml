@@ -66,7 +66,6 @@ appId: com.tummytracker.app
 - tapOn:
     text: "Protein (g)"
 - inputText: "28"
-- hideKeyboard
 
 # Save
 - scrollUntilVisible:

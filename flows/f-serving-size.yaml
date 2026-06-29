@@ -45,7 +45,6 @@ appId: com.tummytracker.app
     text: "Serving size in grams"
 - eraseText: 20
 - inputText: "0"
-- hideKeyboard
 
 - scrollUntilVisible:
     element:
