@@ -20,6 +20,7 @@ appId: com.tummytracker.app
 - tapOn: "Ingredients"
 - inputText: "butter, cream"
 - hideKeyboard
+- waitForAnimationToEnd
 
 # Scroll to Sat. fat field and fill it
 - scrollUntilVisible:

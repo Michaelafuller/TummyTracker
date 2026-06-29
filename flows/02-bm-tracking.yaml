@@ -29,28 +29,29 @@ appId: com.tummytracker.app
 - waitForAnimationToEnd
 - assertVisible: "TummyTracker"
 
-# --- Journal: BM renders distinctly ---
+# --- Journal: BM renders distinctly (3 total: 2 food + 1 BM) ---
 - tapOn:
     id: "tab-journal"
 - waitForAnimationToEnd
-- assertVisible: "Bowel movement"
+- waitForAnimationToEnd
+- assertVisible: "3 entries"
 
 # --- Filter: BM only ---
 - tapOn: "BM"
 - waitForAnimationToEnd
-- assertVisible: "Bowel movement"
+- assertVisible: "1 entry"
 - assertNotVisible: "Oatmeal"
 - assertNotVisible: "Pizza slice"
 
 # --- Filter: Food only ---
 - tapOn: "Food"
 - waitForAnimationToEnd
+- assertVisible: "2 entries"
 - assertVisible: "Oatmeal"
 - assertVisible: "Pizza slice"
-- assertNotVisible: "Bowel movement"
 
-# --- All filter: both present ---
+# --- All filter: all 3 present ---
 - tapOn: "All"
 - waitForAnimationToEnd
+- assertVisible: "3 entries"
 - assertVisible: "Oatmeal"
-- assertVisible: "Bowel movement"

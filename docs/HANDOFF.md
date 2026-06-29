@@ -1,265 +1,303 @@
-# HANDOFF.md — Fix failing Maestro flows (Opus planning session)
+# HANDOFF.md — Session 4: Proper UX fixes + 4 remaining flows
 
-Read `docs/RESULTS.md` first — it has the full per-flow table and failure
-diagnosis. This document translates those findings into a prioritised work plan.
+**Input contract:** Read `docs/RESULTS.md` (all sessions) for full context. Read
+`docs/E2E.md` for Maestro protocol and run commands. Read root `CLAUDE.md` for
+conventions. This document is the executable prescription for the session 4 execute
+agent.
 
-Read `CLAUDE.md` (root) for conventions, and `docs/E2E.md` for the Maestro
-protocol and flow conventions.
-
----
-
-## Context
-
-The first full Maestro run against the Pixel 5 just completed (`npm run e2e:ci`
-→ `flows/results.xml`). **5 of 19 flows passed; 14 failed.** No existing flow
-had ever been run on a device before this session — the ✅ statuses in E2E.md
-were authored optimism, not verified runs.
-
-The failures fall into four groups. Groups 1 and 4 are YAML-only fixes (no app
-changes). Groups 2 and 3 may expose genuine app bugs that need investigation
-before the flows can be fixed.
-
-**Passes (do not touch):**
-`00-launch`, `01c-barcode-fallback`, `journal-calendar`, `nav-tabs`,
-`ux3-scan-screen`
+**Device:** Pixel 5 (`0A131FDD4006VE`). App installed; `adb devices` must show it
+before `npm run e2e`.
 
 ---
 
-## Priority 1 — YAML label fixes (no app changes, high confidence)
+## Status at handoff
 
-### 1a. `01e-reminders` and `i-backup` — wrong navigation target
+| Flow | State |
+|------|-------|
+| `00-launch`, `01c-barcode-fallback`, `01d-browse-edit`, `01e-reminders`, `03-insights`, `h-recent-foods`, `i-backup`, `journal-calendar`, `nav-tabs`, `settings-smoke`, `ux3-scan-screen` | ✅ passing — do not touch |
+| `02-bm-tracking` | ✅ passing — count-based assertions, do not touch |
+| `01b-manual-entry`, `f-serving-size`, `g-datetime-picker` | ✅ passing via `hideKeyboard` hack — **must be reworked** (see App Change 1) |
+| `c-symptom-logging` | ❌ blocked — emoji-prefixed `EntryRow` inaccessible to Maestro |
+| `e-temporal-insights` | ⏳ YAML updated in session 3, not yet run |
+| `ab-satfat-ingredients` | ⏳ YAML updated in session 3, not yet run |
+| `d-ingredient-insights` | ⏳ YAML updated in session 3 (via helper), not yet run |
 
-Both flows open with:
-```yaml
-- tapOn:
-    text: "Reminder settings"
+Target: **19/19** passing.
+
+---
+
+## App Change 1 — Fix `KeyboardAvoidingView` for Android (`src/app/entry/new.tsx`)
+
+### Why this matters (owner feedback)
+
+Session 3 fixed Groups A flows by adding `hideKeyboard` immediately before
+`scrollUntilVisible: "Save entry"`. The owner pushed back: dismissing the keyboard
+before saving is not how a real user uses the app. The form should scroll far enough
+that the Save button is visible above the keyboard — the user can reach it without
+manually dismissing.
+
+### Root cause
+
+`new.tsx:34` uses `behavior="height"` for Android. React Native on Android defaults to
+`adjustPan` window soft input mode (the keyboard overlays content and pans the active
+field into view — the window itself does not resize). With `adjustPan`, `behavior="height"`
+reads a keyboard offset of zero (no window resize happened), so the `KeyboardAvoidingView`
+does nothing. The keyboard overlays the bottom of the scroll area, blocking the Save
+button.
+
+### Fix
+
+**File:** `src/app/entry/new.tsx`, line 34
+
+Change:
+```tsx
+behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
 ```
-This text does not exist anywhere in the app. Settings is a bottom tab; its
-content heading is `"Settings"` (settings.tsx:159) and the reminder section
-heading is `"Reminders"` (settings.tsx:188).
-
-**Fix both flows:** Replace the `tapOn: text: "Reminder settings"` step with:
-```yaml
-- tapOn:
-    id: "tab-settings"
-- waitForAnimationToEnd
-```
-Then review each flow's subsequent assertions against the current `settings.tsx`
-to ensure they still make sense (e.g., `assertVisible: "breakfast reminder"` →
-the switch accessibilityLabel is `"breakfast reminder"` ✅ per settings.tsx:202).
-
-### 1b. `settings-smoke` — `"App"` asserted before scroll
-
-The flow asserts `"App"` (and `"Export data"`, `"Import data"`) before any
-scroll. On the Pixel 5 the Settings scroll view doesn't fit all three sections
-above the fold. The "App" section is at the bottom.
-
-**Fix `flows/settings-smoke.yaml`:** Remove the pre-scroll `assertVisible: "App"`
-and `assertVisible: "Import data"`. The flow already scrolls to `"Offline mode"`
-(which is inside the App section) and asserts `"App"` again at the end — that
-final assertion is the useful one and it runs after the scroll. Also ensure that
-final `assertVisible: "App"` runs after scroll reaches the App section.
-
-Revised structure:
-```yaml
-- tapOn: id: "tab-settings"
-- waitForAnimationToEnd
-- assertVisible: "Settings"
-- assertVisible: "Data"
-- assertVisible: "Reminders"
-- assertVisible: "Export data"   # Data section button, near top
-# scroll down to App section
-- scrollUntilVisible:
-    element:
-      text: "Offline mode"
-    direction: DOWN
-- assertVisible: "App"           # now visible after scroll
-- tapOn: "Offline mode"
-- waitForAnimationToEnd
-- tapOn: "Offline mode"
-- waitForAnimationToEnd
-- assertVisible: "App"
+to:
+```tsx
+behavior="padding"
 ```
 
-### 1c. `h-recent-foods` — `"Save entry"` asserted before scroll
+`behavior="padding"` adds `paddingBottom = keyboardHeight` to the `KeyboardAvoidingView`
+regardless of window resize mode. Combined with `keyboardShouldPersistTaps="handled"`
+already on the `ScrollView`, the scrollable area shrinks to above the keyboard and
+the Save button is reachable by scrolling — without the user dismissing the keyboard first.
 
-The flow asserts `assertVisible: text: "Save entry"` immediately after the
-pre-filled form opens, without scrolling. The save button is always below the
-fold on the entry form.
+**If Save is still partially hidden after this change:** add
+`keyboardVerticalOffset={StatusBar.currentHeight ?? 0}` (import `StatusBar` from
+`react-native`) to account for modal header height. Try without it first.
 
-**Fix `flows/h-recent-foods.yaml`:** Replace:
+### After app fix: remove the three `hideKeyboard` hacks from Group A flows
+
+These were committed in `b46a38f` solely to work around the keyboard issue. With the
+app properly fixed, they are no longer needed and should be removed so the flows
+accurately reflect real user behaviour.
+
+| File | Line | What to remove |
+|------|------|----------------|
+| `flows/01b-manual-entry.yaml` | 69 | `- hideKeyboard` — the one between `- inputText: "28"` and the `# Save` comment |
+| `flows/f-serving-size.yaml` | 48 | `- hideKeyboard` — between `- inputText: "0"` and `- scrollUntilVisible: "Save entry"` |
+| `flows/g-datetime-picker.yaml` | 41 | `- hideKeyboard` — between `- inputText: "Date picker test"` and `- scrollUntilVisible: "Save entry"` |
+
+**Do NOT remove** the `hideKeyboard` at line 17 of `01b-manual-entry.yaml` — that one
+dismisses the text keyboard so the Lunch meal-slot chip can be tapped, which is
+realistic user behaviour.
+
+**Verify each flow passes without the removed `hideKeyboard`:**
+```
+npm run e2e:flow flows/01b-manual-entry.yaml
+npm run e2e:flow flows/f-serving-size.yaml
+npm run e2e:flow flows/g-datetime-picker.yaml
+```
+
+**Commit:** `fix(form): use behavior=padding for KeyboardAvoidingView on Android`
+
+---
+
+## App Change 2 — `testID` on `EntryRow` Pressable (`src/features/logging/EntryRow.tsx`)
+
+### Root cause
+
+Maestro finds elements by Android's `getText()` API. For a `Pressable` that contains a
+`Text` node starting with an emoji (`"🤢 Bloating"`, `"💩 Bowel movement"`), the emoji
+corrupts `getText()` for the **entire Pressable**, including its children. Session 3's
+systematic test confirmed this: even `"Severity 3"` in the subtitle of an emoji-prefixed
+row is invisible to Maestro, while `"Oatmeal"` (food entry, no emoji title) is fine.
+
+The `Pressable` already carries an emoji-free `accessibilityLabel`, but Maestro's text
+matching uses `getText()`, not `getContentDescription()`.
+
+### Fix
+
+**File:** `src/features/logging/EntryRow.tsx`, line 44
+
+Add a `testID` prop to the `Pressable`:
+```tsx
+<Pressable
+  testID={`entry-row-${(entry.name || 'untitled').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+  accessibilityRole="button"
+  ...
+>
+```
+
+This produces deterministic IDs for entries the flows care about:
+- `"Bloating"` → `entry-row-bloating`
+- `"Bowel movement"` → `entry-row-bowel-movement`
+- Food entries also get IDs (harmless; `d-ingredient-insights` may use them later)
+
+**Run verification rungs before e2e:**
+```
+npm run typecheck && npm run lint && npm test
+```
+All three must be green before running any Maestro flows.
+
+**Commit this together with the `c-symptom-logging` YAML change below.**
+
+---
+
+## YAML Change — `flows/c-symptom-logging.yaml`
+
+After App Change 2, all four places that target the Bloating `EntryRow` by text must
+switch to the `id:` selector. The subtitle assertion (`"Severity 3"`) is also dropped
+from the Journal view — it lives inside the same inaccessible Pressable — because
+severity is already confirmed in the edit-screen assertion at the end of the flow.
+
+### Journal assertion block (current lines 29–33)
+
+Replace:
+```yaml
+# Entry name is the symptom type label; row shows "🤢 Bloating"
+- assertVisible: "Bloating"
+# Subtitle: "Symptom · Bloating · Severity 3"
+- assertVisible: "Severity 3"
+```
+with:
+```yaml
+# EntryRow for emoji-prefixed entries is not text-accessible via Maestro getText().
+# Use the testID added to the Pressable in EntryRow.tsx.
+- assertVisible:
+    id: "entry-row-bloating"
+# "Severity 3" subtitle is inside the same inaccessible Pressable — skip here;
+# severity is confirmed in the edit-screen assertion at the end of this flow.
+```
+
+### Symptom-filter assertion (current line 37)
+
+Replace:
+```yaml
+- assertVisible: "Bloating"
+```
+with:
 ```yaml
 - assertVisible:
-    text: "Save entry"
-- assertVisible: "Oatmeal"
+    id: "entry-row-bloating"
+```
+
+### Food-filter assertion (current line 45)
+
+Replace:
+```yaml
+- assertNotVisible: "Bloating"
 ```
 with:
 ```yaml
-- assertVisible: "Oatmeal"          # name field is above fold, confirms form opened
-- scrollUntilVisible:
-    element:
-      text: "Save entry"
-    direction: DOWN
-- assertVisible: "Save entry"
+- assertNotVisible:
+    id: "entry-row-bloating"
 ```
 
-### 1d. `03-insights` — `"across"` asserted after title-only scroll
+### Edit sub-test navigation (current line 51)
 
-`scrollUntilVisible: text: "Wheat Bread"` stops once the card *title* is
-on-screen. The card body (which contains "across") immediately follows but may
-still be partially off-screen. Also the card title "Wheat Bread" appears in the
-`foodSentence` body text too, so the scroll might stop at the body line, which
-would make "across" visible. Either way, adding one more scroll until "across"
-itself is visible is more robust.
-
-**Fix `flows/03-insights.yaml`:** Replace:
+Replace:
 ```yaml
-- scrollUntilVisible:
-    element:
-      text: "Wheat Bread"
-    direction: DOWN
-- assertVisible: "Wheat Bread"
-- assertVisible: "across"
+# Tap the Bloating row to open entry/[id] edit screen
+- tapOn: "Bloating"
 ```
 with:
 ```yaml
-- scrollUntilVisible:
-    element:
-      text: "Wheat Bread"
-    direction: DOWN
-- assertVisible: "Wheat Bread"
-- scrollUntilVisible:
-    element:
-      text: "across"
-    direction: DOWN
-- assertVisible: "across"
+# Tap the Bloating row to open entry/[id] edit screen
+- tapOn:
+    id: "entry-row-bloating"
 ```
+
+**Verify:**
+```
+npm run e2e:flow flows/c-symptom-logging.yaml
+```
+
+**Commit (together with EntryRow.tsx change):**
+`fix(e2e): add testID to EntryRow, fix emoji-prefixed entry navigation (Group B)`
 
 ---
 
-## Priority 2 — Post-save sync point (Groups 2 & 3 — NOT app bugs)
+## Verify remaining flows — YAML already updated in session 3
 
-> **Diagnosis corrected after source verification (Opus, this session).** The
-> earlier draft of this section asked you to investigate two *suspected app bugs*.
-> Both were checked against the source and are **false** — do not chase them:
->
-> - **All three save screens already call `router.back()`** after an awaited
->   `createLogEntry` — `entry/new.tsx:25`, `bm/new.tsx:18`, `symptom/new.tsx:18`
->   (and `entry/[id].tsx` for edits). Navigation is not missing.
-> - **`useEntries.ts` already uses Drizzle `useLiveQuery`** (`useEntries.ts:12`) —
->   a live SQLite subscription that re-renders on every insert/edit. So the
->   Journal does *not* need `useFocusEffect`. **Do not add it** — it would be a
->   pointless app change that fixes nothing.
->
-> Groups 2 and 3 are therefore the **same root cause: a missing post-save
-> synchronization point in the flows.** A form `Save` fires an *awaited* DB write
-> then `router.back()`; `waitForAnimationToEnd` does not wait for that async work.
-> Maestro races ahead and taps `tab-journal` while the form is still dismissing
-> (tab bar not yet present → "Id not found"), or asserts the new entry before the
-> live query has repainted. This is a **flow fix, no app change.**
+These flows had YAML fixes applied but were not run. Execute in order.
 
-**The fix (apply to every save→navigate step):** add a positive sync point that
-forces Maestro to wait for the return to a tab screen before proceeding.
+### `flows/e-temporal-insights.yaml`
+
+```
+npm run e2e:flow flows/e-temporal-insights.yaml
+```
+
+Seeds 2 meals + 1 BM, navigates to Insights, scrolls to "Your journal so far",
+asserts "BM" and "food" appear in the summary line.
+
+**If still failing:** The modal dismiss may not have completed before the Insights tab
+was tapped. Add a second `waitForAnimationToEnd` after `assertVisible: "TummyTracker"`.
+If the screen doesn't scroll to "Your journal so far", check whether
+`computeInsights` renders a different heading string.
+
+### `flows/ab-satfat-ingredients.yaml`
+
+```
+npm run e2e:flow flows/ab-satfat-ingredients.yaml
+```
+
+Fills "butter, cream" in Ingredients, saves, reopens the entry, asserts "butter, cream"
+is pre-filled. The `waitForAnimationToEnd` after `hideKeyboard` for Ingredients was
+added in session 3 to let state settle before the scroll.
+
+**If "butter, cream" is still missing after save:** The text is not being persisted
+to the DB. Check `src/features/logging/formModel.ts` — confirm `state.ingredientsText`
+flows into the `buildLogEntry` return value and maps to the `ingredientsText` column
+in the Drizzle schema. Add a temporary intermediate assertion: after save but before
+navigating to Journal, add:
 ```yaml
-- tapOn: "Save entry"            # or "Save" (BM/symptom)
-- waitForAnimationToEnd
-- assertVisible: "TummyTracker"  # sync: we're back on Home; save + nav have settled
 - tapOn:
     id: "tab-journal"
-- assertVisible: "<the entry>"   # live query has the row by now
+- tapOn: "Sat Fat Test"
+- scrollUntilVisible:
+    element:
+      text: "butter, cream"
+    direction: DOWN
+- assertVisible: "butter, cream"
+```
+If this intermediate assert also fails, the value never reached the DB.
+
+### `flows/d-ingredient-insights.yaml`
+
+```
+npm run e2e:flow flows/d-ingredient-insights.yaml
 ```
 
-Apply it to:
-- `01b-manual-entry`, `f-serving-size`, `g-datetime-picker` — sync after save,
-  then the Journal assertion (Group 2).
-- `02-bm-tracking`, `c-symptom-logging` — same sync after `Save`; the live query
-  will then show the BM/symptom row (Group 3).
-- `01d-browse-edit` — the edit submit label is `"Save changes"` (`entry/[id].tsx`,
-  below the fold): `scrollUntilVisible text: "Save changes"` before tapping it.
-- `ab-satfat-ingredients` — on reopen, `scrollUntilVisible` the Ingredients field
-  before asserting `"butter, cream"` (the edit screen scrolls too).
+Seeds 3 "Onion Dish" entries via `_helpers/seed-ingredient-reactions.yaml`, navigates
+to Insights, asserts "Ingredients you react to" section and "onion" card appear.
 
-**Only if a flow still fails after the sync point:** capture `npm run e2e:debug`
-screenshots and re-diagnose — *then* it may be a real app bug. Verify against
-source before writing one up (see `docs/TEST_STRATEGY.md §4`, "verify before
-blaming the app").
+**This flow depends on ingredients text persisting correctly** — if
+`ab-satfat-ingredients` fails for a DB reason, fix that first; both flows share the
+same root cause.
+
+**Commit if no YAML changes were needed:**
+`fix(e2e): verify e-temporal-insights, ab-satfat-ingredients, d-ingredient-insights`
 
 ---
 
-## Priority 3 — Ingredient insights (Group 5)
+## Final step — full suite
 
-### `d-ingredient-insights`
+```
+npm run e2e
+```
 
-The `seed-ingredient-reactions.yaml` helper enters `"onion, garlic"` in the
-Ingredients field for 3 entries with sentiment 1. `buildLogEntry` DOES call
-`extractTags` on the ingredients text (confirmed: `formModel.ts:150-157`), so
-the tags SHOULD be written to `tagsJson`.
-
-Failure point: the `scrollUntilVisible: text: "Ingredients you react to"` step
-fails, meaning the section doesn't appear in Insights. Either:
-
-a) The ingredients text didn't persist (Maestro's `inputText` didn't actually set
-   the field value before save), or
-b) The tags were written but `analyzeIngredientSentiment` didn't trigger (check
-   its threshold: `MIN_TAG_OCCURRENCES = 3` and `LOW_SENTIMENT_MAX = 2.5`).
-
-**Investigation:** Re-run only this flow with `--debug-output` to see what's on
-screen when the scroll fails. Also add an intermediate Journal-reopen step to the
-seed helper to confirm ingredients text persists.
-
-**If (a):** Add `hideKeyboard` + a brief `waitForAnimationToEnd` after
-`inputText: "onion, garlic"` before scrolling/saving, to ensure the field
-commits its value.
-
-**If (b):** Check `src/features/analysis/insights.ts` around
-`analyzeIngredientSentiment` — confirm the function uses `parseTagsJson` on
-`entry.tagsJson` and check whether 3 entries with avg sentiment 1.0 meet all
-thresholds.
-
-### `e-temporal-insights`
-
-The Insights summary always renders `{summary.bmEntries} BM` — even `"0 BM"`
-contains "BM". If this assertion is failing, either the BM logging in the flow
-failed (Investigation A + B above), or `computeInsights` is computing `bmEntries`
-differently than expected. After fixing the BM visibility issue (Group 3), re-run
-to see if this resolves itself.
+Target: **19/19**. Record date and pass count in `docs/RESULTS.md`. If any
+previously-passing flows regress, diagnose before closing the session.
 
 ---
 
-## Suggested execution order
+## Files summary
 
-1. **Fix and commit Group 1 YAML fixes** (1a–1d): no investigation needed,
-   do it in one commit. Re-run `npm run e2e:ci` to confirm those 5 flows now
-   pass.
+| File | Change |
+|------|--------|
+| `src/app/entry/new.tsx` | Line 34: `behavior="padding"` (both platforms) |
+| `src/features/logging/EntryRow.tsx` | Line 44: add `testID` prop to `Pressable` |
+| `flows/01b-manual-entry.yaml` | Line 69: remove `- hideKeyboard` |
+| `flows/f-serving-size.yaml` | Line 48: remove `- hideKeyboard` |
+| `flows/g-datetime-picker.yaml` | Line 41: remove `- hideKeyboard` |
+| `flows/c-symptom-logging.yaml` | 4 selector changes: assertVisible×2, assertNotVisible, tapOn |
+| `flows/e-temporal-insights.yaml` | Verify only — YAML already updated |
+| `flows/ab-satfat-ingredients.yaml` | Verify only — YAML already updated |
+| `flows/d-ingredient-insights.yaml` | Verify only — YAML already updated |
 
-2. **Read the two investigation files** (`entry/new.tsx`, `useEntries.ts`), then
-   **fix and commit Group 2 + 3 flows**.
-
-3. **Re-run `npm run e2e:ci`** and assess Group 5 with a narrower failure list
-   and (optionally) `npm run e2e:debug` for the ingredient insights flow.
-
-4. **Update `docs/E2E.md` and `docs/ACCEPTANCE.md`** once flows pass (flip
-   `⏳ Authored` → `✅ Automated` in the coverage table, flip `[ ]` → `[x]`
-   in ACCEPTANCE.md for each newly passing item).
-
-5. **Write a new `docs/RESULTS.md`** after the re-run.
-
----
-
-## Files to read first (before writing fixes)
-
-| File | Why |
-|------|-----|
-| `src/app/entry/new.tsx` | Does it call `router.back()` after save? |
-| `src/app/bm/new.tsx` | Same question |
-| `src/app/symptom/new.tsx` | Same question |
-| `src/features/logging/useEntries.ts` | Does it use `useFocusEffect`? |
-| `flows/01e-reminders.yaml` | Full flow to rewrite |
-| `flows/i-backup.yaml` | Full flow to rewrite |
-| `flows/settings-smoke.yaml` | Fix pre-scroll assertions |
-| `flows/h-recent-foods.yaml` | Fix save-button assertion |
-| `flows/03-insights.yaml` | Fix "across" scroll |
-
-Existing passing flows as reference for correct patterns:
-- `flows/nav-tabs.yaml` — correct `id:` tab-bar navigation
-- `flows/journal-calendar.yaml` — correct Journal tab entry + mode toggle
+**Two app changes require verification rungs before any e2e run:**
+```
+npm run typecheck && npm run lint && npm test
+```

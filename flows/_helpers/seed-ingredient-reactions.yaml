@@ -17,6 +17,7 @@ appId: com.tummytracker.app
 - tapOn: "Ingredients"
 - inputText: "onion, garlic"
 - hideKeyboard
+- waitForAnimationToEnd
 - scrollUntilVisible:
     element:
       text: "Save entry"
@@ -37,6 +38,7 @@ appId: com.tummytracker.app
 - tapOn: "Ingredients"
 - inputText: "onion, garlic"
 - hideKeyboard
+- waitForAnimationToEnd
 - scrollUntilVisible:
     element:
       text: "Save entry"
@@ -57,6 +59,7 @@ appId: com.tummytracker.app
 - tapOn: "Ingredients"
 - inputText: "onion, garlic"
 - hideKeyboard
+- waitForAnimationToEnd
 - scrollUntilVisible:
     element:
       text: "Save entry"

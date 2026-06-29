@@ -18,16 +18,19 @@ appId: com.tummytracker.app
     id: "sentiment-4"
 - tapOn: "Save"
 - waitForAnimationToEnd
+- assertVisible: "TummyTracker"    # sync: modal fully dismissed, back on Home
 
 # Navigate to Insights
 - tapOn:
     id: "tab-insights"
 - waitForAnimationToEnd
-# Summary heading is always rendered regardless of entry count
+# Scroll to ensure the summary section is on-screen before asserting
+- scrollUntilVisible:
+    element:
+      text: "Your journal so far"
+    direction: DOWN
 - assertVisible: "Your journal so far"
 # Summary line: "<n> entries · <n> food · <n> BM · <n> rated"
-# "BM" appears in the summary line (unique on this screen — Journal filter chips
-# are on the Journal tab only)
 - assertVisible: "BM"
 # "food" appears in the summary line as well
 - assertVisible: "food"
