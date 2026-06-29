@@ -75,11 +75,12 @@ appId: com.tummytracker.app
 - tapOn:
     text: "Save entry"
 - waitForAnimationToEnd
-- assertVisible: "TummyTracker"
+- assertVisible: "Scan barcode"
 
 # Verify in Journal
 - tapOn:
     id: "tab-journal"
+- waitForAnimationToEnd
 - assertVisible: "Chicken salad"
 
 # SQLite persistence: stop and relaunch without clearing state

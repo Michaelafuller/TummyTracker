@@ -53,10 +53,11 @@ appId: com.tummytracker.app
 - tapOn:
     text: "Save entry"
 - waitForAnimationToEnd
-- assertVisible: "TummyTracker"
+- assertVisible: "Scan barcode"
 
 - tapOn:
     id: "tab-journal"
+- waitForAnimationToEnd
 - assertVisible: "Avocado toast"
 
 # Persist across restart

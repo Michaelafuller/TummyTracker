@@ -24,6 +24,6 @@ appId: com.tummytracker.app
 - assertVisible: "Wheat Bread"
 - scrollUntilVisible:
     element:
-      text: "across"
+      text: "Based on 5 logs."
     direction: DOWN
-- assertVisible: "across"
+- assertVisible: "Based on 5 logs."

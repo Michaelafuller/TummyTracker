@@ -49,6 +49,6 @@ appId: com.tummytracker.app
 # is also provided by Jest unit tests for scaleNutrition / validateNutrition)
 - scrollUntilVisible:
     element:
-      text: "Ingredients (optional)"
+      text: "butter, cream"
     direction: DOWN
 - assertVisible: "butter, cream"

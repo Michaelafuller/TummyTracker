@@ -24,6 +24,7 @@ appId: com.tummytracker.app
 # --- Journal: symptom renders distinctly ---
 - tapOn:
     id: "tab-journal"
+- waitForAnimationToEnd
 # Entry name is the symptom type label; row shows "🤢 Bloating"
 - assertVisible: "Bloating"
 # Subtitle: "Symptom · Bloating · Severity 3"

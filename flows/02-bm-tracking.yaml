@@ -32,6 +32,7 @@ appId: com.tummytracker.app
 # --- Journal: BM renders distinctly ---
 - tapOn:
     id: "tab-journal"
+- waitForAnimationToEnd
 - assertVisible: "Bowel movement"
 
 # --- Filter: BM only ---
