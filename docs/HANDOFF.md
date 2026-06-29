@@ -181,7 +181,7 @@ Apply it to:
 
 **Only if a flow still fails after the sync point:** capture `npm run e2e:debug`
 screenshots and re-diagnose — *then* it may be a real app bug. Verify against
-source before writing one up (see `docs/TEST_STRATEGY.md §3`, "verify before
+source before writing one up (see `docs/TEST_STRATEGY.md §4`, "verify before
 blaming the app").
 
 ---

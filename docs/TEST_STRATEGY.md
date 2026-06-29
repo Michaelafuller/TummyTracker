@@ -79,7 +79,45 @@ dropped when bundled with feature work.
 
 ---
 
-## 3. The artifacts (what bridges the sessions)
+## 3. Starting a session — read only your input contract
+
+**Do not "read all the docs."** Each session has one **input contract** — the doc
+that tells it what to do — and that doc points onward to anything else it needs.
+Root `CLAUDE.md` is auto-injected every session, so never spend a read on it.
+
+| Session | Open by reading | Auto-loaded | Pulls onward as needed |
+|---------|-----------------|-------------|------------------------|
+| **Plan** | `PROGRESS.md` + `docs/RESULTS.md` | `CLAUDE.md` | `docs/TEST_STRATEGY.md`, the codebase |
+| **Execute** | `docs/HANDOFF.md` | `CLAUDE.md` | whatever HANDOFF's preamble points to |
+| **Test-plan** | `docs/RESULTS.md` + `docs/E2E.md` | `CLAUDE.md` | `docs/TEST_STRATEGY.md` |
+| **Test-execute** | `docs/HANDOFF.md` (test variant) + `docs/E2E.md` | `CLAUDE.md` | `docs/TEST_STRATEGY.md §4` |
+
+So the session-opener prompt shrinks to one line: **"Read docs/HANDOFF.md"** for an
+execute session, **"Read PROGRESS.md and docs/RESULTS.md"** for a plan session. The
+docs enforce the rest.
+
+**Never auto-read** (historical / human-only — pull only if a task specifically
+needs them): `docs/CLAUDE.md` (superseded by the root copy), `docs/BUILD_PLAN.md`
+(phased MVP spec, now history), `docs/CLAUDE_CODE_WORKFLOW.md` (the owner's
+learning guide, not agent input).
+
+### The handoff preamble rule (what makes HANDOFF-only safe)
+
+Reading only `HANDOFF.md` is safe **iff** every handoff is self-contained. So this
+is a **rule, not a habit**:
+
+> Every `docs/HANDOFF.md` MUST open with a "Read first" line naming **`CLAUDE.md`
+> + the one protocol doc for this session type** (`docs/E2E.md` for a
+> test-backfill handoff; otherwise whatever the task touches). A handoff that
+> doesn't point at the doc its session needs is a defect — fix the handoff, don't
+> make the next session guess.
+
+A plan session writing the handoff owns this preamble. If you can't name the
+onward doc, the task isn't specced tightly enough yet.
+
+---
+
+## 4. The artifacts (what bridges the sessions)
 
 | Artifact | Written by | Read by | Purpose |
 |----------|-----------|---------|---------|
@@ -154,7 +192,7 @@ runs); `flows/results.xml` is **gitignored** (per-run, device-specific). The nex
 
 ---
 
-## 4. Maestro coverage: source of truth
+## 5. Maestro coverage: source of truth
 
 `docs/E2E.md` holds the **Coverage table** (ACCEPTANCE item → flow file → status)
 and the run protocol. When you add a flow, you add a row there. The table is the
@@ -167,7 +205,7 @@ contrast, file-content inspection) are listed in `E2E.md` and stay `· manual` i
 
 ---
 
-## 5. Targeting & cadence — what to run when
+## 6. Targeting & cadence — what to run when
 
 A full Maestro run is ~22 min and flaky; running it after every JS tweak destroys
 the tight loop. So **default to targeted**, escalate to full by *blast radius*,
@@ -207,7 +245,7 @@ first time; that's the baseline doing its job, not a disaster.
 
 ---
 
-## 6. Guardrails for test sessions
+## 7. Guardrails for test sessions
 
 - **Test sessions don't change features.** A test-execute session that finds a
   missing accessibility label records it as a *finding* in `RESULTS.md`; it does
@@ -215,7 +253,7 @@ first time; that's the baseline doing its job, not a disaster.
   (This keeps "the test changed the app to make itself pass" from ever happening.)
 - **Verify before blaming the app.** Don't classify a failure as `app-regression`
   until you've read the source and ruled out a flow bug. Speculation is a finding
-  *to check*, never a fix *to ship*. (See the 2026-06-28 false-positive in §3.)
+  *to check*, never a fix *to ship*. (See the 2026-06-28 false-positive in §4.)
 - **A documented manual item beats a flaky flow.** If a flow can't be made
   deterministic (e.g. needs real time gaps, camera, or notification timing), mark
   it `· manual` and say why — don't ship an assertion that fails intermittently.
@@ -246,7 +284,7 @@ These three caused 11 of 14 failures in the first full run — bake them in:
 
 ---
 
-## 7. Where this leaves us today (2026-06-28)
+## 8. Where this leaves us today (2026-06-28)
 
 - Jest backfill: complete (merged to `main`, 165 tests green).
 - Maestro backfill: 7 flows authored; **first full run done** — 5 ✅ / 14 ❌

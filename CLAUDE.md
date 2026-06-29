@@ -9,8 +9,12 @@
 > version and may diverge from `docs/CLAUDE.md` where reality required it — see
 > §0 below for the running list of deviations.
 >
-> **Continuing the project?** Read `docs/HANDOFF.md` (current state, gotchas, the
-> next specced task) and `PROGRESS.md` (ranked roadmap) before starting.
+> **Continuing the project?** Read only your session's *input contract*, not every
+> doc — an **execute** session opens with `docs/HANDOFF.md`; a **plan** session
+> opens with `PROGRESS.md` + `docs/RESULTS.md`. Each points onward to what it
+> needs. The full per-session table and the cycle it serves are in
+> `docs/TEST_STRATEGY.md` (§3 "Starting a session"). This file (`CLAUDE.md`) is
+> auto-loaded every session — you never need to read it explicitly.
 
 ---
 

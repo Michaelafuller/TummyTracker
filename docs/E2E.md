@@ -128,7 +128,7 @@ flow file. A `<failure>` element means the flow failed. Claude then:
 - Leaves the 5 manual items as `[ ]` with a note: "manual — see E2E.md"
 - Writes `docs/RESULTS.md` — the human-readable run report (per-flow result,
   what was fixed, what stays manual, findings for the next planning session).
-  See `docs/TEST_STRATEGY.md §3` for the template.
+  See `docs/TEST_STRATEGY.md §4` for the template.
 
 ---
 
