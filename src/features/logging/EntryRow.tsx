@@ -42,6 +42,7 @@ export function EntryRow({ entry }: { entry: LogEntry }) {
   return (
     <Link href={`/entry/${entry.id}`} asChild>
       <Pressable
+        testID={`entry-row-${(entry.name || 'untitled').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
         accessibilityRole="button"
         accessibilityLabel={`${entry.name}, ${subtitle(entry)}, ${
           sentiment ? `rated ${sentimentLabel(sentiment)}` : 'not rated'

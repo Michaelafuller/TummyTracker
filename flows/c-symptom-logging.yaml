@@ -25,15 +25,19 @@ appId: com.tummytracker.app
 - tapOn:
     id: "tab-journal"
 - waitForAnimationToEnd
-# Entry name is the symptom type label; row shows "🤢 Bloating"
-- assertVisible: "Bloating"
-# Subtitle: "Symptom · Bloating · Severity 3"
-- assertVisible: "Severity 3"
+- waitForAnimationToEnd
+# EntryRow for emoji-prefixed entries is not text-accessible via Maestro getText().
+# Use the testID added to the Pressable in EntryRow.tsx.
+- assertVisible:
+    id: "entry-row-bloating"
+# "Severity 3" subtitle is inside the same inaccessible Pressable — skip here;
+# severity is confirmed in the edit-screen assertion at the end of this flow.
 
 # --- Filter: Symptom only ---
 - tapOn: "Symptom"
 - waitForAnimationToEnd
-- assertVisible: "Bloating"
+- assertVisible:
+    id: "entry-row-bloating"
 - assertNotVisible: "Oatmeal"
 - assertNotVisible: "Pizza slice"
 
@@ -41,13 +45,15 @@ appId: com.tummytracker.app
 - tapOn: "Food"
 - waitForAnimationToEnd
 - assertVisible: "Oatmeal"
-- assertNotVisible: "Bloating"
+- assertNotVisible:
+    id: "entry-row-bloating"
 
 # --- Edit reloads saved type + severity ---
 - tapOn: "All"
 - waitForAnimationToEnd
 # Tap the Bloating row to open entry/[id] edit screen
-- tapOn: "Bloating"
+- tapOn:
+    id: "entry-row-bloating"
 - waitForAnimationToEnd
 # SeveritySelector shows the selected severity label below the row of buttons;
 # the cell accessibilityLabel is "Severity 3: Significant" and the label text
