@@ -137,71 +137,52 @@ with:
 
 ---
 
-## Priority 2 — Investigate post-save navigation (Groups 2 & 3)
+## Priority 2 — Post-save sync point (Groups 2 & 3 — NOT app bugs)
 
-These failures share a common thread: entries are saved via stack screens
-(`/entry/new`, `/bm/new`, `/symptom/new`) and then the Journal or Home tab
-content doesn't reflect the saved data. **Before writing fixes, investigate
-the two questions below.**
+> **Diagnosis corrected after source verification (Opus, this session).** The
+> earlier draft of this section asked you to investigate two *suspected app bugs*.
+> Both were checked against the source and are **false** — do not chase them:
+>
+> - **All three save screens already call `router.back()`** after an awaited
+>   `createLogEntry` — `entry/new.tsx:25`, `bm/new.tsx:18`, `symptom/new.tsx:18`
+>   (and `entry/[id].tsx` for edits). Navigation is not missing.
+> - **`useEntries.ts` already uses Drizzle `useLiveQuery`** (`useEntries.ts:12`) —
+>   a live SQLite subscription that re-renders on every insert/edit. So the
+>   Journal does *not* need `useFocusEffect`. **Do not add it** — it would be a
+>   pointless app change that fixes nothing.
+>
+> Groups 2 and 3 are therefore the **same root cause: a missing post-save
+> synchronization point in the flows.** A form `Save` fires an *awaited* DB write
+> then `router.back()`; `waitForAnimationToEnd` does not wait for that async work.
+> Maestro races ahead and taps `tab-journal` while the form is still dismissing
+> (tab bar not yet present → "Id not found"), or asserts the new entry before the
+> live query has repainted. This is a **flow fix, no app change.**
 
-### Investigation A — Does `entry/new` navigate back to tabs after save?
-
-**Files to read:** `src/app/entry/new.tsx` (and `src/app/bm/new.tsx`,
-`src/app/symptom/new.tsx`). Confirm each calls `router.back()` (or
-`router.replace('/')`) after a successful save.
-
-If they do NOT navigate back, the tab bar is hidden when Maestro tries to tap
-`tab-journal` — that is an app bug that must be fixed in the screen file.
-
-If they DO navigate back, the tab bar should become visible. In that case the
-`tab-journal` failures in `01b-manual-entry`, `f-serving-size`, and
-`g-datetime-picker` are a timing issue: Maestro fires `tapOn: id: "tab-journal"`
-before the navigation animation completes. **Fix:** Add a sync-point assertion
-after the save step:
+**The fix (apply to every save→navigate step):** add a positive sync point that
+forces Maestro to wait for the return to a tab screen before proceeding.
 ```yaml
-- tapOn: "Save entry"
+- tapOn: "Save entry"            # or "Save" (BM/symptom)
 - waitForAnimationToEnd
-- assertVisible: "TummyTracker"     # confirms we're back on the Home tab
+- assertVisible: "TummyTracker"  # sync: we're back on Home; save + nav have settled
 - tapOn:
     id: "tab-journal"
+- assertVisible: "<the entry>"   # live query has the row by now
 ```
 
-### Investigation B — Does `useAllEntries` refresh on focus?
+Apply it to:
+- `01b-manual-entry`, `f-serving-size`, `g-datetime-picker` — sync after save,
+  then the Journal assertion (Group 2).
+- `02-bm-tracking`, `c-symptom-logging` — same sync after `Save`; the live query
+  will then show the BM/symptom row (Group 3).
+- `01d-browse-edit` — the edit submit label is `"Save changes"` (`entry/[id].tsx`,
+  below the fold): `scrollUntilVisible text: "Save changes"` before tapping it.
+- `ab-satfat-ingredients` — on reopen, `scrollUntilVisible` the Ingredients field
+  before asserting `"butter, cream"` (the edit screen scrolls too).
 
-**File to read:** `src/features/logging/useEntries.ts`. Confirm whether the hook
-uses `useFocusEffect` (or equivalent) to re-query SQLite when the Journal tab
-gains focus.
-
-`02-bm-tracking` and `c-symptom-logging` both successfully navigate to the
-Journal tab but then fail to find the just-logged entry. The seeded food entries
-(logged via the same tab-screen journey) ARE visible in `01d-browse-edit`. The
-difference: BM/symptom entries are logged from stack screens
-(`/bm/new`, `/symptom/new`) that navigate BACK to the tab group. If the
-Journal's data hook doesn't re-query when the tab refocuses, stale (pre-BM/pre-
-symptom) data would show.
-
-**If the hook does NOT use `useFocusEffect`:** That is the root cause. The fix
-is in `useEntries.ts` (add `useFocusEffect` + refetch, or switch to a live
-SQLite subscription). Note: this is an **app bug**, not a flow bug — the Journal
-must reliably reflect entries logged from any screen.
-
-**If the hook DOES use `useFocusEffect`:** The timing is off. Try adding a
-`tapOn: id: "tab-home"` + `tapOn: id: "tab-journal"` round-trip before the
-assertion to force a focus cycle.
-
-### After Investigation A + B — Fix the affected flows
-
-Once the root causes are confirmed, fix:
-- `01b-manual-entry` — sync after save, then Journal assertion
-- `f-serving-size` — same sync
-- `g-datetime-picker` — same sync
-- `02-bm-tracking` — Journal refresh or force-focus
-- `c-symptom-logging` — Journal refresh or force-focus
-- `01d-browse-edit` — "Save changes" in edit form; also check if the edit screen
-  needs a scroll to reach the save button (`scrollUntilVisible id: "sentiment-3"`
-  is already there, check if "Save changes" also needs one)
-- `ab-satfat-ingredients` — "butter, cream" not visible in edit; likely the
-  Ingredients field requires a scroll in the edit screen too
+**Only if a flow still fails after the sync point:** capture `npm run e2e:debug`
+screenshots and re-diagnose — *then* it may be a real app bug. Verify against
+source before writing one up (see `docs/TEST_STRATEGY.md §3`, "verify before
+blaming the app").
 
 ---
 

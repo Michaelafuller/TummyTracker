@@ -89,35 +89,68 @@ dropped when bundled with feature work.
 | `flows/results.xml` | `maestro test ... --format junit` | step 4 | Machine-readable pass/fail per flow. |
 | `docs/RESULTS.md` | step 4 (test-execute) | step 1 (next plan) | **Human-readable** test run report: which flows passed/failed, what was fixed, what stays manual, what the next planning session must address. |
 
-### `RESULTS.md` — the new, previously-missing artifact
-`flows/results.xml` is machine output; `ACCEPTANCE.md` is a checklist. Neither
-tells the *next planning session* the story of the run. `RESULTS.md` is that
-story — written at the end of every **test-execute** session:
+### `RESULTS.md` — the interpretation layer (not a transcript)
+`flows/results.xml` is machine output (one pass/fail + one-line failure string per
+testcase); `ACCEPTANCE.md` is a checklist. **Neither interprets the run.**
+`RESULTS.md` is the interpretation: it *consumes* `results.xml` and adds the
+triage the next planning session actually needs — root-cause grouping, failure
+classification, and next-actions. Transcribing `results.xml` row-by-row adds no
+value; the value is collapsing N raw failures into their few real causes.
 
+> Worked example (2026-06-28 first full run): **14 raw failures collapsed to
+> ~4 root causes.** Eleven of the fourteen were flow bugs (stale labels,
+> below-fold assertions, a missing post-save sync point) — *not* app
+> regressions. A row-by-row transcript would have read as "the app is broken";
+> the interpretation read as "the flows need 3 mechanical fixes + 1 sync point."
+
+**Every failure gets a classification** (this is the core of the report):
+
+| Class | Meaning | Who fixes it | Where |
+|-------|---------|--------------|-------|
+| `flow-bug` | stale label, below-fold assert, missing sync point, bad selector | test-execute (flow YAML) | the flow |
+| `app-regression` | the app genuinely broke | next plan → execute | component/lib |
+| `flake` | passes on re-run, no code change | nobody (note it; quarantine if chronic) | — |
+| `stale-build` | device ran an old bundle; not a real result | re-run on a fresh build | — |
+| `expected-manual` | can't be made deterministic (camera, timing, switch value) | stays `· manual` | E2E.md |
+
+**Verify before you blame the app.** A failing assertion is *not* evidence of an
+app bug until you've read the source and ruled out a flow bug. Before writing
+`app-regression`, open the relevant file and confirm. The 2026-06-28 run is the
+cautionary tale: it hypothesised two app bugs — "`entry/new` may not call
+`router.back()`" and "the Journal needs `useFocusEffect` to refresh" — and **both
+were false**. All three save screens already call `router.back()`, and
+`useEntries` already uses Drizzle `useLiveQuery` (a live subscription, so
+`useFocusEffect` is irrelevant). The real cause was a missing post-save sync
+point in the flows. A 5-minute source read would have prevented a wrong app
+change.
+
+Template:
 ```markdown
 # RESULTS.md — Maestro run <date>
 
 ## Summary
-- Flows run: N. Passed: X. Failed: Y. Skipped/manual: Z.
-- Rungs: green/red. bundle:check: green/red.
+- Flows run: N. Passed: X. Failed: Y. Manual/skipped: Z.
+- Scope: targeted (<which flows> + neighbours) | full regression.
+- Rungs: green/red. bundle:check: green/red. Device + build: <id / commit>.
+
+## Root causes (the point of this file)
+1. <cause> → class <flow-bug|app-regression|...> → flows affected → fix.
+2. ...
 
 ## Per-flow
-| Flow | Result | Note |
-|------|--------|------|
-| c-symptom-logging | ✅ pass | — |
-| e-temporal-insights | ⚠️ partial | "Timing patterns" left manual — timing-dependent |
-| ... | ❌ fail | step "tapOn: X" — label drifted, see finding |
+| Flow | Result | Class | Root cause # |
+|------|--------|-------|--------------|
 
 ## Findings for the next planning session
-- <label to add / flow to fix / feature regression / new manual item>
+- <verified app bug to fix / label to add / new manual item>. Cite file:line.
 
 ## ACCEPTANCE.md changes made
-- Flipped <items> [ ]→[x] from results.xml.
+- Flipped <items> [ ]→[x] from results.xml (verified passes only).
 ```
 
 `RESULTS.md` is overwritten each test-execute run (git history preserves prior
-runs). The next **plan** session reads it first — it's the feedback that closes
-the loop.
+runs); `flows/results.xml` is **gitignored** (per-run, device-specific). The next
+**plan** session reads `RESULTS.md` first — it's the feedback that closes the loop.
 
 ---
 
@@ -134,30 +167,94 @@ contrast, file-content inspection) are listed in `E2E.md` and stay `· manual` i
 
 ---
 
-## 5. Guardrails for test sessions
+## 5. Targeting & cadence — what to run when
+
+A full Maestro run is ~22 min and flaky; running it after every JS tweak destroys
+the tight loop. So **default to targeted**, escalate to full by *blast radius*,
+not by calendar.
+
+**Targeted** = the flow(s) for the changed feature **plus their immediate
+neighbours** (flows that share the same screen or navigation path). Run with
+`npm run e2e:flow flows/<file>.yaml`.
+
+**Full regression** = `npm run e2e:ci` (all flows → `flows/results.xml`).
+
+| The change touches… | Run |
+|---------------------|-----|
+| One leaf screen / one `lib/` function / one new flow | **Targeted** |
+| Shared infra: tab bar / nav, theme tokens, `db/schema` or a migration, the app shell, a dependency bump | **Full** — global changes break distant flows |
+| Before any EAS build / release (the `bundle:check` moment) | **Full** |
+| Periodic backstop (e.g. weekly), to catch drift nobody flagged | **Full** |
+| Establishing or re-establishing a trusted baseline | **Full** (see below) |
+
+**Why full can't be purely "occasional":** targeted runs are blind to exactly the
+failures that matter most — the cross-cutting ones. The 2026-06-28 run is proof:
+a global change (Settings became a tab; entry screens save-and-`router.back()`)
+broke *eleven* flows across unrelated features. A targeted run on that session's
+new flows would have looked fine while the suite was broadly red.
+
+**"Authored ✅" is not "verified ✅".** Until 2026-06-28, *no* flow had ever run on
+a device — the ✅ marks in E2E.md were authored optimism. Use a two-state
+vocabulary and never skip the second:
+- **⏳ Authored** — flow written, labels verified against source, but never run on
+  a device. (All an Execute/Test-author session can claim.)
+- **✅ Verified** — passed on the Pixel 5 in a real run, recorded in `results.xml`.
+  Only a test-execute session may set this, and only from a green testcase.
+
+The first full run after a backlog of authored flows is a **baseline run** — its
+whole job is to convert ⏳→✅ (or expose the truth). Expect it to be mostly red the
+first time; that's the baseline doing its job, not a disaster.
+
+---
+
+## 6. Guardrails for test sessions
 
 - **Test sessions don't change features.** A test-execute session that finds a
   missing accessibility label records it as a *finding* in `RESULTS.md`; it does
   **not** edit the component. The fix is specced by the next planning session.
   (This keeps "the test changed the app to make itself pass" from ever happening.)
+- **Verify before blaming the app.** Don't classify a failure as `app-regression`
+  until you've read the source and ruled out a flow bug. Speculation is a finding
+  *to check*, never a fix *to ship*. (See the 2026-06-28 false-positive in §3.)
 - **A documented manual item beats a flaky flow.** If a flow can't be made
   deterministic (e.g. needs real time gaps, camera, or notification timing), mark
   it `· manual` and say why — don't ship an assertion that fails intermittently.
-- **The Execute session can author flows but can't certify them.** Only a
-  test-execute session with the device attached may mark a flow as passing.
+- **Authored ≠ verified.** The Execute/author session can write flows but can't
+  certify them; only a test-execute session with the device attached flips
+  ⏳ Authored → ✅ Verified, and only from a green `results.xml` testcase. (§5)
+- **Prefer flow fixes; batch the cheap ones first.** When a run is mostly red,
+  fix the mechanical flow bugs (stale labels, below-fold scrolls, sync points)
+  and re-run before investigating anything suspected to be an app bug — the
+  narrower failure list makes the real bugs obvious.
 - **One rolling `HANDOFF.md`.** It's overwritten each cycle. If two sessions must
   run concurrently (e.g. a Jest backfill and a Maestro backfill), the second
   handoff gets a suffixed name (`HANDOFF_MAESTRO.md`) and that divergence is noted
   here until they re-converge.
 
+### Flow-authoring conventions that prevent the common failures
+These three caused 11 of 14 failures in the first full run — bake them in:
+- **Sync after every save.** A form `Save` triggers an awaited DB write +
+  `router.back()`; `waitForAnimationToEnd` does **not** wait for that. Add a
+  positive sync point before the next tap — e.g. `assertVisible: "TummyTracker"`
+  (back on Home) before `tapOn: id: "tab-journal"`.
+- **Scroll before asserting below-fold content.** Long forms and the Settings
+  scroll view push `Save entry` / `App` / card bodies off-screen. Use
+  `scrollUntilVisible` before `assertVisible`/`tapOn`, never a bare assert.
+- **Target current labels.** Re-confirm the label against the component each run;
+  navigation refactors (e.g. "Reminder settings" → the Settings tab) silently
+  strip the strings flows depend on.
+
 ---
 
-## 6. Where this leaves us today (2026-06-28)
+## 7. Where this leaves us today (2026-06-28)
 
-- Jest backfill: in progress (separate session, the previous `HANDOFF.md`).
-- Maestro backfill: specced in the current `HANDOFF.md`. Eight feature areas
-  shipped without flows (symptom logging being the largest hole at 8 ACCEPTANCE
-  items). Until those flows land and a test-execute session produces a clean
-  `RESULTS.md`, the green-rungs status **overstates** real coverage.
-- Action: run steps 4a→4b for the Maestro backfill, produce the first `RESULTS.md`,
-  then resume normal feature cycles with flow-authoring no longer optional.
+- Jest backfill: complete (merged to `main`, 165 tests green).
+- Maestro backfill: 7 flows authored; **first full run done** — 5 ✅ / 14 ❌
+  (`docs/RESULTS.md`). The reds collapse to ~4 root causes, **11 of 14 are flow
+  bugs, not app regressions** (verified: all save screens call `router.back()`;
+  `useEntries` uses `useLiveQuery`). The current `HANDOFF.md` is the fix plan.
+- The green-rungs status still **overstates** real coverage until the flows go
+  ⏳→✅. That's expected for a baseline run (§5).
+- Action: apply the flow fixes (Groups 1 + 4 first, then the post-save sync point
+  for Groups 2 + 3), re-run `npm run e2e:ci`, write a fresh `RESULTS.md`, flip
+  verified boxes. Then resume feature cycles with flow-authoring no longer optional.

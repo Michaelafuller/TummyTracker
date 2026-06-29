@@ -47,3 +47,7 @@ example
 
 # Maestro e2e debug output (npm run e2e:debug)
 maestro-debug/
+
+# Maestro JUnit run output (npm run e2e:ci) — per-run, device-specific.
+# The durable, human-readable record is docs/RESULTS.md, not this file.
+flows/results.xml
