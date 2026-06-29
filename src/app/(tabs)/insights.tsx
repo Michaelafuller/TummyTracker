@@ -77,11 +77,7 @@ export default function InsightsScreen() {
         <View style={styles.summary}>
           <ThemedText type="smallBold">Your journal so far</ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
-            {summary.totalEntries} entries · {summary.foodEntries} food · {summary.bmEntries} BM ·{' '}
-            {summary.ratedEntries} rated
-            {summary.averageSentiment != null
-              ? ` · avg sentiment ${summary.averageSentiment}`
-              : ''}
+            {`${summary.totalEntries} entries · ${summary.foodEntries} food · ${summary.bmEntries} BM · ${summary.ratedEntries} rated${summary.averageSentiment != null ? ` · avg sentiment ${summary.averageSentiment}` : ''}`}
           </ThemedText>
         </View>
 
