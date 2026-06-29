@@ -115,6 +115,15 @@ is a **rule, not a habit**:
 A plan session writing the handoff owns this preamble. If you can't name the
 onward doc, the task isn't specced tightly enough yet.
 
+### Plan sessions curate `PROGRESS.md` as a standing step
+
+`PROGRESS.md` is the plan session's input contract, so it must stay lean — every
+cycle's fat is re-read on every future plan. The plan session that reads it also
+**prunes it** before writing the handoff: trim "Shipped last cycle" to the last
+cycle only, collapse fully-done sections to one line, re-rank live items, delete
+dead ones. History is git's job; the roadmap answers "what's next, and why." (The
+rule lives at the top of `PROGRESS.md` too, so it travels with the file.)
+
 ---
 
 ## 4. The artifacts (what bridges the sessions)
