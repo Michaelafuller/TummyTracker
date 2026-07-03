@@ -68,7 +68,7 @@ export default function HomeScreen() {
               </Pressable>
             </Link>
 
-            <Link href="/entry/new" asChild>
+            <Link href="/meal/component" asChild>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Add an entry manually"
