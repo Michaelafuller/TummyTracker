@@ -1,6 +1,8 @@
 import {
   formatClock,
+  formatClock12h,
   formatDateInput,
+  formatTime12h,
   formatTimeInput,
   parseClockTime,
   parseDateTime,
@@ -48,5 +50,24 @@ describe('clock time', () => {
     expect(parseClockTime('08:60')).toBeNull();
     expect(parseClockTime('8:00')).toBeNull();
     expect(parseClockTime('nope')).toBeNull();
+  });
+});
+
+describe('12-hour clock formatting', () => {
+  it('formats hour/minute as 12-hour with no leading zero on hour', () => {
+    expect(formatClock12h(0, 5)).toBe('12:05 AM');
+    expect(formatClock12h(12, 0)).toBe('12:00 PM');
+    expect(formatClock12h(23, 59)).toBe('11:59 PM');
+    expect(formatClock12h(15, 7)).toBe('3:07 PM');
+    expect(formatClock12h(9, 30)).toBe('9:30 AM');
+  });
+
+  it('formats an epoch timestamp as a 12-hour clock string', () => {
+    const midnight = new Date(2026, 5, 27, 0, 5).getTime();
+    const noon = new Date(2026, 5, 27, 12, 0).getTime();
+    const lateNight = new Date(2026, 5, 27, 23, 59).getTime();
+    expect(formatTime12h(midnight)).toBe('12:05 AM');
+    expect(formatTime12h(noon)).toBe('12:00 PM');
+    expect(formatTime12h(lateNight)).toBe('11:59 PM');
   });
 });

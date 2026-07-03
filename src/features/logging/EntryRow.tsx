@@ -9,7 +9,7 @@ import { isSentimentValue, sentimentEmoji, sentimentLabel } from '@/features/sen
 import { isSeverityValue } from '@/features/symptoms/severity';
 import { isSymptomTypeValue, symptomTypeLabel } from '@/features/symptoms/symptomTypes';
 import { useTheme } from '@/hooks/use-theme';
-import { formatTimeInput } from '@/lib/datetime';
+import { formatTime12h } from '@/lib/datetime';
 
 const TYPE_EMOJI: Partial<Record<string, string>> = {
   bowel_movement: '💩',
@@ -49,7 +49,7 @@ export function EntryRow({ entry }: { entry: LogEntry }) {
         }`}
         style={[styles.row, { backgroundColor: theme.backgroundElement }]}>
         <ThemedText type="small" themeColor="textSecondary" style={styles.time}>
-          {formatTimeInput(entry.loggedAt)}
+          {formatTime12h(entry.loggedAt)}
         </ThemedText>
         <View style={styles.body}>
           <ThemedText type="smallBold" numberOfLines={1}>
@@ -74,7 +74,7 @@ const styles = StyleSheet.create({
     borderRadius: Spacing.three,
   },
   time: {
-    width: 44,
+    width: 64,
   },
   body: {
     flex: 1,

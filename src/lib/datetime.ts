@@ -85,3 +85,16 @@ export function parseClockTime(input: string): ClockTime | null {
   if (hour > 23 || minute > 59) return null;
   return { hour, minute };
 }
+
+/** Format an hour/minute (0–23) as a 12-hour clock string, e.g. '3:07 PM'. No leading zero on hour. */
+export function formatClock12h(hour: number, minute: number): string {
+  const period = hour < 12 ? 'AM' : 'PM';
+  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+  return `${hour12}:${pad2(minute)} ${period}`;
+}
+
+/** Format an epoch-ms timestamp as a local 12-hour clock string, e.g. '3:07 PM'. */
+export function formatTime12h(epochMs: number): string {
+  const d = new Date(epochMs);
+  return formatClock12h(d.getHours(), d.getMinutes());
+}

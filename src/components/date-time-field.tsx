@@ -6,7 +6,7 @@ import { FormField } from '@/components/form-fields';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { formatDateInput, formatTimeInput, parseDateTime } from '@/lib/datetime';
+import { formatClock12h, formatDateInput, formatTimeInput, parseClockTime, parseDateTime } from '@/lib/datetime';
 
 export interface DateTimeFieldProps {
   dateInput: string;
@@ -57,6 +57,9 @@ export function DateTimeField({
 
   const chipStyle = [styles.chip, { backgroundColor: theme.backgroundElement, borderColor: theme.border }];
 
+  const parsedTime = parseClockTime(timeInput);
+  const timeDisplay = parsedTime ? formatClock12h(parsedTime.hour, parsedTime.minute) : timeInput;
+
   return (
     <FormField label="When" error={error}>
       <View style={styles.row}>
@@ -73,7 +76,7 @@ export function DateTimeField({
           accessibilityLabel="Choose time"
           onPress={() => setPickerMode('time')}
           style={chipStyle}>
-          <ThemedText type="small">{timeInput || 'Time'}</ThemedText>
+          <ThemedText type="small">{timeDisplay || 'Time'}</ThemedText>
         </Pressable>
 
         <Pressable
