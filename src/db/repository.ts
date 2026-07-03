@@ -1,11 +1,21 @@
 // Thin repository over Drizzle for log entries. Keeps DB access in one place so
 // screens/components stay free of query details. Pure validation/shaping lives in
 // lib/ and features/logging/formModel; this module just persists.
-import { desc, eq, inArray } from 'drizzle-orm';
+import { asc, desc, eq, inArray } from 'drizzle-orm';
 
 import { createId } from '@/lib/id';
+import { aggregateComponents, unionComponentTags, type MealComponentDraft } from '@/lib/mealAggregate';
+import { serializeTags } from '@/lib/ingredients';
 import { db } from './client';
-import { FOOD_TYPES, logEntry, type LogEntry, type NewLogEntry } from './schema';
+import {
+  FOOD_TYPES,
+  logEntry,
+  mealComponent,
+  type LogEntry,
+  type MealComponent,
+  type NewLogEntry,
+  type NewMealComponent,
+} from './schema';
 
 /** Fields a caller supplies on create — id and timestamps are filled in here. */
 export type CreateLogEntryInput = Omit<NewLogEntry, 'id' | 'createdAt' | 'updatedAt'>;
@@ -23,6 +33,60 @@ export async function createLogEntry(input: CreateLogEntryInput): Promise<LogEnt
   };
   await db.insert(logEntry).values(row);
   return row as LogEntry;
+}
+
+/**
+ * Persists a multi-scan grouped meal (HANDOFF Phase 2.4): one logEntry row whose
+ * nutrition columns hold the aggregate (sum of value × servings across
+ * components) and whose tagsJson holds the union of component tags, plus one
+ * mealComponent row per component (sortOrder = array index). Single transaction
+ * so a partial write never leaves an entry without its components or vice versa.
+ */
+export async function createMealWithComponents(
+  entry: CreateLogEntryInput,
+  components: readonly MealComponentDraft[],
+): Promise<LogEntry> {
+  const now = Date.now();
+  const aggregate = aggregateComponents(components);
+  const tags = unionComponentTags(components);
+  const ingredientsText = components.map((c) => c.name).join(', ');
+
+  const row: NewLogEntry = {
+    ...entry,
+    ...aggregate,
+    id: createId(),
+    componentCount: components.length,
+    ingredientsText: ingredientsText.length > 0 ? ingredientsText : null,
+    tagsJson: tags.length > 0 ? serializeTags(tags) : null,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  const componentRows: NewMealComponent[] = components.map((component, index) => ({
+    ...component,
+    id: createId(),
+    entryId: row.id,
+    sortOrder: index,
+    createdAt: now,
+  }));
+
+  await db.transaction(async (tx) => {
+    await tx.insert(logEntry).values(row);
+    if (componentRows.length > 0) {
+      await tx.insert(mealComponent).values(componentRows);
+    }
+  });
+
+  return row as LogEntry;
+}
+
+/** Components of a grouped meal, ordered as the user built them. */
+export async function getMealComponents(entryId: string): Promise<MealComponent[]> {
+  return db
+    .select()
+    .from(mealComponent)
+    .where(eq(mealComponent.entryId, entryId))
+    .orderBy(asc(mealComponent.sortOrder));
 }
 
 export async function getLogEntry(id: string): Promise<LogEntry | undefined> {
@@ -64,6 +128,14 @@ export async function updateLogEntry(id: string, patch: UpdateLogEntryInput): Pr
     .where(eq(logEntry.id, id));
 }
 
+/**
+ * Deletes an entry and, when it's a grouped meal, its mealComponent children.
+ * There's no FK cascade (schema has no FK constraints today), so component
+ * cleanup is manual — kept in the same transaction as the entry delete.
+ */
 export async function deleteLogEntry(id: string): Promise<void> {
-  await db.delete(logEntry).where(eq(logEntry.id, id));
+  await db.transaction(async (tx) => {
+    await tx.delete(mealComponent).where(eq(mealComponent.entryId, id));
+    await tx.delete(logEntry).where(eq(logEntry.id, id));
+  });
 }
