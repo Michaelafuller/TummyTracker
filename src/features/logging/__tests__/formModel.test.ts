@@ -111,6 +111,7 @@ describe('logEntryToFormState (edit round-trip)', () => {
     servingG: 40,
     ingredientsText: 'oats, water',
     tagsJson: '["oats","water"]',
+    componentCount: null,
     createdAt: 1,
     updatedAt: 2,
   };

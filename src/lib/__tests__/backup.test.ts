@@ -24,6 +24,7 @@ const BASE_ENTRY: LogEntry = {
   sugarG: 1,
   sodiumMg: 50,
   servingG: 150,
+  componentCount: null,
   createdAt: 1,
   updatedAt: 2,
 };

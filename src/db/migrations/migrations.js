@@ -7,6 +7,7 @@ import m0002 from './0002_magical_lorna_dane.sql';
 import m0003 from './0003_supreme_vengeance.sql';
 import m0004 from './0004_gorgeous_beyonder.sql';
 import m0005 from './0005_mature_mad_thinker.sql';
+import m0006 from './0006_high_brood.sql';
 
   export default {
     journal,
@@ -16,7 +17,8 @@ m0001,
 m0002,
 m0003,
 m0004,
-m0005
+m0005,
+m0006
     }
   }
   

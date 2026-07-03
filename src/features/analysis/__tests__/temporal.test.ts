@@ -31,6 +31,7 @@ function makeEntry(overrides: Partial<LogEntry>): LogEntry {
     servingG: null,
     ingredientsText: null,
     tagsJson: null,
+    componentCount: null,
     createdAt: 0,
     updatedAt: 0,
     ...overrides,

@@ -46,4 +46,12 @@ describe('migrations', () => {
     expect(sql).not.toMatch(/drop table/i);
     expect(sql).not.toMatch(/create table `log_entry`/i);
   });
+
+  it('0006 adds the meal_component table and component_count additively without dropping data', () => {
+    const sql = readMigration('0006');
+    expect(sql).toMatch(/create table `meal_component`/i);
+    expect(sql).toMatch(/alter table `log_entry` add `component_count`/i);
+    expect(sql).not.toMatch(/drop table/i);
+    expect(sql).not.toMatch(/create table `log_entry`/i);
+  });
 });

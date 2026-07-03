@@ -61,6 +61,7 @@ function normaliseEntry(v: Record<string, unknown>): LogEntry {
     sugarG: nullable<number>('sugarG'),
     sodiumMg: nullable<number>('sodiumMg'),
     servingG: nullable<number>('servingG'),
+    componentCount: nullable<number>('componentCount'),
     createdAt: v.createdAt as number,
     updatedAt: v.updatedAt as number,
   };
