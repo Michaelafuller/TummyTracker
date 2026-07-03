@@ -114,7 +114,7 @@ describe('buildSymptomEntry', () => {
 
   it('reports invalid date and over-long notes', () => {
     expect(buildSymptomEntry(baseState({ dateInput: '2026-02-30' })).errors.loggedAt).toBeDefined();
-    expect(buildSymptomEntry(baseState({ notes: 'x'.repeat(201) })).errors.notes).toBeDefined();
+    expect(buildSymptomEntry(baseState({ notes: 'x'.repeat(501) })).errors.notes).toBeDefined();
   });
 
   it('round-trips through symptomEntryToFormState', () => {

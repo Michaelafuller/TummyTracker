@@ -40,12 +40,12 @@ sentiment now or later, browse and edit past entries, and get a daily reminder.
 
 ### 1a. Data layer
 - Implement the `logEntry` schema (CLAUDE.md §6) in `db/schema.ts` + a migration.
-- Pure helpers in `lib/`: `validateNotes` (≤200 chars), `validateNutrition`,
+- Pure helpers in `lib/`: `validateNotes` (≤500 chars), `validateNutrition`,
   sentiment scale module (CLAUDE.md §7). Unit-test each.
 
 ### 1b. Manual entry (build this before barcode — it’s the fallback and the simpler path)
 - Form: name, meal slot, `loggedAt` (defaults to now, editable), the seven
-  nutrition fields (all optional), notes (200-char counter), sentiment selector.
+  nutrition fields (all optional), notes (500-char counter), sentiment selector.
 - Sentiment selector = the 5-emoji component, also usable standalone for later rating.
 
 ### 1c. Barcode ingestion

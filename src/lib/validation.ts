@@ -7,10 +7,10 @@ export interface ValidationResult {
 
 const VALID: ValidationResult = { valid: true };
 
-export const MAX_NOTES_LENGTH = 200;
+export const MAX_NOTES_LENGTH = 500;
 
 /**
- * Notes are optional and capped at 200 characters (CLAUDE.md §6). Empty/null is fine.
+ * Notes are optional and capped at 500 characters (CLAUDE.md §6). Empty/null is fine.
  * Length is measured on the raw string (the UI shows a live counter against the same cap).
  */
 export function validateNotes(notes: string | null | undefined): ValidationResult {

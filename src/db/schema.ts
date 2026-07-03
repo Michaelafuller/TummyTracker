@@ -29,7 +29,7 @@ export const logEntry = sqliteTable('log_entry', {
   symptomType: text('symptom_type'),
   // Severity 1–5 for symptom entries (1 = mild, 5 = very severe); null otherwise.
   severity: integer('severity'),
-  // Free text, max 200 chars — enforced in lib/validateNotes, not just the UI.
+  // Free text, max 500 chars — enforced in lib/validateNotes, not just the UI.
   notes: text('notes'),
   // Raw ingredient list from OFF or manual entry; tags derived from this + allergens/additives.
   ingredientsText: text('ingredients_text'),

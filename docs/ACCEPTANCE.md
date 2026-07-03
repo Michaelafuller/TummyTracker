@@ -62,7 +62,7 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
 
 ## Phase 1b — Manual entry
 - [ ] Add a meal manually: name, slot, time, a couple nutrition fields, notes, sentiment. · auto `flows/01b-manual-entry.yaml`
-- [ ] The 200-char notes counter blocks overflow. · auto `flows/01b-manual-entry.yaml`
+- [ ] The 500-char notes counter blocks overflow. · auto `flows/01b-manual-entry.yaml`
 - [ ] Entry persists across an app restart (SQLite). · auto `flows/01b-manual-entry.yaml`
 
 ## Phase 1c — Barcode
