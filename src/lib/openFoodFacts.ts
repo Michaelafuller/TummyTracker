@@ -21,7 +21,9 @@ export interface OffNutrition {
 }
 
 export interface OffProduct {
-  barcode: string;
+  barcode: string | null;
+  /** First brand from OFF's comma-separated `brands` field, or null. */
+  brand: string | null;
   found: boolean;
   name: string | null;
   nutrition: OffNutrition;
@@ -60,22 +62,25 @@ const EMPTY_NUTRITION: OffNutrition = {
 };
 
 /**
- * Map a raw OFF `/api/v2/product/{barcode}.json` response to an OffProduct.
- * Uses per-100g nutriments. Sodium is reported in grams by OFF and converted to
- * milligrams (falling back to salt/2.5 when sodium is absent).
+ * Parse one raw OFF product node — the shape found at `root.product` in a
+ * product-lookup response, or one entry of `root.products` in a search
+ * response — into an OffProduct. `barcode` is the caller's authoritative code
+ * for a product lookup; pass null to fall back to the node's own `code` field
+ * (search results carry their own, and may have none).
  */
-export function mapOffResponse(barcode: string, json: unknown): OffProduct {
-  const root = asRecord(json);
-  const found = num(root.status) === 1 || root.status === 1;
-  if (!found) {
-    return { barcode, found: false, name: null, nutrition: { ...EMPTY_NUTRITION }, servingG: null, ingredientsText: null, tags: [] };
-  }
-
-  const product = asRecord(root.product);
+function mapOffProductJson(barcode: string | null, product: Record<string, unknown>): OffProduct {
   const nutriments = asRecord(product.nutriments);
+
+  const resolvedBarcode = barcode ?? (typeof product.code === 'string' ? product.code : null);
 
   const nameRaw = product.product_name;
   const name = typeof nameRaw === 'string' && nameRaw.trim().length > 0 ? nameRaw.trim() : null;
+
+  const brandsRaw = product.brands;
+  const brand =
+    typeof brandsRaw === 'string' && brandsRaw.trim().length > 0
+      ? brandsRaw.split(',')[0].trim()
+      : null;
 
   const ingredientsTextRaw = product.ingredients_text;
   const ingredientsText =
@@ -110,7 +115,46 @@ export function mapOffResponse(barcode: string, json: unknown): OffProduct {
 
   const servingG = num(product.serving_quantity);
 
-  return { barcode, found: true, name, nutrition, servingG, ingredientsText, tags };
+  return { barcode: resolvedBarcode, brand, found: true, name, nutrition, servingG, ingredientsText, tags };
+}
+
+/**
+ * Map a raw OFF `/api/v2/product/{barcode}.json` response to an OffProduct.
+ * Uses per-100g nutriments. Sodium is reported in grams by OFF and converted to
+ * milligrams (falling back to salt/2.5 when sodium is absent).
+ */
+export function mapOffResponse(barcode: string, json: unknown): OffProduct {
+  const root = asRecord(json);
+  const found = num(root.status) === 1 || root.status === 1;
+  if (!found) {
+    return {
+      barcode,
+      brand: null,
+      found: false,
+      name: null,
+      nutrition: { ...EMPTY_NUTRITION },
+      servingG: null,
+      ingredientsText: null,
+      tags: [],
+    };
+  }
+
+  return mapOffProductJson(barcode, asRecord(root.product));
+}
+
+/**
+ * Map a raw OFF `/cgi/search.pl` (Generic_Search) response into candidate
+ * products, most-scanned first (the request sorts by unique_scans_n). Entries
+ * with no product name are dropped — OFF search returns plenty of incomplete
+ * community entries — and the result is capped at 5.
+ */
+export function mapOffSearchResponse(json: unknown): OffProduct[] {
+  const root = asRecord(json);
+  const products = Array.isArray(root.products) ? root.products : [];
+  return products
+    .map((p) => mapOffProductJson(null, asRecord(p)))
+    .filter((p) => p.name != null)
+    .slice(0, 5);
 }
 
 function nutritionToInputs(nutrition: NutritionValues): NutritionInputs {

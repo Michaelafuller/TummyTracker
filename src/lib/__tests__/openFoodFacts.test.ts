@@ -1,4 +1,9 @@
-import { mapOffResponse, offProductToComponentFormState, offProductToFormState } from '../openFoodFacts';
+import {
+  mapOffResponse,
+  mapOffSearchResponse,
+  offProductToComponentFormState,
+  offProductToFormState,
+} from '../openFoodFacts';
 import found from './fixtures/off-found.json';
 import notfound from './fixtures/off-notfound.json';
 
@@ -66,6 +71,53 @@ describe('mapOffResponse', () => {
   it('returns servingG null when serving_quantity is absent', () => {
     const json = { status: 1, product: { product_name: 'Loose', nutriments: {} } };
     expect(mapOffResponse('1', json).servingG).toBeNull();
+  });
+});
+
+describe('mapOffSearchResponse', () => {
+  it('maps each product node and caps at 5, most-scanned order preserved', () => {
+    const json = {
+      products: Array.from({ length: 7 }, (_, i) => ({
+        code: `${i}`,
+        product_name: `Product ${i}`,
+        nutriments: { 'energy-kcal_100g': 100 + i },
+      })),
+    };
+    const results = mapOffSearchResponse(json);
+    expect(results).toHaveLength(5);
+    expect(results[0].name).toBe('Product 0');
+    expect(results[0].barcode).toBe('0');
+  });
+
+  it('drops products with no product_name', () => {
+    const json = {
+      products: [
+        { code: '1', product_name: 'Has a name', nutriments: {} },
+        { code: '2', nutriments: {} },
+        { code: '3', product_name: '', nutriments: {} },
+      ],
+    };
+    const results = mapOffSearchResponse(json);
+    expect(results).toHaveLength(1);
+    expect(results[0].name).toBe('Has a name');
+  });
+
+  it('extracts the first brand from a comma-separated brands field', () => {
+    const json = {
+      products: [{ code: '1', product_name: 'Chips', brands: 'Chiquita, Something Else', nutriments: {} }],
+    };
+    expect(mapOffSearchResponse(json)[0].brand).toBe('Chiquita');
+  });
+
+  it('reports barcode null when the product node has no code', () => {
+    const json = { products: [{ product_name: 'Homemade-ish', nutriments: {} }] };
+    expect(mapOffSearchResponse(json)[0].barcode).toBeNull();
+  });
+
+  it('is defensive against a missing/garbage products array', () => {
+    expect(mapOffSearchResponse(null)).toEqual([]);
+    expect(mapOffSearchResponse({})).toEqual([]);
+    expect(mapOffSearchResponse({ products: 'not-an-array' })).toEqual([]);
   });
 });
 
