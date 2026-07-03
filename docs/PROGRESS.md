@@ -26,22 +26,31 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   running on the Pixel 5 via an EAS `preview` APK. (Manual & barcode entry, browse/edit
   with calendar, reminders, BM + symptom logging, ingredient & temporal correlation
   insights, serving-size scaling, backup/restore, 4-tab nav, offline mode.)
-- **Health:** 165 Jest tests + all three rungs + `bundle:check` green; tree clean on `main`.
-- **In flight (2026-07-02 cycle, owner-directed):** six-item bug/UX batch (notes 500,
-  12-hour clock, iOS picker dismissal fix, searchable recents, iOS app icon, light-mode
-  palette) + **multi-scan meal builder** + **insights v2** (baseline-relative stats,
-  confidence tiers, ingredient-pair analysis, zero-dep charts). Spec: `docs/HANDOFF.md`.
+- **Health:** 301 Jest tests + all three rungs + `bundle:check` green at HEAD of the
+  2026-07-02 cycle branch (`claude/determined-bartik-13b8aa`), awaiting merge to `main`.
 - **Test coverage caveat:** Maestro suite at 16/19 verified; 3 flows still await a
-  rebuild + device run (`docs/RESULTS.md` §For next session). The in-flight cycle edits
-  several flow YAMLs (authored ⏳) and touches theme tokens — the next device session
-  must run the **full** suite. Green rungs currently **overstate** real coverage.
+  rebuild + device run (`docs/RESULTS.md` §For next session). The 2026-07-02 cycle
+  edited several flow YAMLs (authored ⏳), reworked the light palette (shared infra),
+  and changed the scan flow — the next device session must be a **full-suite** run on
+  a fresh build. Green rungs currently **overstate** real coverage.
+- **Owner on-device checklist (2026-07-02 cycle):** iOS app icon (needs EAS build),
+  iOS time-picker Done-button feel, light-mode look, migration 0006 against a real
+  database, and the full scan → add-next → finish-meal → review → save loop (camera).
 
 ### Shipped last cycle (overwrite each plan cycle; full history = `git log`)
 
-- UI/UX sprint: accessible teal/mauve palette + `primary` tokens, 4-tab nav, offline
-  mode, collapsible calendar, programmatic icons.
-- Test infrastructure: `TEST_STRATEGY.md` (4-step loop, RESULTS.md, targeting/cadence),
-  7 Maestro backfill flows authored, first full e2e run + `RESULTS.md`.
+2026-07-02 owner-feedback cycle (planned Fable 5, executed Sonnet 5):
+- **Bug/UX batch:** notes limit 500 · 12-hour clock display · iOS time-picker
+  dismissal fix (Done-button inline spinner) + native pickers for reminder times ·
+  searchable recents quick-add · iOS app icon fix (opaque PNG, `.icon` bundle removed) ·
+  light-mode palette rework + `danger`/`link` tokens.
+- **Meal builder:** multi-scan grouped meals — `mealComponent` table (migration 0006),
+  one-serving-per-item aggregation, tag union incl. component names, review screen with
+  single meal-level sentiment, backup v2 round-trip, grouped display in journal/edit.
+- **Insights v2:** `stats.ts` (Wilson, Welch SE, confidence tiers) · baseline-relative
+  ingredient/food findings with deltas + confidence chips · ingredient-pair
+  (combination) analysis · zero-dep charts (trend bars, mini histograms, rate meters) ·
+  stricter nutrient gating · insights tab redesign.
 
 ---
 
@@ -66,15 +75,15 @@ temporal meal→outcome correlation are **✅ shipped**. Remaining:
 
 ## Tier 2 — The payoff (turn data into trust + motivation)
 
+Sentiment trend chart, confidence labeling, and ingredient-pair analysis **✅ shipped**
+(insights v2, 2026-07-02). Remaining:
+
 | Item | Why | Effort | Notes |
 |------|-----|:--:|------|
-| **Trends / charts** | Motivation + pattern spotting | M | 🔨 in flight (insights v2, zero-dep plain-View bars; BM-regularity chart still open) |
-| **Confidence labeling on insights** | Don't erode trust with noise | S | 🔨 in flight (insights v2, Wilson/SE tiers — decision #2 revised) |
 | **Per-food / ingredient drill-down** | Tap a finding → every instance + outcomes | S–M | no dep; natural follow-on to insights v2 |
+| **BM-regularity + intake charts** | Complete the trends story beyond sentiment | S–M | reuse the zero-dep chart components |
+| **Meal-component editing after save** | v1 meal builder saves components immutably; edit/remove with re-aggregation is the obvious next ask | S–M | builds on migration 0006 |
 | **Doctor / dietitian PDF report** | Share a date range + insights with a pro | M | ⚠ `expo-print` |
-| **Meal-component editing after save** | v1 meal builder saves components immutably; edit/remove with re-aggregation is the obvious next ask | S–M | follows the in-flight meal builder |
-
-*(Insights-as-a-tab shipped in the UI/UX sprint.)*
 
 ## Tier 3 — Quality of life
 
