@@ -27,9 +27,14 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   with calendar, reminders, BM + symptom logging, ingredient & temporal correlation
   insights, serving-size scaling, backup/restore, 4-tab nav, offline mode.)
 - **Health:** 165 Jest tests + all three rungs + `bundle:check` green; tree clean on `main`.
-- **Test coverage caveat:** Maestro on-device suite is mid-backlog — first full run was
-  5 ✅ / 14 ❌ (mostly flow bugs, not app bugs). See `docs/RESULTS.md` and the active
-  `docs/HANDOFF.md`. Green rungs currently **overstate** real coverage.
+- **In flight (2026-07-02 cycle, owner-directed):** six-item bug/UX batch (notes 500,
+  12-hour clock, iOS picker dismissal fix, searchable recents, iOS app icon, light-mode
+  palette) + **multi-scan meal builder** + **insights v2** (baseline-relative stats,
+  confidence tiers, ingredient-pair analysis, zero-dep charts). Spec: `docs/HANDOFF.md`.
+- **Test coverage caveat:** Maestro suite at 16/19 verified; 3 flows still await a
+  rebuild + device run (`docs/RESULTS.md` §For next session). The in-flight cycle edits
+  several flow YAMLs (authored ⏳) and touches theme tokens — the next device session
+  must run the **full** suite. Green rungs currently **overstate** real coverage.
 
 ### Shipped last cycle (overwrite each plan cycle; full history = `git log`)
 
@@ -63,10 +68,11 @@ temporal meal→outcome correlation are **✅ shipped**. Remaining:
 
 | Item | Why | Effort | Notes |
 |------|-----|:--:|------|
-| **Trends / charts** (sentiment over time, BM regularity, intake) | Motivation + pattern spotting | M | ⚠ charting lib (`react-native-gifted-charts` or hand-rolled `react-native-svg`) |
-| **Per-food / ingredient drill-down** | Tap a finding → every instance + outcomes | S–M | no dep |
-| **Confidence labeling on insights** | Don't erode trust with noise; gate on sample size, flag low-confidence | S | keeps it simple (see decision #2) |
+| **Trends / charts** | Motivation + pattern spotting | M | 🔨 in flight (insights v2, zero-dep plain-View bars; BM-regularity chart still open) |
+| **Confidence labeling on insights** | Don't erode trust with noise | S | 🔨 in flight (insights v2, Wilson/SE tiers — decision #2 revised) |
+| **Per-food / ingredient drill-down** | Tap a finding → every instance + outcomes | S–M | no dep; natural follow-on to insights v2 |
 | **Doctor / dietitian PDF report** | Share a date range + insights with a pro | M | ⚠ `expo-print` |
+| **Meal-component editing after save** | v1 meal builder saves components immutably; edit/remove with re-aggregation is the obvious next ask | S–M | follows the in-flight meal builder |
 
 *(Insights-as-a-tab shipped in the UI/UX sprint.)*
 
@@ -79,18 +85,25 @@ currently hardcoded Sunday, default meal slot by time of day).
 
 ## Tier 4 — Platform / infra
 
-iOS pass (BUILD_PLAN "iOS crossover") · **finish the Maestro backlog** (fix the 14
-failing flows, then keep flow-authoring in every cycle) · screen-level RNTL tests ·
-`bundle:check` in a pre-push hook · `FlashList` virtualization once entry volume grows.
+iOS pass (BUILD_PLAN "iOS crossover"; the 2026-07-02 cycle fixes the icon, picker, and
+light-mode blockers) · **finish the Maestro backlog** (16/19 verified; rebuild + run the
+last 3 per RESULTS.md, then a FULL re-run after this cycle's YAML/theme changes) ·
+screen-level RNTL tests · `bundle:check` in a pre-push hook · `FlashList` virtualization
+once entry volume grows.
 
 ---
 
 ## Decisions (resolved with owner)
 
 1. **New dependencies OK** when CVE-inventoried and clearly value-additive.
-2. **Insights stay simple** — counts / averages / thresholds + sample-size gating +
-   confidence labels. Defer chi-square / effect-size until ingredient→sentiment proves
-   out. (False triggers are worse than missed ones here.)
+2. **Insights v2 (revised 2026-07-02, owner-directed — supersedes "stay simple").**
+   Findings must be *baseline-relative* (a tag's avg sentiment vs. the user's other
+   meals, not an absolute ≤2.5 cutoff), carry Wilson/standard-error-based confidence
+   tiers (low/medium/high; sub-medium suppressed where multiple comparisons bite),
+   include ingredient *pair* (combination) analysis, and be delivered visually
+   (zero-dep plain-View charts). The false-triggers-are-worse principle stands —
+   it's now enforced by confidence gating rather than by simplicity. Still no
+   stats/charting dependencies.
 3. **Symptoms = a new loggable type** (mirror the BM migration), dedicated severity, not
    by overloading `sentiment`.
 4. **`isOutcome` definition:** bad BM (Bristol 1, 2, 6, 7) OR symptom (severity ≥ 3) OR
