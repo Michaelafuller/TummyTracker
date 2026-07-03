@@ -1,6 +1,6 @@
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { FormField } from '@/components/form-fields';
 import { ThemedText } from '@/components/themed-text';
@@ -25,6 +25,14 @@ function toDate(dateInput: string, timeInput: string): Date {
 /**
  * Native date/time picker field with a Now shortcut.
  * Shows two Pressable chips (date and time) that each open the OS-native picker.
+ *
+ * Platform behavior differs because the native picker itself behaves differently
+ * (confirmed root cause, owner-verified on iOS):
+ * - Android's dialog fires `onChange` once (commit) — conditional render, closes on
+ *   commit or on `event.type === 'dismissed'`.
+ * - iOS's spinner fires `onChange` on every wheel pause. Committing on every change
+ *   is fine, but closing on the first one isn't — it unmounts the picker mid-scroll.
+ *   So on iOS the picker renders inline and only a "Done" chip closes it.
  */
 export function DateTimeField({
   dateInput,
@@ -36,17 +44,26 @@ export function DateTimeField({
   const theme = useTheme();
   const [pickerMode, setPickerMode] = useState<'date' | 'time' | null>(null);
 
-  function handlePickerChange(_event: DateTimePickerEvent, date: Date | undefined) {
-    if (!date) {
+  function commit(mode: 'date' | 'time', date: Date) {
+    if (mode === 'date') {
+      onDateChange(formatDateInput(date.getTime()));
+    } else {
+      onTimeChange(formatTimeInput(date.getTime()));
+    }
+  }
+
+  function handleAndroidChange(event: DateTimePickerEvent, date: Date | undefined) {
+    if (event.type === 'dismissed' || !date) {
       setPickerMode(null);
       return;
     }
-    if (pickerMode === 'date') {
-      onDateChange(formatDateInput(date.getTime()));
-    } else if (pickerMode === 'time') {
-      onTimeChange(formatTimeInput(date.getTime()));
-    }
+    if (pickerMode) commit(pickerMode, date);
     setPickerMode(null);
+  }
+
+  function handleIosChange(_event: DateTimePickerEvent, date: Date | undefined) {
+    if (!date || !pickerMode) return;
+    commit(pickerMode, date);
   }
 
   function handleNow() {
@@ -59,6 +76,8 @@ export function DateTimeField({
 
   const parsedTime = parseClockTime(timeInput);
   const timeDisplay = parsedTime ? formatClock12h(parsedTime.hour, parsedTime.minute) : timeInput;
+
+  const isIos = Platform.OS === 'ios';
 
   return (
     <FormField label="When" error={error}>
@@ -88,13 +107,33 @@ export function DateTimeField({
         </Pressable>
       </View>
 
-      {pickerMode !== null && (
+      {pickerMode !== null && !isIos && (
         <DateTimePicker
+          testID="date-time-picker"
           value={toDate(dateInput, timeInput)}
           mode={pickerMode}
           display="default"
-          onChange={handlePickerChange}
+          onChange={handleAndroidChange}
         />
+      )}
+
+      {pickerMode !== null && isIos && (
+        <View style={styles.iosPicker}>
+          <DateTimePicker
+            testID="date-time-picker"
+            value={toDate(dateInput, timeInput)}
+            mode={pickerMode}
+            display="spinner"
+            onChange={handleIosChange}
+          />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={pickerMode === 'date' ? 'Done choosing date' : 'Done choosing time'}
+            onPress={() => setPickerMode(null)}
+            style={[chipStyle, styles.doneChip]}>
+            <ThemedText type="smallBold">Done</ThemedText>
+          </Pressable>
+        </View>
       )}
     </FormField>
   );
@@ -119,5 +158,11 @@ const styles = StyleSheet.create({
   },
   nowChip: {
     paddingHorizontal: Spacing.two,
+  },
+  iosPicker: {
+    gap: Spacing.two,
+  },
+  doneChip: {
+    alignItems: 'center',
   },
 });
