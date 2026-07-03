@@ -28,8 +28,12 @@ appId: com.tummytracker.app
 - assertVisible:
     text: "breakfast reminder"
 
-# Verify time field is editable
+# Verify time field opens the native picker (now a chip showing 12h time,
+# e.g. "8:00 AM" — HANDOFF 1.2/1.3, replaces the old raw HH:MM text input)
 - tapOn:
     text: "breakfast reminder time"
-- eraseText: 20
-- inputText: "08:00"
+- waitForAnimationToEnd
+- tapOn: "OK"
+- waitForAnimationToEnd
+- assertVisible:
+    text: "breakfast reminder time"

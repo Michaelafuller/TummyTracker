@@ -4,9 +4,10 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { FormField, ThemedTextInput } from '@/components/form-fields';
+import { FormField } from '@/components/form-fields';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { TimeField } from '@/components/time-field';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import { createLogEntry, getLogEntry, listLogEntries } from '@/db/repository';
 import {
@@ -17,19 +18,8 @@ import {
 } from '@/features/notifications/model';
 import { disableReminder, enableReminder, getReminders } from '@/features/notifications/service';
 import { usePrefsStore } from '@/features/prefs/prefsStore';
-import { formatClock, parseClockTime } from '@/lib/datetime';
 import { entriesToJson, parseBackupJson } from '@/lib/backup';
 import { useTheme } from '@/hooks/use-theme';
-
-type TimeInputs = Record<ReminderSlot, string>;
-
-function timeInputsFrom(state: RemindersState): TimeInputs {
-  return {
-    breakfast: formatClock(state.breakfast.hour, state.breakfast.minute),
-    lunch: formatClock(state.lunch.hour, state.lunch.minute),
-    dinner: formatClock(state.dinner.hour, state.dinner.minute),
-  };
-}
 
 export default function SettingsScreen() {
   const theme = useTheme();
@@ -37,7 +27,6 @@ export default function SettingsScreen() {
   const offlineMode = usePrefsStore((s) => s.offlineMode);
   const setOfflineMode = usePrefsStore((s) => s.setOfflineMode);
   const [reminders, setReminders] = useState<RemindersState>(DEFAULT_REMINDERS);
-  const [timeInputs, setTimeInputs] = useState<TimeInputs>(() => timeInputsFrom(DEFAULT_REMINDERS));
   const [loading, setLoading] = useState(true);
   const [dataWorking, setDataWorking] = useState(false);
 
@@ -46,7 +35,6 @@ export default function SettingsScreen() {
     getReminders().then((state) => {
       if (!active) return;
       setReminders(state);
-      setTimeInputs(timeInputsFrom(state));
       setLoading(false);
     });
     return () => {
@@ -56,10 +44,7 @@ export default function SettingsScreen() {
 
   async function toggle(slot: ReminderSlot, value: boolean) {
     if (value) {
-      const time = parseClockTime(timeInputs[slot]) ?? {
-        hour: reminders[slot].hour,
-        minute: reminders[slot].minute,
-      };
+      const time = { hour: reminders[slot].hour, minute: reminders[slot].minute };
       const ok = await enableReminder(slot, time.hour, time.minute);
       if (!ok) {
         Alert.alert(
@@ -75,18 +60,10 @@ export default function SettingsScreen() {
     }
   }
 
-  async function commitTime(slot: ReminderSlot) {
-    const time = parseClockTime(timeInputs[slot]);
-    if (!time) {
-      setTimeInputs((prev) => ({
-        ...prev,
-        [slot]: formatClock(reminders[slot].hour, reminders[slot].minute),
-      }));
-      return;
-    }
-    setReminders((prev) => ({ ...prev, [slot]: { ...prev[slot], ...time } }));
+  async function commitTime(slot: ReminderSlot, hour: number, minute: number) {
+    setReminders((prev) => ({ ...prev, [slot]: { ...prev[slot], hour, minute } }));
     if (reminders[slot].enabled) {
-      await enableReminder(slot, time.hour, time.minute);
+      await enableReminder(slot, hour, minute);
     }
   }
 
@@ -202,15 +179,11 @@ export default function SettingsScreen() {
               />
             </View>
             <FormField label="Time">
-              <ThemedTextInput
-                value={timeInputs[slot]}
-                onChangeText={(value) => setTimeInputs((prev) => ({ ...prev, [slot]: value }))}
-                onBlur={() => commitTime(slot)}
-                onSubmitEditing={() => commitTime(slot)}
-                placeholder="HH:MM"
+              <TimeField
+                hour={reminders[slot].hour}
+                minute={reminders[slot].minute}
+                onChange={(hour, minute) => commitTime(slot, hour, minute)}
                 accessibilityLabel={`${slot} reminder time`}
-                keyboardType="numbers-and-punctuation"
-                autoCapitalize="none"
               />
             </FormField>
           </View>
