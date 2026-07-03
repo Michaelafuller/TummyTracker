@@ -30,6 +30,9 @@ function subtitle(entry: LogEntry): string {
   }
   const parts: string[] = [entry.type[0].toUpperCase() + entry.type.slice(1)];
   if (entry.mealSlot) parts.push(entry.mealSlot);
+  if (entry.componentCount != null && entry.componentCount > 1) {
+    parts.push(`${entry.componentCount} items`);
+  }
   if (entry.calories != null) parts.push(`${entry.calories} kcal`);
   return parts.join(' · ');
 }
