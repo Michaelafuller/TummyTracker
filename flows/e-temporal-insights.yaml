@@ -30,7 +30,15 @@ appId: com.tummytracker.app
       text: "Your journal so far"
     direction: DOWN
 - assertVisible: "Your journal so far"
-# Summary line: "<n> entries · <n> food · <n> BM · <n> rated"
+# The summary DATA line sits one row *below* the "Your journal so far" header, so
+# the header-targeted scroll above can stop with the data line just below the fold
+# (assertVisible does not scroll). Scroll until a token from the data line itself is
+# on-screen before asserting its contents. (TEST_STRATEGY §7 — scroll before assert.)
+- scrollUntilVisible:
+    element:
+      text: "rated"
+    direction: DOWN
+# Summary line: "<n> entries · <n> food · <n> BM · <n> rated · avg sentiment <x>"
 - assertVisible: "BM"
-# "food" appears in the summary line as well
+# "food" appears in the same summary line as well
 - assertVisible: "food"
