@@ -42,7 +42,7 @@ function temporalSentence(finding: TemporalFinding): string {
 function Card({ title, body, sample }: { title: string; body: string; sample: string }) {
   const theme = useTheme();
   return (
-    <View style={[styles.card, { backgroundColor: theme.backgroundElement }]}>
+    <View style={[styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
       <ThemedText type="smallBold">{title}</ThemedText>
       <ThemedText type="small">{body}</ThemedText>
       <ThemedText type="small" themeColor="textSecondary">
@@ -173,5 +173,6 @@ const styles = StyleSheet.create({
     gap: Spacing.one,
     padding: Spacing.three,
     borderRadius: Spacing.three,
+    borderWidth: StyleSheet.hairlineWidth,
   },
 });

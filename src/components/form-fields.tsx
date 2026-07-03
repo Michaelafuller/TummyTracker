@@ -27,7 +27,7 @@ export function FormField({ label, error, hint, children }: FormFieldProps) {
       </View>
       {children}
       {error ? (
-        <ThemedText type="small" style={styles.error}>
+        <ThemedText type="small" themeColor="danger">
           {error}
         </ThemedText>
       ) : null}
@@ -75,8 +75,5 @@ const styles = StyleSheet.create({
     minHeight: 88,
     textAlignVertical: 'top',
     paddingTop: Spacing.two,
-  },
-  error: {
-    color: '#d9534f',
   },
 });

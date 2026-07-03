@@ -109,7 +109,7 @@ export default function EditEntryScreen() {
           accessibilityRole="button"
           accessibilityLabel="Delete entry"
           onPress={handleDelete}>
-          <ThemedText type="link" style={styles.deleteLabel}>
+          <ThemedText type="link" themeColor="danger">
             Delete entry
           </ThemedText>
         </Pressable>
@@ -136,8 +136,5 @@ const styles = StyleSheet.create({
   },
   deleteWrapper: {
     alignItems: 'center',
-  },
-  deleteLabel: {
-    color: '#d9534f',
   },
 });

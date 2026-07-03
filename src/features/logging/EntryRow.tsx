@@ -47,7 +47,7 @@ export function EntryRow({ entry }: { entry: LogEntry }) {
         accessibilityLabel={`${entry.name}, ${subtitle(entry)}, ${
           sentiment ? `rated ${sentimentLabel(sentiment)}` : 'not rated'
         }`}
-        style={[styles.row, { backgroundColor: theme.backgroundElement }]}>
+        style={[styles.row, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
         <ThemedText type="small" themeColor="textSecondary" style={styles.time}>
           {formatTime12h(entry.loggedAt)}
         </ThemedText>
@@ -72,6 +72,7 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
     padding: Spacing.three,
     borderRadius: Spacing.three,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   time: {
     width: 64,
