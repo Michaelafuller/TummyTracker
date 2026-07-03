@@ -10,6 +10,7 @@ import type { LogEntry } from '@/db/schema';
 import { listRecentFoodEntries } from '@/db/repository';
 import { logEntryToFormState } from '@/features/logging/formModel';
 import { usePrefillStore } from '@/features/logging/prefillStore';
+import { RecentFoodPicker } from '@/features/logging/RecentFoodPicker';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDateInput, formatTimeInput } from '@/lib/datetime';
 
@@ -21,7 +22,7 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      listRecentFoodEntries(10).then(setRecents).catch(() => setRecents([]));
+      listRecentFoodEntries(50).then(setRecents).catch(() => setRecents([]));
     }, []),
   );
 
@@ -110,26 +111,7 @@ export default function HomeScreen() {
               <ThemedText type="smallBold" style={styles.recentHeading}>
                 Recent
               </ThemedText>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.recentScroll}>
-                {recents.map((entry) => (
-                  <Pressable
-                    key={entry.id}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Re-log ${entry.name}`}
-                    onPress={() => handleRecentTap(entry)}
-                    style={[
-                      styles.recentChip,
-                      { backgroundColor: theme.backgroundElement, borderColor: theme.border },
-                    ]}>
-                    <ThemedText type="small" numberOfLines={1}>
-                      {entry.name}
-                    </ThemedText>
-                  </Pressable>
-                ))}
-              </ScrollView>
+              <RecentFoodPicker entries={recents} onSelect={handleRecentTap} />
             </ThemedView>
           )}
         </ScrollView>
@@ -185,16 +167,5 @@ const styles = StyleSheet.create({
   },
   recentHeading: {
     marginLeft: Spacing.one,
-  },
-  recentScroll: {
-    gap: Spacing.two,
-    paddingBottom: Spacing.two,
-  },
-  recentChip: {
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
-    maxWidth: 200,
   },
 });

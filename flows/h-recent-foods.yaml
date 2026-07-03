@@ -1,10 +1,12 @@
 appId: com.tummytracker.app
-# Tier-0 H — Recent foods quick-add.
-#   - After logging meals, the "Recent" row appears on the Home screen
-#   - Tapping a chip opens the new-entry form pre-filled with that food's data
+# Tier-0 H — Recent foods searchable quick-add (HANDOFF 1.4).
+#   - After logging meals, the "Recent" section appears on the Home screen
+#   - Typing in the search field filters the suggestion rows
+#   - Tapping a row (id: recent-<slug>) opens the new-entry form pre-filled
+#     with that food's data
 #   - The date/time defaults to now (not the original log time)
 #   - Saving creates a new distinct entry
-#   - At most 10 chips shown (no duplicate names)
+#   - At most 6 rows shown at a time (no duplicate names)
 ---
 - launchApp:
     clearState: true
@@ -19,14 +21,21 @@ appId: com.tummytracker.app
     id: "tab-home"
 - waitForAnimationToEnd
 
-# "Recent" section heading and chips should now be visible
+# "Recent" section heading and rows should now be visible
 - assertVisible: "Recent"
 - assertVisible: "Oatmeal"
 - assertVisible: "Pizza slice"
 
-# Tap "Oatmeal" chip — opens prefilled new-entry form
+# Search narrows the list to the matching row
 - tapOn:
-    text: "Re-log Oatmeal"
+    text: "Search past foods…"
+- inputText: "Oatmeal"
+- assertVisible:
+    id: "recent-oatmeal"
+
+# Tap the Oatmeal row — opens prefilled new-entry form
+- tapOn:
+    id: "recent-oatmeal"
 - waitForAnimationToEnd
 
 # Form is open and pre-filled with the food's name (above fold confirms open)
