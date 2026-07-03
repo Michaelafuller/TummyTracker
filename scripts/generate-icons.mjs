@@ -1,10 +1,11 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { Resvg } from '@resvg/resvg-js';
 
-function rasterize(svgPath, outputPath, width, height) {
+function rasterize(svgPath, outputPath, width, height, options = {}) {
   const svg = readFileSync(svgPath, 'utf8');
   const resvg = new Resvg(svg, {
     fitTo: { mode: 'width', value: width },
+    ...options,
   });
   const pngData = resvg.render();
   writeFileSync(outputPath, pngData.asPng());
@@ -13,8 +14,14 @@ function rasterize(svgPath, outputPath, width, height) {
 
 console.log('Generating app icons…');
 
-// Main app icon
-rasterize('assets/icons/icon.svg', 'assets/images/icon.png', 1024);
+// Main app icon. icon.svg's background is a rounded rect (rx=200) that doesn't
+// cover the square canvas's corners, so those render transparent — fine for
+// Android (its own adaptive-icon mask clips it) but iOS requires a fully
+// opaque icon (HANDOFF 1.5). Composite over the brand background color (same
+// as the Android adaptive background) so the corners are opaque.
+rasterize('assets/icons/icon.svg', 'assets/images/icon.png', 1024, undefined, {
+  background: '#0D1C20',
+});
 
 // Android adaptive icon layers
 rasterize('assets/icons/icon.svg', 'assets/images/android-icon-foreground.png', 1024);

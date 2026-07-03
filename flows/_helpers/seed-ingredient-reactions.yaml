@@ -2,6 +2,11 @@ appId: com.tummytracker.app
 # Helper — seeds 3 "Onion Dish" meals with sentiment 1 and "onion, garlic"
 # ingredients, each time building tagsJson via extractTags so "onion" and "garlic"
 # accumulate ≥ MIN_TAG_OCCURRENCES (3) in rated food entries.
+# Insights v2 (Phase 3) made ingredient findings baseline-relative — a tag's
+# average sentiment is compared against the mean of all OTHER rated food
+# entries, so at least one high-sentiment control entry is needed or there is
+# no baseline to compare against and no finding surfaces at all. "Rice" below
+# is that control (sentiment 5, no ingredients tag).
 # Assumes app is already running and the Home screen is visible.
 ---
 - tapOn: "Add an entry manually"
@@ -60,6 +65,19 @@ appId: com.tummytracker.app
 - inputText: "onion, garlic"
 - hideKeyboard
 - waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "Save entry"
+    direction: DOWN
+- tapOn: "Save entry"
+- waitForAnimationToEnd
+
+- tapOn: "Add an entry manually"
+- tapOn: "Entry name"
+- inputText: "Rice"
+- hideKeyboard
+- tapOn:
+    id: "sentiment-5"
 - scrollUntilVisible:
     element:
       text: "Save entry"

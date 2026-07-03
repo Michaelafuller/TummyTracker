@@ -1,6 +1,10 @@
+import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BarMeter } from '@/components/charts/BarMeter';
+import { MiniHistogram } from '@/components/charts/MiniHistogram';
+import { TrendBars } from '@/components/charts/TrendBars';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Spacing } from '@/constants/theme';
@@ -8,29 +12,40 @@ import {
   computeInsights,
   type FoodFinding,
   type NutrientFinding,
+  type PairFinding,
   type TagFinding,
   type TemporalFinding,
 } from '@/features/analysis/insights';
 import { useAllEntries } from '@/features/logging/useEntries';
 import { useTheme } from '@/hooks/use-theme';
+import { weeklySentiment } from '@/lib/chartData';
 import { NUTRITION_NOUNS } from '@/lib/nutrition';
+import type { ConfidenceTier } from '@/lib/stats';
 
-function nutrientSentence(finding: NutrientFinding): string {
+function confidenceLabel(confidence: ConfidenceTier): string {
+  return confidence === 'high' ? 'High' : confidence === 'medium' ? 'Medium' : 'Low';
+}
+
+export function nutrientSentence(finding: NutrientFinding): string {
   return (
     `Meals higher in ${NUTRITION_NOUNS[finding.nutrient]} (≥ ${finding.thresholdValue}) average a ` +
     `sentiment of ${finding.highAvgSentiment}, versus ${finding.lowAvgSentiment} otherwise.`
   );
 }
 
-function foodSentence(finding: FoodFinding): string {
-  return `${finding.name}: average sentiment ${finding.avgSentiment} across ${finding.occurrences} logs.`;
+export function foodSentence(finding: FoodFinding): string {
+  return `${finding.name} averages ${finding.avgSentiment} vs your usual ${finding.baselineAvg}, across ${finding.occurrences} logs.`;
 }
 
-function ingredientSentence(finding: TagFinding): string {
-  return `Average sentiment ${finding.avgSentiment} across ${finding.occurrences} meals containing this ingredient.`;
+export function ingredientSentence(finding: TagFinding): string {
+  return `Averages ${finding.avgSentiment} vs your usual ${finding.baselineAvg}, across ${finding.occurrences} meals containing this ingredient.`;
 }
 
-function temporalSentence(finding: TemporalFinding): string {
+export function pairSentence(finding: PairFinding): string {
+  return `${finding.tags[0]} + ${finding.tags[1]} together average ${finding.avgSentiment} vs your usual ${finding.baselineAvg}, across ${finding.occurrences} meals.`;
+}
+
+export function temporalSentence(finding: TemporalFinding): string {
   const pct = Math.round(finding.hitRate * 100);
   const basePct = Math.round(finding.baseRate * 100);
   return (
@@ -39,15 +54,50 @@ function temporalSentence(finding: TemporalFinding): string {
   );
 }
 
-function Card({ title, body, sample }: { title: string; body: string; sample: string }) {
+function ConfidenceChip({ confidence, n }: { confidence: ConfidenceTier; n: number }) {
+  const theme = useTheme();
+  const backgroundColor =
+    confidence === 'high' ? theme.primary : confidence === 'medium' ? theme.backgroundSelected : theme.border;
+  const textColor = confidence === 'high' ? theme.primaryText : theme.text;
+  return (
+    <View style={[styles.chip, { backgroundColor }]}>
+      <ThemedText
+        type="small"
+        style={[styles.chipText, { color: textColor }]}>{`${confidenceLabel(confidence)} confidence · ${n} meals`}</ThemedText>
+    </View>
+  );
+}
+
+function Card({
+  title,
+  body,
+  sample,
+  confidence,
+  n,
+  histogram,
+  children,
+}: {
+  title: string;
+  body: string;
+  sample?: string;
+  confidence?: ConfidenceTier;
+  n?: number;
+  histogram?: readonly [number, number, number, number, number];
+  children?: React.ReactNode;
+}) {
   const theme = useTheme();
   return (
-    <View style={[styles.card, { backgroundColor: theme.backgroundElement }]}>
+    <View style={[styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
       <ThemedText type="smallBold">{title}</ThemedText>
       <ThemedText type="small">{body}</ThemedText>
-      <ThemedText type="small" themeColor="textSecondary">
-        {sample}
-      </ThemedText>
+      {sample ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          {sample}
+        </ThemedText>
+      ) : null}
+      {confidence != null && n != null ? <ConfidenceChip confidence={confidence} n={n} /> : null}
+      {histogram ? <MiniHistogram counts={histogram} /> : null}
+      {children}
     </View>
   );
 }
@@ -55,11 +105,24 @@ function Card({ title, body, sample }: { title: string; body: string; sample: st
 export default function InsightsScreen() {
   const entries = useAllEntries();
   const insets = useSafeAreaInsets();
-  const { summary, nutrientFindings, foodFindings, ingredientFindings, temporalFindings } = computeInsights(entries);
+  const {
+    summary,
+    nutrientFindings,
+    foodFindings,
+    ingredientFindings,
+    pairFindings,
+    temporalFindings,
+  } = computeInsights(entries);
+  // Lazy-init so Date.now() is read once per mount, not on every render pass
+  // (the render function itself must stay pure/idempotent).
+  const [now] = useState(() => Date.now());
+  const trendBuckets = weeklySentiment(entries, now);
+  const hasTrendData = trendBuckets.some((b) => b.avg != null);
   const hasFindings =
     nutrientFindings.length > 0 ||
     foodFindings.length > 0 ||
     ingredientFindings.length > 0 ||
+    pairFindings.length > 0 ||
     temporalFindings.length > 0;
 
   return (
@@ -81,15 +144,40 @@ export default function InsightsScreen() {
           </ThemedText>
         </View>
 
-        {nutrientFindings.length > 0 ? (
+        {hasTrendData ? (
           <View style={styles.section}>
-            <ThemedText type="subtitle">Nutrients</ThemedText>
-            {nutrientFindings.map((finding) => (
+            <ThemedText type="subtitle">Trend</ThemedText>
+            <TrendBars buckets={trendBuckets} />
+          </View>
+        ) : null}
+
+        {ingredientFindings.length > 0 ? (
+          <View style={styles.section}>
+            <ThemedText type="subtitle">Ingredients you react to</ThemedText>
+            {ingredientFindings.map((finding) => (
               <Card
-                key={finding.nutrient}
-                title={`Higher ${NUTRITION_NOUNS[finding.nutrient]}`}
-                body={nutrientSentence(finding)}
-                sample={`Based on ${finding.sampleSize} higher-${NUTRITION_NOUNS[finding.nutrient]} meals.`}
+                key={finding.tag}
+                title={finding.tag}
+                body={ingredientSentence(finding)}
+                confidence={finding.confidence}
+                n={finding.occurrences}
+                histogram={finding.sentimentCounts}
+              />
+            ))}
+          </View>
+        ) : null}
+
+        {pairFindings.length > 0 ? (
+          <View style={styles.section}>
+            <ThemedText type="subtitle">Combinations</ThemedText>
+            {pairFindings.map((finding) => (
+              <Card
+                key={`${finding.tags[0]}+${finding.tags[1]}`}
+                title={`${finding.tags[0]} + ${finding.tags[1]}`}
+                body={pairSentence(finding)}
+                confidence={finding.confidence}
+                n={finding.occurrences}
+                histogram={finding.sentimentCounts}
               />
             ))}
           </View>
@@ -104,20 +192,9 @@ export default function InsightsScreen() {
                 title={finding.name}
                 body={foodSentence(finding)}
                 sample={`Based on ${finding.occurrences} logs.`}
-              />
-            ))}
-          </View>
-        ) : null}
-
-        {ingredientFindings.length > 0 ? (
-          <View style={styles.section}>
-            <ThemedText type="subtitle">Ingredients you react to</ThemedText>
-            {ingredientFindings.map((finding) => (
-              <Card
-                key={finding.tag}
-                title={finding.tag}
-                body={ingredientSentence(finding)}
-                sample={`Based on ${finding.occurrences} meals.`}
+                confidence={finding.confidence}
+                n={finding.occurrences}
+                histogram={finding.sentimentCounts}
               />
             ))}
           </View>
@@ -135,7 +212,25 @@ export default function InsightsScreen() {
                 key={finding.tag}
                 title={finding.tag}
                 body={temporalSentence(finding)}
-                sample={`Based on ${finding.meals} meals.`}
+                confidence={finding.confidence}
+                n={finding.meals}>
+                <BarMeter label={finding.tag} rate={finding.hitRate} baseRate={finding.baseRate} />
+              </Card>
+            ))}
+          </View>
+        ) : null}
+
+        {nutrientFindings.length > 0 ? (
+          <View style={styles.section}>
+            <ThemedText type="subtitle">Nutrients</ThemedText>
+            {nutrientFindings.map((finding) => (
+              <Card
+                key={finding.nutrient}
+                title={`Higher ${NUTRITION_NOUNS[finding.nutrient]}`}
+                body={nutrientSentence(finding)}
+                sample={`Based on ${finding.sampleSize} higher-${NUTRITION_NOUNS[finding.nutrient]} meals.`}
+                confidence={finding.confidence}
+                n={finding.sampleSize}
               />
             ))}
           </View>
@@ -173,5 +268,15 @@ const styles = StyleSheet.create({
     gap: Spacing.one,
     padding: Spacing.three,
     borderRadius: Spacing.three,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  chip: {
+    alignSelf: 'flex-start',
+    borderRadius: Spacing.four,
+    paddingVertical: Spacing.half,
+    paddingHorizontal: Spacing.two,
+  },
+  chipText: {
+    fontWeight: '700',
   },
 });

@@ -5,8 +5,8 @@ import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, Sc
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
-import type { LogEntry } from '@/db/schema';
-import { deleteLogEntry, getLogEntry, updateLogEntry } from '@/db/repository';
+import type { LogEntry, MealComponent } from '@/db/schema';
+import { deleteLogEntry, getLogEntry, getMealComponents, updateLogEntry } from '@/db/repository';
 import { BmForm } from '@/features/bm/BmForm';
 import { bmEntryToFormState, type BuiltBmEntry } from '@/features/bm/formModel';
 import type { BuiltLogEntry } from '@/features/logging/formModel';
@@ -14,14 +14,17 @@ import { logEntryToFormState } from '@/features/logging/formModel';
 import { LogEntryForm } from '@/features/logging/LogEntryForm';
 import { SymptomForm } from '@/features/symptoms/SymptomForm';
 import { symptomEntryToFormState, type BuiltSymptomEntry } from '@/features/symptoms/formModel';
+import { useTheme } from '@/hooks/use-theme';
 
 // undefined = still loading, null = not found.
 type LoadState = LogEntry | null | undefined;
 
 export default function EditEntryScreen() {
+  const theme = useTheme();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [entry, setEntry] = useState<LoadState>(undefined);
+  const [components, setComponents] = useState<MealComponent[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -33,6 +36,19 @@ export default function EditEntryScreen() {
       active = false;
     };
   }, [id]);
+
+  // A grouped meal (componentCount > 1) has child rows worth showing read-only —
+  // v1 does not support editing components after save (HANDOFF 2.5).
+  useEffect(() => {
+    if (!entry || entry.componentCount == null || entry.componentCount <= 1) return;
+    let active = true;
+    getMealComponents(entry.id).then((rows) => {
+      if (active) setComponents(rows);
+    });
+    return () => {
+      active = false;
+    };
+  }, [entry]);
 
   async function handleSubmit(updated: BuiltLogEntry | BuiltBmEntry | BuiltSymptomEntry) {
     setSubmitting(true);
@@ -104,12 +120,28 @@ export default function EditEntryScreen() {
           submitting={submitting}
         />
       )}
+      {components.length > 0 ? (
+        <View style={styles.componentSection}>
+          <ThemedText type="smallBold">In this meal</ThemedText>
+          <View style={styles.componentList}>
+            {components.map((component) => (
+              <View
+                key={component.id}
+                style={[styles.componentRow, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+                <ThemedText type="small" numberOfLines={1}>
+                  {`${component.name} · ${component.servings}× serving${component.calories != null ? ` · ${Math.round(component.calories * component.servings)} kcal` : ''}`}
+                </ThemedText>
+              </View>
+            ))}
+          </View>
+        </View>
+      ) : null}
       <View style={styles.deleteWrapper}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Delete entry"
           onPress={handleDelete}>
-          <ThemedText type="link" style={styles.deleteLabel}>
+          <ThemedText type="link" themeColor="danger">
             Delete entry
           </ThemedText>
         </Pressable>
@@ -137,7 +169,15 @@ const styles = StyleSheet.create({
   deleteWrapper: {
     alignItems: 'center',
   },
-  deleteLabel: {
-    color: '#d9534f',
+  componentSection: {
+    gap: Spacing.two,
+  },
+  componentList: {
+    gap: Spacing.two,
+  },
+  componentRow: {
+    padding: Spacing.three,
+    borderRadius: Spacing.three,
+    borderWidth: StyleSheet.hairlineWidth,
   },
 });

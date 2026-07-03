@@ -158,7 +158,7 @@ MVP entities:
   - `barcode` (text, nullable)
   - `loggedAt` (timestamp — when the meal happened, editable)
   - `sentiment` (int 1–5, nullable until rated; see §7)
-  - `notes` (text, **max 200 chars** — enforce in validation, not just UI)
+  - `notes` (text, **max 500 chars** — enforce in validation, not just UI)
   - nutrition: `calories, fatG, carbsG, proteinG, fiberG, sugarG, sodiumMg`
     (all real, nullable)
   - `createdAt`, `updatedAt` (timestamps)

@@ -48,9 +48,9 @@ describe('buildLogEntry', () => {
     expect(ok.entry?.name).toBe('Soup');
   });
 
-  it('nulls out empty notes and rejects notes over 200 chars', () => {
+  it('nulls out empty notes and rejects notes over 500 chars', () => {
     expect(buildLogEntry(baseState({ notes: '   ' })).entry?.notes).toBeNull();
-    expect(buildLogEntry(baseState({ notes: 'x'.repeat(201) })).errors.notes).toBeDefined();
+    expect(buildLogEntry(baseState({ notes: 'x'.repeat(501) })).errors.notes).toBeDefined();
   });
 
   it('reports an invalid date/time', () => {
@@ -111,6 +111,7 @@ describe('logEntryToFormState (edit round-trip)', () => {
     servingG: 40,
     ingredientsText: 'oats, water',
     tagsJson: '["oats","water"]',
+    componentCount: null,
     createdAt: 1,
     updatedAt: 2,
   };

@@ -9,7 +9,7 @@ import { isSentimentValue, sentimentEmoji, sentimentLabel } from '@/features/sen
 import { isSeverityValue } from '@/features/symptoms/severity';
 import { isSymptomTypeValue, symptomTypeLabel } from '@/features/symptoms/symptomTypes';
 import { useTheme } from '@/hooks/use-theme';
-import { formatTimeInput } from '@/lib/datetime';
+import { formatTime12h } from '@/lib/datetime';
 
 const TYPE_EMOJI: Partial<Record<string, string>> = {
   bowel_movement: '💩',
@@ -30,6 +30,9 @@ function subtitle(entry: LogEntry): string {
   }
   const parts: string[] = [entry.type[0].toUpperCase() + entry.type.slice(1)];
   if (entry.mealSlot) parts.push(entry.mealSlot);
+  if (entry.componentCount != null && entry.componentCount > 1) {
+    parts.push(`${entry.componentCount} items`);
+  }
   if (entry.calories != null) parts.push(`${entry.calories} kcal`);
   return parts.join(' · ');
 }
@@ -47,9 +50,9 @@ export function EntryRow({ entry }: { entry: LogEntry }) {
         accessibilityLabel={`${entry.name}, ${subtitle(entry)}, ${
           sentiment ? `rated ${sentimentLabel(sentiment)}` : 'not rated'
         }`}
-        style={[styles.row, { backgroundColor: theme.backgroundElement }]}>
+        style={[styles.row, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
         <ThemedText type="small" themeColor="textSecondary" style={styles.time}>
-          {formatTimeInput(entry.loggedAt)}
+          {formatTime12h(entry.loggedAt)}
         </ThemedText>
         <View style={styles.body}>
           <ThemedText type="smallBold" numberOfLines={1}>
@@ -72,9 +75,10 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
     padding: Spacing.three,
     borderRadius: Spacing.three,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   time: {
-    width: 44,
+    width: 64,
   },
   body: {
     flex: 1,

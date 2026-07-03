@@ -1,5 +1,5 @@
 appId: com.tummytracker.app
-# Phase 1b — Manual entry: full form fill, 200-char notes limit enforced,
+# Phase 1b — Manual entry: full form fill, 500-char notes limit enforced,
 # entry persists across an app restart (SQLite round-trip).
 ---
 - launchApp:
@@ -22,15 +22,15 @@ appId: com.tummytracker.app
 - tapOn:
     id: "sentiment-4"
 
-# Notes — 210 chars; maxLength=200 caps to 200/200
+# Notes — 510 chars; maxLength=500 caps to 500/500
 - scrollUntilVisible:
     element:
       text: "Notes"
     direction: DOWN
 - tapOn:
     text: "Notes"
-- inputText: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-- assertVisible: "200/200"
+- inputText: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+- assertVisible: "500/500"
 
 # Ingredients
 - scrollUntilVisible:

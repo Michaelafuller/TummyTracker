@@ -3,6 +3,7 @@
 // and hands the parsed JSON to `mapOffResponse`. Keeping this pure makes it
 // fixture-testable.
 
+import type { ComponentFormState } from '@/features/logging/componentFormModel';
 import type { LogEntryFormState, NutritionInputs } from '@/features/logging/formModel';
 import { extractTags, serializeTags } from '@/lib/ingredients';
 import { scaleNutrition, type NutritionValues } from '@/lib/nutrition';
@@ -122,6 +123,22 @@ function nutritionToInputs(nutrition: NutritionValues): NutritionInputs {
 
 /** Convert a looked-up product into form prefill state for the manual entry form. */
 export function offProductToFormState(product: OffProduct): Partial<LogEntryFormState> {
+  const servingG = product.servingG ?? 100;
+  const base: NutritionValues = { ...product.nutrition };
+  const scaled = servingG === 100 ? base : scaleNutrition(base, servingG);
+  return {
+    name: product.name ?? '',
+    barcode: product.barcode,
+    nutrition: nutritionToInputs(scaled),
+    servingG: String(servingG),
+    nutritionBase: base,
+    ingredientsText: product.ingredientsText ?? '',
+    tagsJson: serializeTags(product.tags),
+  };
+}
+
+/** Convert a looked-up product into prefill state for a meal-builder component form. */
+export function offProductToComponentFormState(product: OffProduct): Partial<ComponentFormState> {
   const servingG = product.servingG ?? 100;
   const base: NutritionValues = { ...product.nutrition };
   const scaled = servingG === 100 ? base : scaleNutrition(base, servingG);

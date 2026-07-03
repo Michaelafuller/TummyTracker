@@ -4,6 +4,7 @@ import {
   DEFAULT_MIN_MEALS,
   DEFAULT_WINDOW_MS,
   isOutcome,
+  MAX_LOW_CONFIDENCE_FINDINGS,
 } from '../temporal';
 
 let seq = 0;
@@ -31,6 +32,7 @@ function makeEntry(overrides: Partial<LogEntry>): LogEntry {
     servingG: null,
     ingredientsText: null,
     tagsJson: null,
+    componentCount: null,
     createdAt: 0,
     updatedAt: 0,
     ...overrides,
@@ -89,14 +91,108 @@ describe('analyzeTemporalTriggers', () => {
     });
 
     expect(findings).toHaveLength(1);
-    // lactose: hits=3/3=1.0; baseRate=3/6=0.5 → excess
+    // lactose: hits=3/3=1.0; baseRate=3/6=0.5 → excess.
+    // Wilson lower bound for 3/3 ≈ 0.438 (hand-verified), below baseRate 0.5 → not
+    // "high". meals=3 < MEDIUM_CONFIDENCE_MIN_MEALS (5) → not "medium" either → "low".
     expect(findings[0]).toMatchObject({
       tag: 'lactose',
       meals: 3,
       hits: 3,
       hitRate: 1,
       baseRate: 0.5,
+      confidence: 'low',
     });
+  });
+
+  it('labels a finding "high" confidence when the Wilson lower bound clears the base rate', () => {
+    // 9/10 lactose meals hit; 1/10 control meals hit -> baseRate = 10/20 = 0.5.
+    // Meal blocks are spaced 20h apart (windowMs 2h) so windows never cross
+    // between meals of the same tag or between tags.
+    // Wilson lower bound for 9/10 ≈ 0.596 (hand-verified) clears baseRate 0.5 → high.
+    const GAP = 20 * HOUR;
+    const lactoseMeals = Array.from({ length: 10 }, (_, i) =>
+      makeEntry({ type: 'meal', tagsJson: '["lactose"]', loggedAt: T + i * GAP }),
+    );
+    const controlMeals = Array.from({ length: 10 }, (_, i) =>
+      makeEntry({ type: 'meal', tagsJson: '["rice"]', loggedAt: T + 1000 * HOUR + i * GAP }),
+    );
+    const outcomes = [
+      ...Array.from({ length: 9 }, (_, i) => makeEntry({ type: 'symptom', severity: 4, loggedAt: T + i * GAP + HOUR })),
+      makeEntry({ type: 'symptom', severity: 4, loggedAt: T + 1000 * HOUR + HOUR }), // 1 of 10 control hits
+    ];
+
+    const findings = analyzeTemporalTriggers([...lactoseMeals, ...controlMeals, ...outcomes], {
+      windowMs: 2 * HOUR,
+      minMeals: 3,
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      tag: 'lactose',
+      meals: 10,
+      hits: 9,
+      hitRate: 0.9,
+      baseRate: 0.5,
+      confidence: 'high',
+    });
+  });
+
+  it('labels a finding "medium" confidence when the raw rate clears the margin but Wilson does not, with enough meals', () => {
+    // 3/5 lactose meals hit (hitRate 0.6), baseRate 0.4 (4/10 total tagged meals hit).
+    // hitRate(0.6) >= baseRate(0.4) + 0.15 (0.55) and meals=5 >= 5 → medium candidate.
+    // Wilson lower bound for 3/5 ≈ 0.231 (hand-verified), well below baseRate 0.4 → not high.
+    const lactoseMeals = Array.from({ length: 5 }, (_, i) =>
+      makeEntry({ type: 'meal', tagsJson: '["lactose"]', loggedAt: T + i * 10 * HOUR }),
+    );
+    const controlMeals = Array.from({ length: 5 }, (_, i) =>
+      makeEntry({ type: 'meal', tagsJson: '["rice"]', loggedAt: T + i * 10 * HOUR + 5 * HOUR }),
+    );
+    // 3 of 5 lactose meals hit; 1 of 5 rice meals hits -> total 4/10 = 0.4 baseRate.
+    const outcomes = [
+      makeEntry({ type: 'symptom', severity: 4, loggedAt: T + 0 * 10 * HOUR + HOUR }),
+      makeEntry({ type: 'symptom', severity: 4, loggedAt: T + 1 * 10 * HOUR + HOUR }),
+      makeEntry({ type: 'symptom', severity: 4, loggedAt: T + 2 * 10 * HOUR + HOUR }),
+      makeEntry({ type: 'symptom', severity: 4, loggedAt: T + 0 * 10 * HOUR + 6 * HOUR }),
+    ];
+
+    const findings = analyzeTemporalTriggers([...lactoseMeals, ...controlMeals, ...outcomes], {
+      windowMs: 2 * HOUR,
+      minMeals: 3,
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      tag: 'lactose',
+      meals: 5,
+      hits: 3,
+      hitRate: 0.6,
+      baseRate: 0.4,
+      confidence: 'medium',
+    });
+  });
+
+  it('caps low-confidence-only results at MAX_LOW_CONFIDENCE_FINDINGS', () => {
+    // Five independent tags, each with just 3 meals (too few for medium/high),
+    // each showing excess risk over a shared low baseline. All findings are "low".
+    const entries: LogEntry[] = [];
+    const tags = ['a', 'b', 'c', 'd', 'e'];
+    for (const tag of tags) {
+      for (let i = 0; i < 3; i++) {
+        const loggedAt = T + (tags.indexOf(tag) * 3 + i) * 10 * HOUR;
+        entries.push(makeEntry({ type: 'meal', tagsJson: `["${tag}"]`, loggedAt }));
+        entries.push(makeEntry({ type: 'symptom', severity: 4, loggedAt: loggedAt + HOUR }));
+      }
+    }
+    // A control tag with meals that are never followed by an outcome, to keep
+    // baseRate below 1.0 so the tagged meals above show "excess" risk.
+    for (let i = 0; i < 3; i++) {
+      entries.push(makeEntry({ type: 'meal', tagsJson: '["control"]', loggedAt: T + 1000 * HOUR + i * 10 * HOUR }));
+    }
+
+    const findings = analyzeTemporalTriggers(entries, { windowMs: 2 * HOUR, minMeals: 3 });
+
+    expect(findings.length).toBeLessThanOrEqual(MAX_LOW_CONFIDENCE_FINDINGS);
+    expect(findings.every((f) => f.confidence === 'low')).toBe(true);
   });
 
   it('returns nothing when hit rate equals or is below base rate', () => {

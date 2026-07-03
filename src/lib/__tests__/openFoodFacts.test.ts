@@ -1,4 +1,4 @@
-import { mapOffResponse, offProductToFormState } from '../openFoodFacts';
+import { mapOffResponse, offProductToComponentFormState, offProductToFormState } from '../openFoodFacts';
 import found from './fixtures/off-found.json';
 import notfound from './fixtures/off-notfound.json';
 
@@ -114,5 +114,32 @@ describe('offProductToFormState', () => {
     const state = offProductToFormState(mapOffResponse('3017620422003', found));
     expect(state.servingG).toBe('100');
     expect(state.nutrition?.calories).toBe('539'); // unchanged from per-100g
+  });
+});
+
+describe('offProductToComponentFormState', () => {
+  it('produces component prefill with nutrition, barcode, ingredients text, and tags JSON', () => {
+    const state = offProductToComponentFormState(mapOffResponse('3017620422003', found));
+    expect(state.name).toBe('Nutella');
+    expect(state.barcode).toBe('3017620422003');
+    expect(state.nutrition?.calories).toBe('539');
+    expect(state.ingredientsText).toContain('Sugar');
+    const tags = JSON.parse(state.tagsJson as string) as string[];
+    expect(tags).toContain('milk');
+  });
+
+  it('scales nutrition by serving_quantity and exposes the per-100g base', () => {
+    const json = {
+      status: 1,
+      product: {
+        product_name: 'Bar',
+        serving_quantity: 40,
+        nutriments: { 'energy-kcal_100g': 500, 'fat_100g': 20 },
+      },
+    };
+    const state = offProductToComponentFormState(mapOffResponse('1', json));
+    expect(state.nutrition?.calories).toBe('200');
+    expect(state.servingG).toBe('40');
+    expect(state.nutritionBase?.calories).toBe(500);
   });
 });

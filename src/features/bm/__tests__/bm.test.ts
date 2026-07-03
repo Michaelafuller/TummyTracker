@@ -56,7 +56,7 @@ describe('buildBmEntry', () => {
 
   it('reports invalid date and over-long notes', () => {
     expect(buildBmEntry(baseState({ dateInput: '2026-02-30' })).errors.loggedAt).toBeDefined();
-    expect(buildBmEntry(baseState({ notes: 'x'.repeat(201) })).errors.notes).toBeDefined();
+    expect(buildBmEntry(baseState({ notes: 'x'.repeat(501) })).errors.notes).toBeDefined();
   });
 
   it('round-trips through bmEntryToFormState', () => {

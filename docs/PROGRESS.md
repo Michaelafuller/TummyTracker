@@ -26,17 +26,31 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   running on the Pixel 5 via an EAS `preview` APK. (Manual & barcode entry, browse/edit
   with calendar, reminders, BM + symptom logging, ingredient & temporal correlation
   insights, serving-size scaling, backup/restore, 4-tab nav, offline mode.)
-- **Health:** 165 Jest tests + all three rungs + `bundle:check` green; tree clean on `main`.
-- **Test coverage caveat:** Maestro on-device suite is mid-backlog — first full run was
-  5 ✅ / 14 ❌ (mostly flow bugs, not app bugs). See `docs/RESULTS.md` and the active
-  `docs/HANDOFF.md`. Green rungs currently **overstate** real coverage.
+- **Health:** 301 Jest tests + all three rungs + `bundle:check` green at HEAD of the
+  2026-07-02 cycle branch (`claude/determined-bartik-13b8aa`), awaiting merge to `main`.
+- **Test coverage caveat:** Maestro suite at 16/19 verified; 3 flows still await a
+  rebuild + device run (`docs/RESULTS.md` §For next session). The 2026-07-02 cycle
+  edited several flow YAMLs (authored ⏳), reworked the light palette (shared infra),
+  and changed the scan flow — the next device session must be a **full-suite** run on
+  a fresh build. Green rungs currently **overstate** real coverage.
+- **Owner on-device checklist (2026-07-02 cycle):** iOS app icon (needs EAS build),
+  iOS time-picker Done-button feel, light-mode look, migration 0006 against a real
+  database, and the full scan → add-next → finish-meal → review → save loop (camera).
 
 ### Shipped last cycle (overwrite each plan cycle; full history = `git log`)
 
-- UI/UX sprint: accessible teal/mauve palette + `primary` tokens, 4-tab nav, offline
-  mode, collapsible calendar, programmatic icons.
-- Test infrastructure: `TEST_STRATEGY.md` (4-step loop, RESULTS.md, targeting/cadence),
-  7 Maestro backfill flows authored, first full e2e run + `RESULTS.md`.
+2026-07-02 owner-feedback cycle (planned Fable 5, executed Sonnet 5):
+- **Bug/UX batch:** notes limit 500 · 12-hour clock display · iOS time-picker
+  dismissal fix (Done-button inline spinner) + native pickers for reminder times ·
+  searchable recents quick-add · iOS app icon fix (opaque PNG, `.icon` bundle removed) ·
+  light-mode palette rework + `danger`/`link` tokens.
+- **Meal builder:** multi-scan grouped meals — `mealComponent` table (migration 0006),
+  one-serving-per-item aggregation, tag union incl. component names, review screen with
+  single meal-level sentiment, backup v2 round-trip, grouped display in journal/edit.
+- **Insights v2:** `stats.ts` (Wilson, Welch SE, confidence tiers) · baseline-relative
+  ingredient/food findings with deltas + confidence chips · ingredient-pair
+  (combination) analysis · zero-dep charts (trend bars, mini histograms, rate meters) ·
+  stricter nutrient gating · insights tab redesign.
 
 ---
 
@@ -61,14 +75,15 @@ temporal meal→outcome correlation are **✅ shipped**. Remaining:
 
 ## Tier 2 — The payoff (turn data into trust + motivation)
 
+Sentiment trend chart, confidence labeling, and ingredient-pair analysis **✅ shipped**
+(insights v2, 2026-07-02). Remaining:
+
 | Item | Why | Effort | Notes |
 |------|-----|:--:|------|
-| **Trends / charts** (sentiment over time, BM regularity, intake) | Motivation + pattern spotting | M | ⚠ charting lib (`react-native-gifted-charts` or hand-rolled `react-native-svg`) |
-| **Per-food / ingredient drill-down** | Tap a finding → every instance + outcomes | S–M | no dep |
-| **Confidence labeling on insights** | Don't erode trust with noise; gate on sample size, flag low-confidence | S | keeps it simple (see decision #2) |
+| **Per-food / ingredient drill-down** | Tap a finding → every instance + outcomes | S–M | no dep; natural follow-on to insights v2 |
+| **BM-regularity + intake charts** | Complete the trends story beyond sentiment | S–M | reuse the zero-dep chart components |
+| **Meal-component editing after save** | v1 meal builder saves components immutably; edit/remove with re-aggregation is the obvious next ask | S–M | builds on migration 0006 |
 | **Doctor / dietitian PDF report** | Share a date range + insights with a pro | M | ⚠ `expo-print` |
-
-*(Insights-as-a-tab shipped in the UI/UX sprint.)*
 
 ## Tier 3 — Quality of life
 
@@ -79,18 +94,25 @@ currently hardcoded Sunday, default meal slot by time of day).
 
 ## Tier 4 — Platform / infra
 
-iOS pass (BUILD_PLAN "iOS crossover") · **finish the Maestro backlog** (fix the 14
-failing flows, then keep flow-authoring in every cycle) · screen-level RNTL tests ·
-`bundle:check` in a pre-push hook · `FlashList` virtualization once entry volume grows.
+iOS pass (BUILD_PLAN "iOS crossover"; the 2026-07-02 cycle fixes the icon, picker, and
+light-mode blockers) · **finish the Maestro backlog** (16/19 verified; rebuild + run the
+last 3 per RESULTS.md, then a FULL re-run after this cycle's YAML/theme changes) ·
+screen-level RNTL tests · `bundle:check` in a pre-push hook · `FlashList` virtualization
+once entry volume grows.
 
 ---
 
 ## Decisions (resolved with owner)
 
 1. **New dependencies OK** when CVE-inventoried and clearly value-additive.
-2. **Insights stay simple** — counts / averages / thresholds + sample-size gating +
-   confidence labels. Defer chi-square / effect-size until ingredient→sentiment proves
-   out. (False triggers are worse than missed ones here.)
+2. **Insights v2 (revised 2026-07-02, owner-directed — supersedes "stay simple").**
+   Findings must be *baseline-relative* (a tag's avg sentiment vs. the user's other
+   meals, not an absolute ≤2.5 cutoff), carry Wilson/standard-error-based confidence
+   tiers (low/medium/high; sub-medium suppressed where multiple comparisons bite),
+   include ingredient *pair* (combination) analysis, and be delivered visually
+   (zero-dep plain-View charts). The false-triggers-are-worse principle stands —
+   it's now enforced by confidence gating rather than by simplicity. Still no
+   stats/charting dependencies.
 3. **Symptoms = a new loggable type** (mirror the BM migration), dedicated severity, not
    by overloading `sentiment`.
 4. **`isOutcome` definition:** bad BM (Bristol 1, 2, 6, 7) OR symptom (severity ≥ 3) OR

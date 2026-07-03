@@ -17,6 +17,11 @@ export default function RootLayout() {
           <Stack.Screen name="symptom/new" options={{ title: 'Log symptom', presentation: 'modal' }} />
           <Stack.Screen name="entry/[id]" options={{ title: 'Edit entry' }} />
           <Stack.Screen
+            name="meal/component"
+            options={{ title: 'Confirm item', presentation: 'modal' }}
+          />
+          <Stack.Screen name="meal/review" options={{ title: 'Review meal', presentation: 'modal' }} />
+          <Stack.Screen
             name="scan"
             options={{
               title: 'Scan barcode',
