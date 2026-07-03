@@ -89,6 +89,22 @@ export async function getMealComponents(entryId: string): Promise<MealComponent[
     .orderBy(asc(mealComponent.sortOrder));
 }
 
+/** All mealComponent rows — used by the backup export (src/lib/backup.ts). */
+export async function listAllMealComponents(): Promise<MealComponent[]> {
+  return db.select().from(mealComponent).orderBy(asc(mealComponent.sortOrder));
+}
+
+/**
+ * Inserts pre-built mealComponent rows verbatim (ids/entryId/createdAt already
+ * set) — used by backup import, which only calls this for entries it actually
+ * created (skipped/pre-existing entries keep whatever components they already
+ * have, avoiding duplicate inserts on a repeated import).
+ */
+export async function insertMealComponents(rows: MealComponent[]): Promise<void> {
+  if (rows.length === 0) return;
+  await db.insert(mealComponent).values(rows);
+}
+
 export async function getLogEntry(id: string): Promise<LogEntry | undefined> {
   const rows = await db.select().from(logEntry).where(eq(logEntry.id, id)).limit(1);
   return rows[0];

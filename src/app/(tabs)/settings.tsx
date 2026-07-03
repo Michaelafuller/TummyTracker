@@ -9,7 +9,13 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { TimeField } from '@/components/time-field';
 import { BottomTabInset, Spacing } from '@/constants/theme';
-import { createLogEntry, getLogEntry, listLogEntries } from '@/db/repository';
+import {
+  createLogEntry,
+  getLogEntry,
+  insertMealComponents,
+  listAllMealComponents,
+  listLogEntries,
+} from '@/db/repository';
 import {
   DEFAULT_REMINDERS,
   REMINDER_SLOTS,
@@ -71,7 +77,8 @@ export default function SettingsScreen() {
     setDataWorking(true);
     try {
       const entries = await listLogEntries();
-      const json = entriesToJson(entries);
+      const mealComponents = await listAllMealComponents();
+      const json = entriesToJson(entries, mealComponents);
       const file = new File(Paths.cache, 'tummytracker-backup.json');
       file.write(json);
       const canShare = await Sharing.isAvailableAsync();
@@ -106,7 +113,13 @@ export default function SettingsScreen() {
           skipped++;
         } else {
           const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...rest } = entry;
-          await createLogEntry(rest);
+          const created = await createLogEntry(rest);
+          // createLogEntry always mints a fresh id, so re-key this entry's component
+          // rows to it — otherwise a repeated import would collide on component id.
+          const components = parsed.mealComponents
+            .filter((c) => c.entryId === entry.id)
+            .map((c) => ({ ...c, id: `${created.id}:${c.id}`, entryId: created.id }));
+          await insertMealComponents(components);
           imported++;
         }
       }
