@@ -7,9 +7,9 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useOffLookup } from '@/features/barcode/useOffLookup';
-import { usePrefillStore } from '@/features/logging/prefillStore';
+import { useComponentPrefillStore } from '@/features/logging/componentPrefillStore';
 import { useTheme } from '@/hooks/use-theme';
-import { offProductToFormState } from '@/lib/openFoodFacts';
+import { offProductToComponentFormState } from '@/lib/openFoodFacts';
 
 const BARCODE_TYPES = ['ean13', 'ean8', 'upc_a', 'upc_e', 'code128', 'code39'] as const;
 
@@ -21,20 +21,22 @@ export default function ScanScreen() {
   const navigated = useRef(false);
 
   const lookup = useOffLookup(barcode);
-  const setPrefill = usePrefillStore((state) => state.setPrefill);
+  const setPrefill = useComponentPrefillStore((state) => state.setPrefill);
 
-  // Once a scan settles (found, missed, or errored), prefill and head to the form.
+  // Once a scan settles (found, missed, or errored), prefill and head to the
+  // meal-builder component confirm step (HANDOFF Phase 2.3) — a one-component
+  // meal degenerates to the same single-item flow the old direct path gave.
   useEffect(() => {
     if (!barcode || navigated.current || lookup.isLoading) return;
 
     if (lookup.isSuccess && lookup.data.found) {
-      setPrefill(offProductToFormState(lookup.data));
+      setPrefill(offProductToComponentFormState(lookup.data));
     } else {
       // Miss or network error → manual entry with the barcode attached.
       setPrefill({ barcode });
     }
     navigated.current = true;
-    router.replace('/entry/new');
+    router.replace('/meal/component');
   }, [barcode, lookup.isLoading, lookup.isSuccess, lookup.data, setPrefill, router]);
 
   if (!permission) {
@@ -85,7 +87,7 @@ export default function ScanScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Enter product manually"
-            onPress={() => router.replace('/entry/new')}
+            onPress={() => router.replace('/meal/component')}
             style={styles.manualButton}>
             <ThemedText style={styles.manualButtonLabel}>Enter manually</ThemedText>
           </Pressable>
