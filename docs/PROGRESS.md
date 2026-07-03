@@ -87,10 +87,16 @@ Sentiment trend chart, confidence labeling, and ingredient-pair analysis **✅ s
 
 ## Tier 3 — Quality of life
 
-OFF **search-by-name** (produce/restaurant/homemade have no barcode) · photo attachment ⚠ ·
-save-confirmation toasts + haptics · onboarding + better empty states · swipe-to-delete ·
-reminder **deep-link** into the add-entry form · settings (force theme, first-day-of-week —
-currently hardcoded Sunday, default meal slot by time of day).
+**OFF search-by-name — planned, fully specced in `docs/HANDOFF.md` (2026-07-03).**
+Name-lookup on the manual-entry Name field (blur-triggered, inline suggestion
+list, never a blind auto-fill), plus retargeting Home's "+ Add manually" onto
+the meal-builder chain (`meal/component.tsx`) so manually-typed items can join a
+multi-item meal the same way scanned ones already do. `entry/new.tsx` +
+`LogEntryForm` stay live for the Recent-quick-add re-log path and for editing.
+Remaining Tier 3: photo attachment ⚠ · save-confirmation toasts + haptics ·
+onboarding + better empty states · swipe-to-delete · reminder **deep-link** into
+the add-entry form · settings (force theme, first-day-of-week — currently
+hardcoded Sunday, default meal slot by time of day).
 
 ## Tier 4 — Platform / infra
 
