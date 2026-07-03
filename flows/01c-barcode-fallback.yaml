@@ -18,11 +18,12 @@ appId: com.tummytracker.app
 - assertVisible:
     text: "Enter product manually"
 
-# Tap the fallback → should navigate to the new-entry form
+# Tap the fallback → should navigate to the component-confirm screen
+# (scan.tsx routes here, not entry/new, since the meal-builder cycle)
 - tapOn:
     text: "Enter product manually"
 - waitForAnimationToEnd
 - assertVisible:
-    text: "Entry name"
+    text: "Component name"
 
 # SKIP: scanning a real product barcode (camera hardware required)

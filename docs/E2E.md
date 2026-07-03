@@ -55,9 +55,10 @@ maestro test flows/ --format junit --output flows/results.xml
 | ACCEPTANCE.md item | Flow file | Status |
 |---|---|---|
 | Phase 0 — app launches | `flows/00-launch.yaml` | ✅ Automated |
-| 1b — manual entry, notes limit, SQLite persist | `flows/01b-manual-entry.yaml` | ✅ Automated |
+| 1b — manual entry (now via meal-builder), notes limit, SQLite persist | `flows/01b-manual-entry.yaml` | ⏳ Authored (rewritten 2026-07-03 for the two-screen ComponentForm → meal/review flow; pending device run) |
 | 1c — barcode scan (real product) | — | ❌ Camera required |
-| 1c — manual fallback from scan screen | `flows/01c-barcode-fallback.yaml` | ✅ Automated |
+| 1c — manual fallback from scan screen | `flows/01c-barcode-fallback.yaml` | ⏳ Authored (stale "Entry name" assertion fixed → "Component name" 2026-07-03; pending device run) |
+| OFF search-by-name lookup | — | ❌ Manual (network, real product DB — same class as a real barcode scan) |
 | 1d — day/week/month views, edit sentiment | `flows/01d-browse-edit.yaml` | ✅ Automated |
 | 1e — reminder toggle, permission prompt | `flows/01e-reminders.yaml` | ⚠️ Partial (fires at scheduled time: manual) |
 | 2 — log BM, filter, coexists with food | `flows/02-bm-tracking.yaml` | ✅ Automated |
@@ -92,6 +93,24 @@ they pass. See `docs/RESULTS.md` (written by the test-execute session).
 Journal → `"Journal"` and Settings → `"Settings"`). `nav-tabs.yaml` uses `"Your journal so
 far"` instead. The test-execute session should note whether adding a subtitle would be
 worth a component edit in the next planning session.
+
+**Finding — wide blast radius from the 2026-07-03 manual-entry retarget:** Home's
+"Add an entry manually" now opens `/meal/component` instead of `/entry/new`
+(HANDOFF "OFF search-by-name lookup" cycle). Every flow that taps that button
+now lands on `ComponentForm` (fields: "Component name", "Ingredients", "Serving
+size in grams", the nutrition grid, "Add & scan next"/"Finish meal") instead of
+the old single-screen `LogEntryForm` ("Entry name", meal slot, sentiment, notes,
+"Save entry" all on one screen). Only `01b-manual-entry.yaml` and
+`01c-barcode-fallback.yaml` were rewritten this cycle. **Still stale, needing
+the same two-screen rework before the next full run:**
+`flows/ab-satfat-ingredients.yaml`, `flows/f-serving-size.yaml`,
+`flows/g-datetime-picker.yaml`, and the seed helpers
+`flows/_helpers/seed-two-meals.yaml`, `flows/_helpers/seed-meals-for-insights.yaml`,
+`flows/_helpers/seed-ingredient-reactions.yaml` — the last three are `runFlow`
+dependencies of other flows (insights/ingredient-correlation flows), so their
+staleness is transitive. `flows/h-recent-foods.yaml` is unaffected — it re-logs
+via the Home "Recent" tap, which still targets `entry/new`/`LogEntryForm`
+unchanged.
 
 **Manual items that stay on your desk:**
 1. Real barcode scan on a physical product

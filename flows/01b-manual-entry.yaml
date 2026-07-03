@@ -1,6 +1,10 @@
 appId: com.tummytracker.app
-# Phase 1b — Manual entry: full form fill, 500-char notes limit enforced,
-# entry persists across an app restart (SQLite round-trip).
+# Phase 1b — Manual entry, now routed through the meal-builder chain (HANDOFF
+# "OFF search-by-name lookup" cycle, 2026-07-03): Home's "Add an entry
+# manually" opens the component-confirm screen (ComponentForm), then "Finish
+# meal" lands on the meal review screen for the meal-level fields (name, slot,
+# sentiment, notes, 500-char limit). Verifies the full two-screen flow persists
+# across an app restart (SQLite round-trip).
 ---
 - launchApp:
     clearState: true
@@ -8,13 +12,54 @@ appId: com.tummytracker.app
 - tapOn:
     text: "Add an entry manually"
 - assertVisible:
-    text: "Entry name"
+    text: "Component name"
 
-# Core fields (above the fold)
+# Component-confirm screen: name, ingredients, serving size, a couple nutrition fields
 - tapOn:
-    text: "Entry name"
+    text: "Component name"
 - inputText: "Chicken salad"
 - hideKeyboard
+
+- tapOn:
+    text: "Ingredients"
+- inputText: "chicken, lettuce, tomato, olive oil"
+- hideKeyboard
+
+- scrollUntilVisible:
+    element:
+      text: "Serving size in grams"
+    direction: DOWN
+- tapOn:
+    text: "Serving size in grams"
+- inputText: "250"
+
+- scrollUntilVisible:
+    element:
+      text: "Calories"
+    direction: DOWN
+- tapOn:
+    text: "Calories"
+- inputText: "320"
+
+- scrollUntilVisible:
+    element:
+      text: "Protein (g)"
+    direction: DOWN
+- tapOn:
+    text: "Protein (g)"
+- inputText: "28"
+- hideKeyboard
+
+- scrollUntilVisible:
+    element:
+      text: "Finish meal"
+    direction: DOWN
+- tapOn:
+    text: "Finish meal"
+- waitForAnimationToEnd
+
+# Meal review screen: name arrives prefilled from the single component
+- assertVisible: "Chicken salad"
 
 - tapOn:
     text: "Lunch"
@@ -31,49 +76,15 @@ appId: com.tummytracker.app
     text: "Notes"
 - inputText: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 - assertVisible: "500/500"
-
-# Ingredients
-- scrollUntilVisible:
-    element:
-      text: "Ingredients"
-    direction: DOWN
-- tapOn:
-    text: "Ingredients"
-- inputText: "chicken, lettuce, tomato, olive oil"
-
-# Serving size
-- scrollUntilVisible:
-    element:
-      text: "Serving size in grams"
-    direction: DOWN
-- tapOn:
-    text: "Serving size in grams"
-- inputText: "250"
-
-# Nutrition fields
-- scrollUntilVisible:
-    element:
-      text: "Calories"
-    direction: DOWN
-- tapOn:
-    text: "Calories"
-- inputText: "320"
-
-- scrollUntilVisible:
-    element:
-      text: "Protein (g)"
-    direction: DOWN
-- tapOn:
-    text: "Protein (g)"
-- inputText: "28"
+- hideKeyboard
 
 # Save
 - scrollUntilVisible:
     element:
-      text: "Save entry"
+      text: "Save meal"
     direction: DOWN
 - tapOn:
-    text: "Save entry"
+    text: "Save meal"
 - waitForAnimationToEnd
 - waitForAnimationToEnd
 - tapOn:

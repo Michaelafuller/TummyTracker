@@ -61,14 +61,19 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
 - [ ] A placeholder home screen renders. · auto `flows/00-launch.yaml`
 
 ## Phase 1b — Manual entry
-- [x] Add a meal manually: name, slot, time, a couple nutrition fields, notes, sentiment. · auto `flows/01b-manual-entry.yaml`
-- [x] The 500-char notes counter blocks overflow. · auto `flows/01b-manual-entry.yaml`
-- [x] Entry persists across an app restart (SQLite). · auto `flows/01b-manual-entry.yaml`
+- [ ] Add a meal manually (now a two-screen flow: component confirm → meal review):
+      name, ingredients, nutrition, then slot, time, notes, sentiment. · auto
+      `flows/01b-manual-entry.yaml` (rewritten 2026-07-03 for the meal-builder
+      chain; pending device run — see docs/E2E.md)
+- [ ] The 500-char notes counter blocks overflow. · auto `flows/01b-manual-entry.yaml`
+- [ ] Entry persists across an app restart (SQLite). · auto `flows/01b-manual-entry.yaml`
 
 ## Phase 1c — Barcode
 - [ ] Scan a real product barcode; nutrition pre-fills from Open Food Facts. · manual (camera)
-- [x] Scan an unknown/again-no-network barcode; it drops into the manual form with
-      the barcode attached. · auto `flows/01c-barcode-fallback.yaml` (manual-fallback path only)
+- [ ] Scan an unknown/again-no-network barcode; it drops into the component-confirm
+      form with the barcode attached. · auto `flows/01c-barcode-fallback.yaml`
+      (manual-fallback path only; assertion retargeted 2026-07-03 to
+      "Component name" — pending device run)
 
 ## Phase 1d — Browse & edit
 - [x] Entries are grouped by day. · auto `flows/01d-browse-edit.yaml`
@@ -195,3 +200,15 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
 - [ ] Open the saved JSON in a text editor — it contains all log entries with correct structure. · manual
 - [ ] Clear app data (or install fresh). Tap Import → choose the JSON file → a summary dialog shows the import count. · manual
 - [ ] After import, all entries appear in the journal exactly as before. · manual
+
+## Post-MVP · OFF search-by-name  *(2026-07-03)*
+
+- [ ] Typing a food name into the manual-entry Name field and tabbing away shows a
+      spinner, then up to 5 candidate rows (name · brand · kcal). · manual (network, real product DB)
+- [ ] Tapping a candidate fills the nutrition grid, servings, and ingredients. · manual (network)
+- [ ] A name with no OFF matches shows a short-lived notice and leaves the form
+      editable. · manual (network)
+- [ ] A component that already has a barcode (scanned) never triggers a name search. · manual (network — same screen, harder to force deterministically without a device)
+- [ ] Home's "+ Add manually" now opens the component-confirm screen and chains
+      into "Finish meal" the same as scanning. · auto `flows/01b-manual-entry.yaml`
+      (rewritten 2026-07-03, pending device run)
