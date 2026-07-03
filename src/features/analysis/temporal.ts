@@ -8,9 +8,16 @@ import { isBristolValue } from '@/features/bm/bristol';
 import { isSentimentValue } from '@/features/sentiment/scale';
 import { isSeverityValue } from '@/features/symptoms/severity';
 import { parseTagsJson } from '@/lib/ingredients';
+import { wilsonLowerBound, type ConfidenceTier } from '@/lib/stats';
 
 export const DEFAULT_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
 export const DEFAULT_MIN_MEALS = 3;
+/** Meals needed before a raw-hit-rate finding can qualify as medium confidence. */
+export const MEDIUM_CONFIDENCE_MIN_MEALS = 5;
+/** Raw hit-rate margin over baseRate needed for medium confidence (when Wilson doesn't clear baseRate). */
+export const MEDIUM_HIT_RATE_MARGIN = 0.15;
+/** At most this many low-confidence findings are shown, and only when nothing better exists. */
+export const MAX_LOW_CONFIDENCE_FINDINGS = 3;
 
 const FOOD_TYPES_SET = new Set(FOOD_TYPES as readonly string[]);
 const BAD_BRISTOL_TYPES = new Set([1, 2, 6, 7]);
@@ -43,6 +50,7 @@ export interface TemporalFinding {
   hitRate: number;
   /** Fraction of all tagged meals that are followed by any outcome — the baseline. */
   baseRate: number;
+  confidence: ConfidenceTier;
 }
 
 export interface TemporalOptions {
@@ -53,7 +61,17 @@ export interface TemporalOptions {
 /**
  * For each ingredient tag, measure how often a meal containing it is followed
  * by a bad outcome within `windowMs`. Reports tags whose hit rate exceeds the
- * overall base rate, gated on a minimum number of meals with that tag.
+ * overall base rate, gated on a minimum number of meals with that tag, and
+ * labels each finding's confidence via a Wilson score interval:
+ *  - `high`  — the Wilson lower bound on the tag's hit rate clears baseRate
+ *              (the excess risk is unlikely to be noise even at the pessimistic end).
+ *  - `medium` — the raw hit rate clears baseRate by MEDIUM_HIT_RATE_MARGIN with
+ *              at least MEDIUM_CONFIDENCE_MIN_MEALS meals, but the Wilson bound
+ *              doesn't clear baseRate outright.
+ *  - `low`   — excess risk exists but neither bar above is cleared.
+ *
+ * All medium+high findings are surfaced; low-confidence findings are included
+ * only when nothing better exists, capped at MAX_LOW_CONFIDENCE_FINDINGS.
  *
  * Findings are sorted by (hitRate − baseRate) descending — highest excess risk first.
  */
@@ -97,20 +115,44 @@ export function analyzeTemporalTriggers(
     }
   }
 
-  const findings: TemporalFinding[] = [];
+  const highOrMedium: TemporalFinding[] = [];
+  const low: TemporalFinding[] = [];
   for (const [tag, group] of byTag.entries()) {
     if (group.meals.length < minMeals) continue;
     const hits = group.meals.filter((m) => mealOutcomeMap.get(m.id)).length;
     const hitRate = hits / group.meals.length;
     if (hitRate <= baseRate) continue; // no excess risk
-    findings.push({
+
+    const lowerBound = wilsonLowerBound(hits, group.meals.length);
+    let confidence: ConfidenceTier;
+    if (lowerBound > baseRate) {
+      confidence = 'high';
+    } else if (hitRate >= baseRate + MEDIUM_HIT_RATE_MARGIN && group.meals.length >= MEDIUM_CONFIDENCE_MIN_MEALS) {
+      confidence = 'medium';
+    } else {
+      confidence = 'low';
+    }
+
+    const finding: TemporalFinding = {
       tag,
       meals: group.meals.length,
       hits,
       hitRate: Math.round(hitRate * 100) / 100,
       baseRate: Math.round(baseRate * 100) / 100,
-    });
+      confidence,
+    };
+    if (confidence === 'low') {
+      low.push(finding);
+    } else {
+      highOrMedium.push(finding);
+    }
   }
 
-  return findings.sort((a, b) => b.hitRate - b.baseRate - (a.hitRate - a.baseRate));
+  const byExcessDesc = (a: TemporalFinding, b: TemporalFinding) =>
+    b.hitRate - b.baseRate - (a.hitRate - a.baseRate);
+
+  highOrMedium.sort(byExcessDesc);
+  if (highOrMedium.length > 0) return highOrMedium;
+
+  return low.sort(byExcessDesc).slice(0, MAX_LOW_CONFIDENCE_FINDINGS);
 }
