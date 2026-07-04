@@ -97,8 +97,8 @@ pool and client-side re-rank toward unbranded/name-close/produce-tagged
 results — no new dependency, no UI change. Confirmed against live OFF data
 this recovers cases where OFF has a buried generic entry (e.g. "banana"), but
 can't manufacture one where OFF has none at all (e.g. "apple" today has no
-unbranded entry in its top results) — see HANDOFF for the honest limit and the
-USDA FoodData Central alternative, which needs owner sign-off before scoping in.
+unbranded entry in its top results). USDA FoodData Central migration/hybrid
+evaluated and deferred — see Decision 6 below.
 Remaining Tier 3: photo attachment ⚠ · save-confirmation toasts + haptics ·
 onboarding + better empty states · swipe-to-delete · reminder **deep-link** into
 the add-entry form · settings (force theme, first-day-of-week — currently
@@ -132,6 +132,19 @@ once entry volume grows.
    self-rating proves too circular.
 5. **`isFood` uses a positive allowlist** (`FOOD_TYPES = ['meal','snack']`), required once
    'symptom' became a third type.
+6. **USDA FoodData Central migration/hybrid — evaluated 2026-07-03, deferred.** OFF's
+   generic-search gap (no unbranded "apple"/"orange"-class entries at all, vs. "banana"
+   which the ranking fix already recovers) is real but narrow. No free API covers both
+   OFF's barcode-scan breadth and USDA's clean generic-food entries at once: FDC has no
+   dedicated barcode endpoint (search+match on `gtinUpc` instead of exact lookup, weaker
+   non-US coverage) and no structured allergen/additive taxonomy (would degrade the
+   ingredient-correlation differentiator, falling back to text parsing). A full swap
+   risks two working features (scan hit-rate, allergen tags) to fix a narrow, already-
+   mitigated path; a hybrid (OFF for scan, USDA as name-search fallback) would close the
+   gap but adds a second network dependency + API key, against a stated single-source
+   preference. **Decision: stay OFF-only for now**, reassess only if the apple/orange-
+   class gap keeps coming up in real use after the ranking fix. Don't re-open without new
+   signal — see this item before re-scoping.
 
 ## Definition of done (see CLAUDE.md §4)
 
