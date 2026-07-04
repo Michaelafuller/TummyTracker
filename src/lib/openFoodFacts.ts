@@ -31,6 +31,8 @@ export interface OffProduct {
   servingG: number | null;
   ingredientsText: string | null;
   tags: string[];
+  /** OFF categories_tags (e.g. ["en:fruits", "en:bananas"]), or [] when absent. */
+  categoriesTags: string[];
 }
 
 /** Coerce an unknown value to a finite, non-negative number, or null. */
@@ -94,6 +96,11 @@ function mapOffProductJson(barcode: string | null, product: Record<string, unkno
     additivesTags: product.additives_tags,
   });
 
+  const categoriesTagsRaw = product.categories_tags;
+  const categoriesTags = Array.isArray(categoriesTagsRaw)
+    ? categoriesTagsRaw.filter((t): t is string => typeof t === 'string')
+    : [];
+
   let sodiumMg = num(nutriments['sodium_100g']);
   if (sodiumMg != null) {
     sodiumMg = sodiumMg * 1000; // grams → mg
@@ -115,7 +122,17 @@ function mapOffProductJson(barcode: string | null, product: Record<string, unkno
 
   const servingG = num(product.serving_quantity);
 
-  return { barcode: resolvedBarcode, brand, found: true, name, nutrition, servingG, ingredientsText, tags };
+  return {
+    barcode: resolvedBarcode,
+    brand,
+    found: true,
+    name,
+    nutrition,
+    servingG,
+    ingredientsText,
+    tags,
+    categoriesTags,
+  };
 }
 
 /**
@@ -136,24 +153,97 @@ export function mapOffResponse(barcode: string, json: unknown): OffProduct {
       servingG: null,
       ingredientsText: null,
       tags: [],
+      categoriesTags: [],
     };
   }
 
   return mapOffProductJson(barcode, asRecord(root.product));
 }
 
+/** Category tags (OFF `categories_tags`) that suggest a raw/unbranded food —
+ *  e.g. "banana", produce, whole foods — where a generic entry is preferable
+ *  to a specific branded product. */
+const PRODUCE_CATEGORY_HINTS = [
+  'en:fruits',
+  'en:vegetables',
+  'en:fresh-foods',
+  'en:raw',
+  'en:unprocessed-foods',
+  'en:unsweetened-natural-fruits',
+];
+
+/** Category tags that suggest a processed/packaged product — a weak signal
+ *  against genericity when weighed against a missing brand. */
+const PROCESSED_CATEGORY_HINTS = [
+  'en:meals',
+  'en:snacks',
+  'en:beverages',
+  'en:confectioneries',
+  'en:biscuits-and-cakes',
+  'en:frozen-foods',
+  'en:canned-foods',
+];
+
+/**
+ * Score a candidate product by how "generic" (unbranded/whole-food) it looks,
+ * higher = more generic. Used to re-rank OFF search results so a plain
+ * "banana" or "chicken breast" surfaces above heavily-branded packaged
+ * variants when the user typed a bare, generic query. This only re-ranks
+ * candidates OFF already returned — it cannot invent a generic entry when OFF
+ * has none.
+ *
+ * Heuristic (all additive, no single factor dominates):
+ *  - No brand at all: strong genericity signal.
+ *  - Product name matches the query closely (short, close to the query length):
+ *    generic entries tend to be named exactly what they are ("Banana"),
+ *    while branded entries pad the name with brand/flavor/variant text.
+ *  - Category tags hinting at produce/whole foods: generic signal.
+ *  - Category tags hinting at processed/packaged goods: anti-generic signal.
+ */
+function genericityScore(product: OffProduct, query: string): number {
+  let score = 0;
+
+  if (product.brand == null) {
+    score += 3;
+  }
+
+  const normalizedQuery = query.trim().toLowerCase();
+  const normalizedName = product.name?.trim().toLowerCase() ?? '';
+  if (normalizedQuery.length > 0 && normalizedName === normalizedQuery) {
+    score += 2;
+  } else if (normalizedQuery.length > 0 && normalizedName.length <= normalizedQuery.length + 8) {
+    // Close in length to the bare query — likely not padded with brand/variant text.
+    score += 1;
+  }
+
+  if (product.categoriesTags.some((t) => PRODUCE_CATEGORY_HINTS.includes(t))) {
+    score += 2;
+  }
+  if (product.categoriesTags.some((t) => PROCESSED_CATEGORY_HINTS.includes(t))) {
+    score -= 1;
+  }
+
+  return score;
+}
+
 /**
  * Map a raw OFF `/cgi/search.pl` (Generic_Search) response into candidate
- * products, most-scanned first (the request sorts by unique_scans_n). Entries
- * with no product name are dropped — OFF search returns plenty of incomplete
- * community entries — and the result is capped at 5.
+ * products. Entries with no product name are dropped — OFF search returns
+ * plenty of incomplete community entries. Remaining candidates are re-ranked
+ * by `genericityScore` (stable sort, so OFF's own most-scanned ordering is
+ * the tiebreak) before being capped at 5 — this favors generic/unbranded
+ * matches (e.g. a plain "Banana") over specific branded products when the
+ * user typed a bare, generic query.
  */
-export function mapOffSearchResponse(json: unknown): OffProduct[] {
+export function mapOffSearchResponse(json: unknown, query: string): OffProduct[] {
   const root = asRecord(json);
   const products = Array.isArray(root.products) ? root.products : [];
   return products
     .map((p) => mapOffProductJson(null, asRecord(p)))
     .filter((p) => p.name != null)
+    .map((p, index) => ({ p, index, score: genericityScore(p, query) }))
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .map(({ p }) => p)
     .slice(0, 5);
 }
 

@@ -7,6 +7,7 @@
     "ingredients_text": "Sugar, Palm oil, Hazelnuts 13%, Skimmed milk powder 8.7%, Fat-reduced cocoa 7.4%",
     "allergens_tags": ["en:milk", "en:nuts"],
     "additives_tags": ["en:e322", "en:e476"],
+    "categories_tags": ["en:spreads", "en:hazelnut-spreads"],
     "nutriments": {
       "energy-kcal_100g": 539,
       "fat_100g": 30.9,

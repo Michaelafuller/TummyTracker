@@ -17,6 +17,7 @@ describe('mapOffResponse', () => {
     expect(product.tags).toContain('nuts');
     expect(product.tags).toContain('e322');
     expect(product.tags).toContain('sugar');
+    expect(product.categoriesTags).toEqual(['en:spreads', 'en:hazelnut-spreads']);
     expect(product.nutrition).toEqual({
       calories: 539,
       fatG: 30.9,
@@ -35,6 +36,7 @@ describe('mapOffResponse', () => {
     expect(product.name).toBeNull();
     expect(product.ingredientsText).toBeNull();
     expect(product.tags).toEqual([]);
+    expect(product.categoriesTags).toEqual([]);
     expect(Object.values(product.nutrition).every((v) => v === null)).toBe(true);
   });
 
@@ -75,7 +77,10 @@ describe('mapOffResponse', () => {
 });
 
 describe('mapOffSearchResponse', () => {
-  it('maps each product node and caps at 5, most-scanned order preserved', () => {
+  it('maps each product node and caps at 5, most-scanned order preserved when scores tie', () => {
+    // All 7 fixtures are unbranded, uncategorized, and the same name length relative
+    // to the query, so genericityScore ties across the board — the stable sort falls
+    // back to OFF's own most-scanned order (the array's original order).
     const json = {
       products: Array.from({ length: 7 }, (_, i) => ({
         code: `${i}`,
@@ -83,7 +88,7 @@ describe('mapOffSearchResponse', () => {
         nutriments: { 'energy-kcal_100g': 100 + i },
       })),
     };
-    const results = mapOffSearchResponse(json);
+    const results = mapOffSearchResponse(json, 'product');
     expect(results).toHaveLength(5);
     expect(results[0].name).toBe('Product 0');
     expect(results[0].barcode).toBe('0');
@@ -97,7 +102,7 @@ describe('mapOffSearchResponse', () => {
         { code: '3', product_name: '', nutriments: {} },
       ],
     };
-    const results = mapOffSearchResponse(json);
+    const results = mapOffSearchResponse(json, 'has a name');
     expect(results).toHaveLength(1);
     expect(results[0].name).toBe('Has a name');
   });
@@ -106,18 +111,69 @@ describe('mapOffSearchResponse', () => {
     const json = {
       products: [{ code: '1', product_name: 'Chips', brands: 'Chiquita, Something Else', nutriments: {} }],
     };
-    expect(mapOffSearchResponse(json)[0].brand).toBe('Chiquita');
+    expect(mapOffSearchResponse(json, 'chips')[0].brand).toBe('Chiquita');
   });
 
   it('reports barcode null when the product node has no code', () => {
     const json = { products: [{ product_name: 'Homemade-ish', nutriments: {} }] };
-    expect(mapOffSearchResponse(json)[0].barcode).toBeNull();
+    expect(mapOffSearchResponse(json, 'homemade-ish')[0].barcode).toBeNull();
   });
 
   it('is defensive against a missing/garbage products array', () => {
-    expect(mapOffSearchResponse(null)).toEqual([]);
-    expect(mapOffSearchResponse({})).toEqual([]);
-    expect(mapOffSearchResponse({ products: 'not-an-array' })).toEqual([]);
+    expect(mapOffSearchResponse(null, 'x')).toEqual([]);
+    expect(mapOffSearchResponse({}, 'x')).toEqual([]);
+    expect(mapOffSearchResponse({ products: 'not-an-array' }, 'x')).toEqual([]);
+  });
+
+  it('extracts categoriesTags defensively', () => {
+    const withTags = {
+      products: [{ code: '1', product_name: 'Banana', categories_tags: ['en:fruits', 'en:bananas'] }],
+    };
+    expect(mapOffSearchResponse(withTags, 'banana')[0].categoriesTags).toEqual(['en:fruits', 'en:bananas']);
+
+    const garbageTags = {
+      products: [{ code: '2', product_name: 'Weird', categories_tags: 'not-an-array' }],
+    };
+    expect(mapOffSearchResponse(garbageTags, 'weird')[0].categoriesTags).toEqual([]);
+
+    const mixedTags = {
+      products: [{ code: '3', product_name: 'Mixed', categories_tags: ['en:fruits', 42, null] }],
+    };
+    expect(mapOffSearchResponse(mixedTags, 'mixed')[0].categoriesTags).toEqual(['en:fruits']);
+
+    const noTags = {
+      products: [{ code: '4', product_name: 'No Tags' }],
+    };
+    expect(mapOffSearchResponse(noTags, 'no tags')[0].categoriesTags).toEqual([]);
+  });
+
+  it('ranks an unbranded generic match above a branded product for the same query', () => {
+    const json = {
+      products: [
+        // Branded, listed first (higher unique_scans_n) — should be outranked.
+        { code: '1', product_name: 'Chiquita Banana Chips', brands: 'Chiquita', nutriments: {} },
+        // Unbranded, generic, listed second — should rank first after re-ranking.
+        { code: '2', product_name: 'Banana', nutriments: {}, categories_tags: ['en:fruits'] },
+      ],
+    };
+    const results = mapOffSearchResponse(json, 'banana');
+    expect(results[0].name).toBe('Banana');
+    expect(results[0].brand).toBeNull();
+    expect(results[1].name).toBe('Chiquita Banana Chips');
+  });
+
+  it('breaks ties toward produce-category hints over processed-category hints', () => {
+    const json = {
+      products: [
+        // Both unbranded, both name-length-neutral relative to the query — the
+        // category hint is the only differentiator.
+        { code: '1', product_name: 'Snack Mix', nutriments: {}, categories_tags: ['en:snacks'] },
+        { code: '2', product_name: 'Fresh Mix', nutriments: {}, categories_tags: ['en:vegetables'] },
+      ],
+    };
+    const results = mapOffSearchResponse(json, 'mix');
+    expect(results[0].name).toBe('Fresh Mix');
+    expect(results[1].name).toBe('Snack Mix');
   });
 });
 

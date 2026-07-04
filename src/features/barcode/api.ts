@@ -29,9 +29,10 @@ export async function fetchOffSearchResults(query: string, signal?: AbortSignal)
     search_simple: '1',
     action: 'process',
     json: '1',
-    page_size: '5',
+    page_size: '24',
     sort_by: 'unique_scans_n', // most-scanned (most reliable) products first
-    fields: 'code,product_name,brands,nutriments,serving_quantity,ingredients_text,allergens_tags,additives_tags',
+    fields:
+      'code,product_name,brands,nutriments,serving_quantity,ingredients_text,allergens_tags,additives_tags,categories_tags',
   });
   const response = await fetch(`${SEARCH_URL}?${params.toString()}`, {
     signal,
@@ -45,5 +46,5 @@ export async function fetchOffSearchResults(query: string, signal?: AbortSignal)
   }
 
   const json: unknown = await response.json();
-  return mapOffSearchResponse(json);
+  return mapOffSearchResponse(json, query);
 }
