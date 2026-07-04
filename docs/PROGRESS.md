@@ -87,12 +87,18 @@ Sentiment trend chart, confidence labeling, and ingredient-pair analysis **✅ s
 
 ## Tier 3 — Quality of life
 
-**OFF search-by-name — planned, fully specced in `docs/HANDOFF.md` (2026-07-03).**
-Name-lookup on the manual-entry Name field (blur-triggered, inline suggestion
-list, never a blind auto-fill), plus retargeting Home's "+ Add manually" onto
-the meal-builder chain (`meal/component.tsx`) so manually-typed items can join a
-multi-item meal the same way scanned ones already do. `entry/new.tsx` +
-`LogEntryForm` stay live for the Recent-quick-add re-log path and for editing.
+**OFF search-by-name — ✅ shipped (2026-07-03).** Name-lookup on the
+manual-entry Name field, plus Home's "+ Add manually" retargeted onto the
+meal-builder chain. **Ranking fine-tune — planned, fully specced in
+`docs/HANDOFF.md` (2026-07-03 owner-feedback cycle).** Owner feedback: a
+generic query like "banana" surfaces branded/processed matches (banana chips,
+banana-flavored cookies) ahead of a plain banana. Fix: widen the OFF candidate
+pool and client-side re-rank toward unbranded/name-close/produce-tagged
+results — no new dependency, no UI change. Confirmed against live OFF data
+this recovers cases where OFF has a buried generic entry (e.g. "banana"), but
+can't manufacture one where OFF has none at all (e.g. "apple" today has no
+unbranded entry in its top results) — see HANDOFF for the honest limit and the
+USDA FoodData Central alternative, which needs owner sign-off before scoping in.
 Remaining Tier 3: photo attachment ⚠ · save-confirmation toasts + haptics ·
 onboarding + better empty states · swipe-to-delete · reminder **deep-link** into
 the add-entry form · settings (force theme, first-day-of-week — currently
