@@ -5,8 +5,11 @@
 // to both analyzers under BOTH of its component tags, not just one.
 
 import type { LogEntry } from '@/db/schema';
+import { defaultComponentFormState, buildComponentDraft } from '@/features/logging/componentFormModel';
+import { buildMealEntry, type MealReviewFormState } from '@/features/logging/mealReviewFormModel';
+import { mapOffResponse, offProductToComponentFormState } from '@/lib/openFoodFacts';
+import { parseTagsJson, serializeTags } from '@/lib/ingredients';
 import { unionComponentTags, type MealComponentDraft } from '@/lib/mealAggregate';
-import { serializeTags } from '@/lib/ingredients';
 import { analyzeIngredientSentiment, MIN_TAG_OCCURRENCES } from '../insights';
 import { analyzeTemporalTriggers, DEFAULT_MIN_MEALS } from '../temporal';
 
@@ -125,5 +128,108 @@ describe('grouped-meal analysis compatibility (Phase 2.6)', () => {
     const tags = findings.map((f) => f.tag);
     expect(tags).toContain('milk');
     expect(tags).toContain('onion');
+  });
+});
+
+/**
+ * HANDOFF.md Phase 4: end-to-end tripwire over the *real* pipeline (no
+ * hand-rolled tagsJson) proving the audit verdict — collating scanned
+ * components into one meal never smooths out a component's tags, including
+ * the parenthetical sub-ingredients Phase 1 stopped dropping.
+ */
+describe('meal-collation tag-granularity invariant (Phase 4)', () => {
+  function offJson(product: Record<string, unknown>): unknown {
+    return { status: 1, product };
+  }
+
+  // Four realistic OFF-style products (the owner's own tofu/eggs/cheese/beans
+  // example), each with allergens_tags + additives_tags + multi-token
+  // ingredients_text that includes a parenthetical sub-ingredient breakdown.
+  const OFF_PRODUCTS = [
+    offJson({
+      product_name: 'Tofu',
+      ingredients_text: 'Tofu (water, soybeans, calcium sulfate), seasoning (onion powder, garlic)',
+      allergens_tags: ['en:soybeans'],
+      additives_tags: ['en:e330'],
+    }),
+    offJson({
+      product_name: 'Eggs',
+      ingredients_text: 'Eggs (chicken egg, water)',
+      allergens_tags: ['en:eggs'],
+      additives_tags: [],
+    }),
+    offJson({
+      product_name: 'Cheese',
+      ingredients_text: 'Cheese (milk 13%, salt, rennet)',
+      allergens_tags: ['en:milk'],
+      additives_tags: ['en:e202'],
+    }),
+    offJson({
+      product_name: 'Beans',
+      ingredients_text: 'Beans (kidney beans, water, may contain traces of nuts)',
+      allergens_tags: [],
+      additives_tags: [],
+    }),
+  ];
+
+  it('collating components into a meal never drops a component tag', () => {
+    // Run every product through the real pipeline: OFF response -> OffProduct
+    // -> component form prefill -> validated MealComponentDraft.
+    const products = OFF_PRODUCTS.map((json, i) => mapOffResponse(String(i), json));
+    const drafts: MealComponentDraft[] = products.map((product, i) => {
+      const prefill = offProductToComponentFormState(product);
+      const result = buildComponentDraft(defaultComponentFormState(prefill), i);
+      if (!result.valid || !result.draft) {
+        throw new Error(`expected a valid draft for product ${i}`);
+      }
+      return result.draft;
+    });
+
+    const mealState: MealReviewFormState = {
+      type: 'meal',
+      name: 'Tofu scramble bowl',
+      mealSlot: 'dinner',
+      dateInput: '2026-07-19',
+      timeInput: '18:00',
+      sentiment: null,
+      notes: '',
+    };
+    const result = buildMealEntry(mealState, drafts);
+    if (!result.valid || !result.entry) {
+      throw new Error('expected a valid meal entry');
+    }
+    const entry = result.entry;
+    const parentTags = parseTagsJson(entry.tagsJson);
+
+    // 1. Every tag derivable from every component — including parenthetical
+    // sub-ingredients and every allergen/additive — survives into the
+    // parent's tagsJson. Nothing is smoothed out by collation.
+    for (const product of products) {
+      for (const tag of product.tags) {
+        expect(parentTags).toContain(tag);
+      }
+    }
+    // Spot-check the sub-ingredient signal explicitly (the Phase 1 fix).
+    expect(parentTags).toEqual(
+      expect.arrayContaining([
+        'soybeans', 'calcium sulfate', 'onion powder', 'garlic', // Tofu
+        'chicken egg', // Eggs
+        'milk', 'rennet', // Cheese
+        'kidney beans', 'nuts', // Beans
+      ]),
+    );
+    // The stopword phrase around Beans' allergen note never survives whole.
+    expect(parentTags).not.toContain('may');
+    expect(parentTags).not.toContain('contain');
+    expect(parentTags).not.toContain('traces');
+
+    // 2. Each component draft retains its own full ingredientsText.
+    drafts.forEach((draft, i) => {
+      expect(draft.ingredientsText).toBe(products[i].ingredientsText);
+    });
+
+    // 3. The parent ingredientsText stays the condensed names-join for the
+    // multi-component case — the owner-approved display contract.
+    expect(entry.ingredientsText).toBe('Tofu, Eggs, Cheese, Beans');
   });
 });
