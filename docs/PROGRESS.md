@@ -22,35 +22,30 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
 
 ## Status
 
-- **MVP (Phases 0–3) + Flagship trio + Tier-0 + UI/UX sprint — all shipped to `main`,**
-  running on the Pixel 5 via an EAS `preview` APK. (Manual & barcode entry, browse/edit
-  with calendar, reminders, BM + symptom logging, ingredient & temporal correlation
-  insights, serving-size scaling, backup/restore, 4-tab nav, offline mode.)
-- **Health:** 301 Jest tests + all three rungs + `bundle:check` green at HEAD of the
-  2026-07-02 cycle branch (`claude/determined-bartik-13b8aa`), awaiting merge to `main`.
-- **Test coverage caveat:** Maestro suite at 16/19 verified; 3 flows still await a
-  rebuild + device run (`docs/RESULTS.md` §For next session). The 2026-07-02 cycle
-  edited several flow YAMLs (authored ⏳), reworked the light palette (shared infra),
-  and changed the scan flow — the next device session must be a **full-suite** run on
-  a fresh build. Green rungs currently **overstate** real coverage.
-- **Owner on-device checklist (2026-07-02 cycle):** iOS app icon (needs EAS build),
-  iOS time-picker Done-button feel, light-mode look, migration 0006 against a real
+- **Everything through the 2026-07-03 cycle is on `main`** and running on the Pixel 5.
+  (Manual & barcode entry, meal builder, browse/edit with calendar, reminders, BM +
+  symptom logging, insights v2, serving-size scaling, backup/restore, 4-tab nav,
+  offline mode, OFF search-by-name + unbranded re-ranking.)
+- **Health:** all three rungs + `bundle:check` green at `main` HEAD. Maestro full
+  regression 2026-07-03: **18/19** (best-ever clean run); the one red
+  (`e-temporal-insights`) is a classified flow-bug with the fix applied — re-run
+  pending, not an app defect (`docs/RESULTS.md`).
+- **In flight (2026-07-19 plan cycle):** ingredient-capture hardening — audit found
+  meal collation preserves full tag granularity (union of per-component OFF tags);
+  fixing the three real gaps found (parenthetical sub-ingredients dropped by
+  `extractTags`, single-component meals losing full ingredient text on the parent
+  row, edited ingredient text never merged into tags). Specced in `docs/HANDOFF.md`.
+- **Owner on-device checklist (carried):** iOS app icon (needs EAS build), iOS
+  time-picker Done-button feel, light-mode look, migration 0006 against a real
   database, and the full scan → add-next → finish-meal → review → save loop (camera).
 
 ### Shipped last cycle (overwrite each plan cycle; full history = `git log`)
 
-2026-07-02 owner-feedback cycle (planned Fable 5, executed Sonnet 5):
-- **Bug/UX batch:** notes limit 500 · 12-hour clock display · iOS time-picker
-  dismissal fix (Done-button inline spinner) + native pickers for reminder times ·
-  searchable recents quick-add · iOS app icon fix (opaque PNG, `.icon` bundle removed) ·
-  light-mode palette rework + `danger`/`link` tokens.
-- **Meal builder:** multi-scan grouped meals — `mealComponent` table (migration 0006),
-  one-serving-per-item aggregation, tag union incl. component names, review screen with
-  single meal-level sentiment, backup v2 round-trip, grouped display in journal/edit.
-- **Insights v2:** `stats.ts` (Wilson, Welch SE, confidence tiers) · baseline-relative
-  ingredient/food findings with deltas + confidence chips · ingredient-pair
-  (combination) analysis · zero-dep charts (trend bars, mini histograms, rate meters) ·
-  stricter nutrient gating · insights tab redesign.
+2026-07-03 cycle (planned Fable 5, executed Sonnet 5):
+- **OFF search re-ranking:** wider candidate pool (24) + client-side genericity
+  scoring (name-closeness, unbranded, produce-vs-processed category hints) so plain
+  foods outrank branded lookalikes; USDA FDC migration evaluated & deferred
+  (Decision 6). New app icon. Full Maestro regression run (18/19, see Health).
 
 ---
 
@@ -71,7 +66,9 @@ temporal meal→outcome correlation are **✅ shipped**. Remaining:
 
 | Item | Why it matters | Effort | Notes |
 |------|----------------|:--:|------|
+| **Ingredient-capture hardening** | Sub-ingredients in parentheses are currently dropped at extraction — the exact "brand X's soybean isolate" signal the analysis exists for | S | **in flight** — `docs/HANDOFF.md` 2026-07-19 |
 | **Trigger watchlist / elimination mode** | Mark suspected ingredients, flag entries containing them, track reactions — how food journals are *actually* used therapeutically | M | builds on ingredient capture |
+| **Historical tag re-derive (backfill)** | Recover parenthetical sub-ingredient tags for entries saved before the hardening fix; additive-only union is safe | S | **needs owner sign-off** (mutates saved rows); decide next plan cycle |
 
 ## Tier 2 — The payoff (turn data into trust + motivation)
 
@@ -87,18 +84,10 @@ Sentiment trend chart, confidence labeling, and ingredient-pair analysis **✅ s
 
 ## Tier 3 — Quality of life
 
-**OFF search-by-name — ✅ shipped (2026-07-03).** Name-lookup on the
-manual-entry Name field, plus Home's "+ Add manually" retargeted onto the
-meal-builder chain. **Ranking fine-tune — planned, fully specced in
-`docs/HANDOFF.md` (2026-07-03 owner-feedback cycle).** Owner feedback: a
-generic query like "banana" surfaces branded/processed matches (banana chips,
-banana-flavored cookies) ahead of a plain banana. Fix: widen the OFF candidate
-pool and client-side re-rank toward unbranded/name-close/produce-tagged
-results — no new dependency, no UI change. Confirmed against live OFF data
-this recovers cases where OFF has a buried generic entry (e.g. "banana"), but
-can't manufacture one where OFF has none at all (e.g. "apple" today has no
-unbranded entry in its top results). USDA FoodData Central migration/hybrid
-evaluated and deferred — see Decision 6 below.
+**OFF search-by-name + unbranded re-ranking — ✅ shipped (2026-07-03).**
+Recovers buried generic entries (e.g. "banana") but can't manufacture ones OFF
+lacks entirely (e.g. "apple"); if that gap keeps biting in real use, see
+Decision 6 before re-scoping.
 Remaining Tier 3: photo attachment ⚠ · save-confirmation toasts + haptics ·
 onboarding + better empty states · swipe-to-delete · reminder **deep-link** into
 the add-entry form · settings (force theme, first-day-of-week — currently

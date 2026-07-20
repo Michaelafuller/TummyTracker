@@ -1,239 +1,229 @@
-# HANDOFF.md — Cycle: rank OFF search-by-name toward generic/unbranded matches
+# HANDOFF.md — Cycle: ingredient-capture hardening (meal-collation granularity audit)
 
 > **Read first:** root `CLAUDE.md` (auto-loaded). No other protocol doc is needed —
 > every task below is fully specced with file paths and line numbers from the
 > current tree.
 >
-> **Session type:** execute (fine-tune). Definition of done per CLAUDE.md §4:
-> `npm run typecheck && npm run lint && npm test` green, tests ship with the
-> change, one logical change per commit, imperative scoped commit message.
-> No schema/UI change, so `npm run bundle:check` is not required this cycle.
+> **Session type:** execute. Definition of done per CLAUDE.md §4:
+> `npm run typecheck && npm run lint && npm test` green, tests ship with each
+> change, one logical change per commit, imperative scoped commit messages.
+> No schema change (no migration), no UI change, no new dependency, no
+> native/Babel change — `npm run bundle:check` is not required this cycle.
 >
-> **Source of these requirements:** owner planning session, 2026-07-03. Follow-up
-> to the OFF search-by-name feature that just shipped (`f3b22ac`, `0ac4da8`,
-> `51be0f1`, `3d4ee53`). Owner feedback: typing "banana" into the manual-entry
-> Name field surfaces banana chips, banana-flavored cookies, and other branded
-> banana-adjacent products ahead of an actual plain banana. Barcode scans are
-> high-fidelity already (a real product); this is specifically about the
-> free-text name-search path (produce, staples, anything typed rather than
-> scanned).
+> **Source of these requirements:** owner planning session, 2026-07-19. The
+> owner's question: *when multiple scanned items (tofu, eggs, cheese, beans) are
+> collated into one meal, is the per-item ingredient granularity lost?* The
+> ingredient→sentiment correlation is the heart of the app — an analysis must be
+> able to indict "soy protein isolate", not just "tofu".
 
 ---
 
-## Why this is a fine-tune, not a new integration (read before changing scope)
+## Audit verdict (context — read once, then execute the phases)
 
-I pulled live results from OFF's public search endpoint to check this empirically
-rather than guess:
+**No analytic granularity is lost at collation.** The verified chain:
 
-- `search_terms=banana`, `sort_by=unique_scans_n`, top 20: mostly banana-flavored
-  yogurt/cookies/cereal/smoothies/chips — but a **plain, unbranded "Bananes"**
-  (`brands: ""`, `categories_tags` incl. `en:fruits`, `en:bananas`) sits at
-  position 8, and a branded-but-organic **"Banane BIO"** at position 13. The
-  signal exists in OFF's own data; it's just outranked by scan-popularity of
-  branded snacks that happen to contain the word "banana".
-- `search_terms=apple`, same params, top ~15: **zero** plain/unbranded apple
-  entries — all compotes, juices, sodas, cereal bars. OFF simply may not have a
-  well-scanned generic "Apple" entry to surface at all.
+1. Scan → `mapOffProductJson` derives tags from the **full** OFF
+   `ingredients_text` + `allergens_tags` + `additives_tags`
+   (`src/lib/openFoodFacts.ts:93-97`), and `offProductToComponentFormState`
+   seeds the component form with both the full ingredient text and the
+   serialized tags (`src/lib/openFoodFacts.ts:275-288`).
+2. Component confirm → `buildComponentDraft` keeps a non-empty `tagsJson`
+   verbatim (`src/features/logging/componentFormModel.ts:103-111`).
+3. Save → `createMealWithComponents` stores the parent `tagsJson` as
+   `unionComponentTags` (every component's tags + each normalized component
+   name) and persists each component row with its own full `ingredientsText` +
+   `tagsJson` (`src/db/repository.ts:45-70`, `src/lib/mealAggregate.ts:50-69`).
+4. Analysis (`insights.ts`, `temporal.ts`) reads the parent `tagsJson` only —
+   so the full ingredient/allergen/additive set flows into correlation,
+   including pair analysis.
+5. Later edits (e.g. rating sentiment afterward) preserve stored tags:
+   `logEntryToFormState` hydrates `tagsJson` and `buildLogEntry` reuses
+   non-empty tags (`src/features/logging/formModel.ts:150-158`).
+6. Recents quick-add copies `tagsJson` through (`src/app/(tabs)/index.tsx:29-42`),
+   and backup v2 round-trips `mealComponent` rows.
 
-**Conclusion:** client-side re-ranking of a larger OFF candidate pool can
-recover the "banana" case (the data is there, just buried) but cannot manufacture
-data OFF doesn't have (the "apple" case). This handoff does the re-ranking —
-it's a real improvement, no new dependency, no new guardrail (same OFF host
-already approved in CLAUDE.md §3/§9). It is **not** a complete fix for every
-food. If after this ships the owner still finds common produce/staples poorly
-served, the durable fix is a produce-focused source like **USDA FoodData
-Central** (has literal "Apples, raw, with skin" entries) — that is a new
-external API and needs explicit owner sign-off before it's scoped in; do not
-add it in this cycle.
+The condensed "Tofu, Eggs, Cheese, Beans" the owner sees is **only** the
+parent's display `ingredientsText` (`src/features/logging/mealReviewFormModel.ts:85`,
+`src/db/repository.ts:52`). Analysis never reads `ingredientsText`. **Keep the
+condensed display — it is owner-approved UX. Do not add any UI.**
+
+However, the audit found three real capture gaps — none specific to collation,
+all UI-invisible to fix. This cycle closes them and locks the collation
+invariant with a regression test.
 
 ---
 
-## Phase 1 — extend `OffProduct` with category tags
+## Phase 1 — stop dropping parenthetical sub-ingredients in `extractTags`
 
-### 1.1 `src/lib/openFoodFacts.ts`
+**The one genuine granularity loss found, and it affects every entry.**
+`src/lib/ingredients.ts:58` deletes parenthetical content wholesale:
+`.replace(/\([^)]*\)/g, '')`. OFF ingredient lists lean on parentheses for
+compound-ingredient breakdowns — `"Tofu (water, soybeans, calcium sulfate),
+seasoning (onion powder, garlic)"` currently yields only `tofu, seasoning`,
+throwing away exactly the sub-ingredient signal (soybeans, calcium sulfate,
+onion powder) the owner cares about.
 
-- Add `categoriesTags: string[]` to the `OffProduct` interface (after `tags:
-  string[]`, line 33).
-- In `mapOffProductJson` (line 71), extract it defensively and add it to the
-  returned object (the return statement is currently line 118):
+**Change** (in `extractTags`, `src/lib/ingredients.ts:55-63`): keep the
+percentage strip, then treat brackets as *delimiters* instead of deleting their
+content:
+
+```ts
+.replace(/\d+(\.\d+)?%/g, '')   // unchanged
+.replace(/[()[\]]/g, ',')       // was: .replace(/\([^)]*\)/g, '')
+```
+
+Nested parens flatten correctly under this rule (every bracket becomes a comma;
+empty/short tokens are already filtered by the `length >= 2` check, and the
+existing `[^a-z0-9 -]` char strip still cleans stray punctuation). Update the
+function's doc comment (lines 21-31): parenthetical content is now *captured as
+separate tags*, not stripped.
+
+**Tests** (`src/lib/__tests__/ingredients.test.ts`): existing assertions that
+expect parenthetical content to be *dropped* must be deliberately inverted —
+that behavior is the bug. Add cases: compound ingredient with sub-ingredients
+(all captured as separate tags); nested parens; percentages inside parens still
+stripped (`"cheese (milk 13%)"` → `cheese`, `milk`); stopwords inside parens
+still filtered (`"(may contain traces of nuts)"` contributes `nuts` at most,
+never `may`/`contain`/`traces`).
+
+Note: tags are computed at capture time, so this improves **future** entries
+only. Historical re-derivation is explicitly out of scope (see below).
+
+**Commit:** `feat(ingredients): capture parenthetical sub-ingredients as tags`
+
+---
+
+## Phase 2 — single-component meals keep their full ingredient text
+
+Since the 2026-07-02 cycle, *every* food entry goes through the meal builder
+(Home's "+ Add manually" targets `/meal/component`; scan lands there too). For a
+single-component meal, `buildMealEntry` sets the parent `ingredientsText` to the
+component's **name** (`mealReviewFormModel.ts:85`) — so a scanned single item
+shows "Tofu" in the edit screen's Ingredients field where the old single-item
+flow showed the real ingredient list. (Tags are unaffected; this is a display /
+data-fidelity regression on the parent row. The edit screen also doesn't render
+component rows when `componentCount <= 1` — `src/app/entry/[id].tsx:43` — so the
+full text is currently unreachable for these entries.)
+
+Note the derivation is **duplicated**: `buildMealEntry`
+(`mealReviewFormModel.ts:85`) and `createMealWithComponents`
+(`repository.ts:52`) each compute the names-join independently. Consolidate:
+
+- Add to `src/lib/mealAggregate.ts`:
 
   ```ts
-  const categoriesTagsRaw = product.categories_tags;
-  const categoriesTags = Array.isArray(categoriesTagsRaw)
-    ? categoriesTagsRaw.filter((t): t is string => typeof t === 'string')
-    : [];
-
-  return { barcode: resolvedBarcode, brand, found: true, name, nutrition, servingG, ingredientsText, tags, categoriesTags };
+  /**
+   * Display ingredient text for the aggregate meal row. A single-component meal
+   * keeps its component's full ingredient list (parity with the old single-item
+   * flow); a multi-component meal condenses to the component names — the full
+   * per-item lists live on the mealComponent rows, and analysis reads tagsJson,
+   * never this field.
+   */
+  export function mealIngredientsText(
+    components: readonly Pick<MealComponentDraft, 'name' | 'ingredientsText'>[],
+  ): string | null {
+    if (components.length === 0) return null;
+    if (components.length === 1) {
+      const only = components[0];
+      return only.ingredientsText?.trim() ? only.ingredientsText : only.name;
+    }
+    const joined = components.map((c) => c.name).join(', ');
+    return joined.length > 0 ? joined : null;
+  }
   ```
 
-- In `mapOffResponse`'s not-found literal (lines 130-139), add `categoriesTags:
-  []` alongside the other empty fields — it's a plain object literal there, not
-  a call through `mapOffProductJson`, so it needs the field added by hand.
+- Use it in **both** call sites (`mealReviewFormModel.ts:85` and
+  `repository.ts:52`), replacing the inline joins.
 
-### 1.2 `src/features/barcode/api.ts`
+**Tests:** `src/lib/__tests__/mealAggregate.test.ts` (single component with
+text → full text; single without text → name; multi → names join; empty → null)
+and adjust `src/features/logging/__tests__/mealReviewFormModel.test.ts` if it
+asserts the old single-component behavior.
 
-- Add `categories_tags` to the `fields` param of `fetchOffSearchResults` (line
-  34): `'code,product_name,brands,nutriments,serving_quantity,ingredients_text,allergens_tags,additives_tags,categories_tags'`.
-
-No test changes needed yet for this sub-step alone — Phase 2's tests cover the
-new field end to end.
+**Commit:** `fix(logging): keep full ingredient text on single-component meals`
 
 ---
 
-## Phase 2 — re-rank search results toward generic/unbranded matches
+## Phase 3 — merge user-edited ingredient text into tags (never ignore it)
 
-### 2.1 Widen the candidate pool: `src/features/barcode/api.ts`
+In both `buildLogEntry` (`formModel.ts:150-158`) and `buildComponentDraft`
+(`componentFormModel.ts:103-111`), pre-computed tags **win outright**: when
+`tagsJson` is non-empty, the ingredient text field is never re-tokenized. So if
+the owner types "hot sauce" into the Ingredients field of a scanned item (or an
+existing entry), it never becomes a tag — invisible to the correlation engine.
 
-Change `page_size: '5'` (line 32) to `page_size: '24'`. We still only ever show
-5 rows to the user (`mapOffSearchResponse` keeps its `.slice(0, 5)`) — this just
-gives the re-ranker a bigger pool to find the buried generic entry in, matching
-what the live "banana" pull above showed (position 8 of 20).
-
-Update the function's return (line 48) to pass the query through:
-`return mapOffSearchResponse(json, query);` — `query` is already the trimmed
-string the caller (`useOffSearch`) passed in, no new trimming needed here.
-
-### 2.2 Scoring function + re-rank: `src/lib/openFoodFacts.ts`
-
-Add above `mapOffSearchResponse`:
+**Change:** in both places, merge instead of preferring one side —
+`finalTags = existingTags ∪ extractTags(trimmedIngredients)`, existing tags
+first (allergens/additives keep their lead position). Add a small helper to
+`src/lib/ingredients.ts`:
 
 ```ts
-const PRODUCE_CATEGORY_HINTS = [
-  'en:fruits',
-  'en:vegetables',
-  'en:fresh-fruits',
-  'en:fresh-vegetables',
-  'en:tubers-and-root-vegetables',
-  'en:legumes',
-  'en:nuts-and-their-products',
-];
-
-const PROCESSED_CATEGORY_HINTS = [
-  'en:snacks',
-  'en:sweet-snacks',
-  'en:desserts',
-  'en:beverages',
-  'en:biscuits-and-cakes',
-  'en:confectioneries',
-  'en:chips-and-fries',
-];
-
-/**
- * Heuristic "how plain/generic is this candidate" score for a search result —
- * lower means more likely the actual food the user typed (a raw banana),
- * higher means more likely a branded product that merely contains the word (a
- * banana-flavored cookie). Three signals, weighted so category only breaks
- * ties between otherwise-similar candidates:
- *   - name/query word-count delta (a name close in length to the query wins)
- *   - presence of a brand (community "generic" entries rarely carry one)
- *   - category tag hints (produce tags nudge down, processed tags nudge up)
- * This can only re-rank what OFF's search already returned — if OFF has no
- * unbranded entry for a food, no score here can invent one (see HANDOFF).
- */
-function genericityScore(query: string, product: OffProduct): number {
-  const queryWords = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const nameWords = (product.name ?? '').trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const lengthDelta = Math.abs(nameWords.length - queryWords.length);
-  const brandPenalty = product.brand != null ? 1 : 0;
-  const hasProduceHint = product.categoriesTags.some((t) => PRODUCE_CATEGORY_HINTS.includes(t));
-  const hasProcessedHint = product.categoriesTags.some((t) => PROCESSED_CATEGORY_HINTS.includes(t));
-  const categoryAdjustment = (hasProduceHint ? -1 : 0) + (hasProcessedHint ? 1 : 0);
-  return lengthDelta * 2 + brandPenalty * 2 + categoryAdjustment;
-}
+/** Order-preserving union of tag arrays (first occurrence wins). */
+export function mergeTags(...lists: readonly string[][]): string[]
 ```
 
-Change `mapOffSearchResponse`'s signature and body (line 151):
+and rewrite both `finalTagsJson` computations to use
+`mergeTags(existingTags, extractTags({ ingredientsText: trimmedIngredients, allergensTags: null, additivesTags: null }))`
+(when the text is empty, this degrades to the existing tags; when tags are
+empty, to the text extraction — both current behaviors preserved). Deliberate
+asymmetry, add a code comment: tag capture is **additive-only** — deleting a
+word from the text does not remove its tag, because we can't tell a removed
+ingredient from a shortened note, and false-negative capture is worse than a
+stale tag.
 
-```ts
-/**
- * Map a raw OFF `/cgi/search.pl` (Generic_Search) response into candidate
- * products. Entries with no product name are dropped, the rest are re-ranked
- * by `genericityScore` against `query` (most-generic first — see that
- * function's doc comment), then capped at 5. OFF's own `sort_by=unique_scans_n`
- * ordering is preserved as the tiebreak among equally-generic candidates.
- */
-export function mapOffSearchResponse(json: unknown, query: string): OffProduct[] {
-  const root = asRecord(json);
-  const products = Array.isArray(root.products) ? root.products : [];
-  return products
-    .map((p) => mapOffProductJson(null, asRecord(p)))
-    .filter((p) => p.name != null)
-    .map((product, index) => ({ product, index })) // index = tiebreak, sort() stability isn't guaranteed on RN's Hermes
-    .sort((a, b) => genericityScore(query, a.product) - genericityScore(query, b.product) || a.index - b.index)
-    .map(({ product }) => product)
-    .slice(0, 5);
-}
-```
+For a grouped meal's edit screen this is safe: the text field holds component
+names, whose normalized forms are already in the union (`unionComponentTags`
+adds them), so merging adds nothing spurious.
 
-### 2.3 Tests — `src/lib/__tests__/openFoodFacts.test.ts`
+**Tests:** `formModel.test.ts` + `componentFormModel.test.ts` — edited text
+adds new tags while OFF tags survive; OFF-only and text-only paths unchanged;
+tag order (existing first) asserted.
 
-The existing `describe('mapOffSearchResponse', ...)` block calls the function
-with one arg; every call site needs a second `query` arg now. For the tests
-that aren't about ranking (capping, name-drop, brand extraction, barcode-null,
-garbage-input defensiveness), pick a query where every fixture product scores
-identically so ordering/capping behavior is unchanged and the assertions still
-hold — e.g. a query whose word count matches none of the fixture names closely
-in a way that would differentiate them, and fixtures with no `brands`/
-`categories_tags` fields (so brandPenalty/categoryAdjustment are 0 for all).
-The "maps each product node and caps at 5, most-scanned order preserved" test
-already uses homogeneous `Product 0`..`Product 6` names with no brands field —
-just add `, 'query'` as the second arg and it should still pass unchanged
-(verify after writing).
-
-Add new tests for the ranking behavior itself, modeled on the real OFF response
-captured for "banana" (see the callout above):
-
-```ts
-it('ranks an unbranded, name-close candidate above longer branded matches', () => {
-  const json = {
-    products: [
-      { code: '1', product_name: 'Gerblé - Organic Cookie Flavored w/ Banana', brands: 'Gerblé', categories_tags: ['en:snacks', 'en:biscuits-and-cakes'], nutriments: {} },
-      { code: '2', product_name: 'Bananes', brands: '', categories_tags: ['en:fruits', 'en:tropical-fruits', 'en:bananas'], nutriments: {} },
-      { code: '3', product_name: 'Banana chips', brands: 'Suny Bites', categories_tags: ['en:dried-fruits'], nutriments: {} },
-    ],
-  };
-  const results = mapOffSearchResponse(json, 'banana');
-  expect(results[0].name).toBe('Bananes');
-});
-
-it('breaks name/brand ties using produce vs. processed category hints', () => {
-  const json = {
-    products: [
-      { code: '1', product_name: 'Zucchini Loaf', brands: '', categories_tags: ['en:snacks', 'en:desserts'], nutriments: {} },
-      { code: '2', product_name: 'Zucchini Spears', brands: '', categories_tags: ['en:vegetables'], nutriments: {} },
-    ],
-  };
-  const results = mapOffSearchResponse(json, 'zucchini');
-  expect(results[0].name).toBe('Zucchini Spears');
-});
-
-it('extracts categoriesTags defensively', () => {
-  expect(mapOffSearchResponse({ products: [{ product_name: 'A', nutriments: {} }] }, 'a')[0].categoriesTags).toEqual([]);
-  expect(mapOffSearchResponse({ products: [{ product_name: 'B', categories_tags: 'not-an-array', nutriments: {} }] }, 'b')[0].categoriesTags).toEqual([]);
-  const mixed = mapOffSearchResponse({ products: [{ product_name: 'C', categories_tags: ['en:fruits', 42, null], nutriments: {} }] }, 'c');
-  expect(mixed[0].categoriesTags).toEqual(['en:fruits']);
-});
-```
-
-Also add one `mapOffResponse`/`mapOffProductJson` assertion (in the existing
-`describe('mapOffResponse', ...)` block) that a barcode lookup populates
-`categoriesTags` from `categories_tags` when present, and that the not-found
-branch reports `categoriesTags: []` — reuse the `found`/`notfound` fixtures or
-an inline JSON object, whichever fits the existing style in that block.
-
-Commit: `feat(barcode): rank OFF search-by-name results toward unbranded matches`
+**Commit:** `feat(logging): merge edited ingredient text into existing tags`
 
 ---
 
-## After this phase (execute-session closeout)
+## Phase 4 — regression test locking the collation invariant
+
+Extend `src/features/analysis/__tests__/mealBuilderCompat.test.ts` with an
+end-to-end tripwire over the *real* pipeline (no hand-rolled tagsJson): build
+3–4 realistic OFF-style products (allergens_tags + additives_tags + multi-token
+`ingredients_text` including parenthetical sub-ingredients), run each through
+`mapOffResponse` → `offProductToComponentFormState` → `buildComponentDraft`,
+collate with `buildMealEntry`, then assert:
+
+1. **Every** tag derivable from every component (including the parenthetical
+   sub-ingredients from Phase 1 and every allergen/additive) appears in the
+   parent entry's `tagsJson` — i.e. nothing is smoothed out by collation.
+2. Each component draft retains its full `ingredientsText`.
+3. The parent `ingredientsText` stays the condensed names-join for the
+   multi-component case (the owner-approved display contract).
+
+Name the test so its intent is unmissable, e.g.
+`'collating components into a meal never drops a component tag'`.
+
+**Commit:** `test(analysis): lock meal-collation tag-granularity invariant`
+
+---
+
+## Explicitly out of scope (do not do these)
+
+- **Historical tag re-derivation/backfill.** Phase 1 widens capture for new
+  entries; recomputing tags for already-saved rows mutates user data and needs
+  an owner decision first (an additive-only union re-derive would be safe and
+  cheap — flagged for the next planning session, not this one).
+- **Any UI change** — no per-component ingredient display on the edit screen,
+  no new fields, no copy changes. The condensed meal display is the contract.
+- **Meal-component editing after save** (already Tier 2 backlog).
+- **OFF/USDA sourcing changes** (PROGRESS.md Decision 6 — don't re-open).
+
+## After the phases (execute-session closeout)
 
 1. Full rungs green (`npm run typecheck && npm run lint && npm test`).
-2. Summarize: what changed (larger candidate pool + re-ranking heuristic, no UI
-   change, no new dependency), and restate the honest limit — this helps when
-   OFF has a buried generic entry, but can't fix foods where OFF has none. Point
-   back to this file's "Why this is a fine-tune, not a new integration" section
-   if the owner asks about further improving produce lookups.
-3. Do not touch `docs/RESULTS.md`, `docs/ACCEPTANCE.md`, or `docs/E2E.md` — no
-   observable flow or UI changed (same spinner → 5 rows → tap-to-fill shape),
-   only result ordering underneath. `PROGRESS.md`'s Tier 3 bullet was already
-   updated by the planning session; don't re-edit it here.
+2. Summarize: the audit verdict (granularity was already preserved through
+   collation), what each phase hardened, and the additive-only tag policy.
+3. Note for the next test-plan session: all changes are `lib/`/form-model
+   level with no observable UI change — targeted Maestro re-run of
+   `flows/ab-satfat-ingredients.yaml` + `flows/01b-manual-entry.yaml` on the
+   next device session is sufficient; no new flows owed. Do not touch
+   `docs/RESULTS.md`, `docs/ACCEPTANCE.md`, or `docs/E2E.md`.
