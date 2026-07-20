@@ -26,7 +26,7 @@ describe('extractTags', () => {
     expect(tags).toEqual(['milk', 'nuts', 'e322']);
   });
 
-  it('tokenizes ingredient text on commas, stripping parentheticals', () => {
+  it('tokenizes ingredient text on commas, stripping percentages', () => {
     const tags = extractTags({
       ingredientsText: 'Sugar, Palm oil, Hazelnuts 13%, Skimmed milk powder 8.7%',
       allergensTags: [],
@@ -36,6 +36,47 @@ describe('extractTags', () => {
     expect(tags).toContain('palm oil');
     expect(tags).toContain('hazelnuts');
     expect(tags).toContain('skimmed milk powder');
+  });
+
+  it('captures parenthetical sub-ingredients as separate tags instead of dropping them', () => {
+    const tags = extractTags({
+      ingredientsText: 'Tofu (water, soybeans, calcium sulfate), seasoning (onion powder, garlic)',
+      allergensTags: [],
+      additivesTags: [],
+    });
+    expect(tags).toEqual(
+      expect.arrayContaining(['tofu', 'water', 'soybeans', 'calcium sulfate', 'seasoning', 'onion powder', 'garlic']),
+    );
+  });
+
+  it('flattens nested parentheses, capturing every level as tags', () => {
+    const tags = extractTags({
+      ingredientsText: 'Bread (flour (wheat, rye), water)',
+      allergensTags: [],
+      additivesTags: [],
+    });
+    expect(tags).toEqual(expect.arrayContaining(['bread', 'flour', 'wheat', 'rye', 'water']));
+  });
+
+  it('still strips percentages found inside parentheses', () => {
+    const tags = extractTags({
+      ingredientsText: 'cheese (milk 13%)',
+      allergensTags: [],
+      additivesTags: [],
+    });
+    expect(tags).toEqual(['cheese', 'milk']);
+  });
+
+  it('still filters stopwords found inside parentheses', () => {
+    const tags = extractTags({
+      ingredientsText: '(may contain traces of nuts)',
+      allergensTags: [],
+      additivesTags: [],
+    });
+    expect(tags).toEqual(['nuts']);
+    expect(tags).not.toContain('may');
+    expect(tags).not.toContain('contain');
+    expect(tags).not.toContain('traces');
   });
 
   it('places allergens before ingredient-text tokens', () => {

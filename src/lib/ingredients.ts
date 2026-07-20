@@ -24,10 +24,16 @@ function coerceStringArray(value: unknown): string[] {
  *  - additivesTags  (OFF additives_tags, e.g. ["en:e322"])
  *  - ingredientsText (raw comma-separated ingredient list from OFF or manual entry)
  *
- * Allergens and additives come first (highest signal). Ingredient-text tokens
- * are stripped of parenthetical content (percentages, notes) then split on
- * commas/semicolons. Tokens shorter than 2 chars or matching STOPWORDS are
- * dropped. The result is deduplicated.
+ * Allergens and additives come first (highest signal). Percentage figures are
+ * stripped from ingredient text, then brackets/parens are treated as *token
+ * delimiters* (not deleted) so compound-ingredient breakdowns — e.g. "Tofu
+ * (water, soybeans, calcium sulfate)" — contribute their sub-ingredients
+ * (soybeans, calcium sulfate) as separate tags instead of losing them. The
+ * text is then split on commas/semicolons; within each resulting token,
+ * individual STOPWORD words are stripped (so a filler phrase like "may
+ * contain traces of nuts" reduces to "nuts" rather than surviving whole or
+ * vanishing entirely) and the remaining words are rejoined. Tokens shorter
+ * than 2 chars after this are dropped. The result is deduplicated.
  */
 export function extractTags({
   ingredientsText,
@@ -55,10 +61,16 @@ export function extractTags({
   if (ingredientsText && ingredientsText.trim().length > 0) {
     ingredientsText
       .replace(/\d+(\.\d+)?%/g, '') // strip percentage figures (e.g. "13%", "8.7%")
-      .replace(/\([^)]*\)/g, '') // strip parenthetical notes (e.g. "(contains sulfites)")
+      .replace(/[()[\]]/g, ',') // treat brackets as delimiters, capturing sub-ingredients as tags
       .split(/[,;]+/)
       .map((t) => t.toLowerCase().replace(/[^a-z0-9 -]/g, '').trim())
-      .filter((t) => t.length >= 2 && !STOPWORDS.has(t))
+      .map((t) =>
+        t
+          .split(/\s+/)
+          .filter((word) => word.length > 0 && !STOPWORDS.has(word))
+          .join(' '),
+      )
+      .filter((t) => t.length >= 2)
       .forEach(add);
   }
 
