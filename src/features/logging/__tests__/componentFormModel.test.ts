@@ -73,12 +73,21 @@ describe('buildComponentDraft', () => {
     expect(result.draft?.tagsJson).toContain('milk');
   });
 
-  it('prefers pre-computed OFF tagsJson over deriving from ingredientsText', () => {
+  it('merges tags tokenized from ingredientsText into pre-computed OFF tagsJson (existing tags first)', () => {
     const result = buildComponentDraft(
       baseState({ ingredientsText: 'wheat, milk', tagsJson: '["off-tag"]' }),
       0,
     );
-    expect(result.draft?.tagsJson).toBe('["off-tag"]');
+    const tags = JSON.parse(result.draft?.tagsJson ?? '[]') as string[];
+    expect(tags).toEqual(['off-tag', 'wheat', 'milk']);
+  });
+
+  it('keeps OFF tagsJson unchanged when ingredientsText contributes nothing new', () => {
+    const result = buildComponentDraft(
+      baseState({ ingredientsText: 'wheat', tagsJson: '["wheat"]' }),
+      0,
+    );
+    expect(result.draft?.tagsJson).toBe('["wheat"]');
   });
 
   it('carries the barcode through unchanged', () => {

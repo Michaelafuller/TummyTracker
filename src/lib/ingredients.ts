@@ -77,6 +77,21 @@ export function extractTags({
   return tags;
 }
 
+/** Order-preserving union of tag arrays (first occurrence wins). */
+export function mergeTags(...lists: readonly string[][]): string[] {
+  const seen = new Set<string>();
+  const merged: string[] = [];
+  for (const list of lists) {
+    for (const tag of list) {
+      if (!seen.has(tag)) {
+        seen.add(tag);
+        merged.push(tag);
+      }
+    }
+  }
+  return merged;
+}
+
 /** Safely parse a JSON tag array, returning [] on any error. */
 export function parseTagsJson(s: string | null | undefined): string[] {
   if (!s) return [];

@@ -5,7 +5,7 @@
 import type { LogEntry, LogEntryType, MealSlot } from '@/db/schema';
 import { isSentimentValue, type SentimentValue } from '@/features/sentiment/scale';
 import { formatDateInput, formatTimeInput, parseDateTime } from '@/lib/datetime';
-import { extractTags, parseTagsJson, serializeTags } from '@/lib/ingredients';
+import { extractTags, mergeTags, parseTagsJson, serializeTags } from '@/lib/ingredients';
 import { parseOptionalNumber } from '@/lib/number';
 import type { NutritionValues } from '@/lib/nutrition';
 import { NUTRITION_FIELDS, type NutritionField, validateNotes } from '@/lib/validation';
@@ -146,16 +146,16 @@ export function buildLogEntry(state: LogEntryFormState): BuildResult {
   const trimmedNotes = state.notes.trim();
   const trimmedIngredients = state.ingredientsText.trim();
 
-  // Use pre-computed OFF tags when supplied; otherwise tokenize from the text field.
+  // Merge pre-computed OFF tags with anything re-tokenized from the (possibly
+  // user-edited) ingredient text — never let one side win outright. Additive
+  // only: a word removed from the text does not remove its tag, because we
+  // can't tell a removed ingredient from a shortened note, and a false
+  // negative in capture is worse than a stale tag. Existing tags keep their
+  // lead position (allergens/additives stay highest-signal-first).
   const existingTags = parseTagsJson(state.tagsJson);
-  const finalTagsJson =
-    existingTags.length > 0
-      ? state.tagsJson
-      : trimmedIngredients.length > 0
-        ? serializeTags(
-            extractTags({ ingredientsText: trimmedIngredients, allergensTags: null, additivesTags: null }),
-          )
-        : null;
+  const textTags = extractTags({ ingredientsText: trimmedIngredients, allergensTags: null, additivesTags: null });
+  const mergedTags = mergeTags(existingTags, textTags);
+  const finalTagsJson = mergedTags.length > 0 ? serializeTags(mergedTags) : null;
 
   const entry: BuiltLogEntry = {
     type: state.type,

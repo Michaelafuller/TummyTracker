@@ -160,12 +160,23 @@ describe('logEntryToFormState (edit round-trip)', () => {
 });
 
 describe('buildLogEntry — ingredient tags', () => {
-  it('carries pre-computed OFF tagsJson through without re-tokenizing', () => {
+  it('keeps pre-computed OFF tags when the ingredient text is unchanged (no new tags to add)', () => {
     const result = buildLogEntry(
       baseState({ ingredientsText: 'wheat flour', tagsJson: '["gluten","wheat flour"]' }),
     );
     expect(result.valid).toBe(true);
     expect(result.entry?.tagsJson).toBe('["gluten","wheat flour"]');
+  });
+
+  it('merges new tags tokenized from user-edited ingredient text into the existing OFF tags', () => {
+    const result = buildLogEntry(
+      baseState({ ingredientsText: 'wheat flour, hot sauce', tagsJson: '["gluten","wheat flour"]' }),
+    );
+    expect(result.valid).toBe(true);
+    const tags = JSON.parse(result.entry?.tagsJson ?? '[]') as string[];
+    // Existing (OFF) tags keep their lead position; the newly-typed ingredient
+    // becomes a tag instead of being silently dropped.
+    expect(tags).toEqual(['gluten', 'wheat flour', 'hot sauce']);
   });
 
   it('tokenizes ingredientsText when tagsJson is empty', () => {
@@ -174,6 +185,12 @@ describe('buildLogEntry — ingredient tags', () => {
     const tags = JSON.parse(result.entry?.tagsJson ?? '[]') as string[];
     expect(tags).toContain('oats');
     expect(tags).toContain('honey');
+  });
+
+  it('keeps existing tags unchanged when the ingredient text is blank (OFF-only path)', () => {
+    const result = buildLogEntry(baseState({ ingredientsText: '', tagsJson: '["gluten","wheat flour"]' }));
+    expect(result.valid).toBe(true);
+    expect(result.entry?.tagsJson).toBe('["gluten","wheat flour"]');
   });
 
   it('sets ingredientsText and tagsJson to null when both are empty', () => {

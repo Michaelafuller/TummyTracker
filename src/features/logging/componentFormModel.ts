@@ -3,7 +3,7 @@
 // a full BuiltLogEntry — no loggedAt/sentiment/type here, those are meal-level
 // fields collected once on the review screen.
 
-import { extractTags, parseTagsJson, serializeTags } from '@/lib/ingredients';
+import { extractTags, mergeTags, parseTagsJson, serializeTags } from '@/lib/ingredients';
 import type { MealComponentDraft } from '@/lib/mealAggregate';
 import { parseOptionalNumber } from '@/lib/number';
 import type { NutritionValues } from '@/lib/nutrition';
@@ -100,15 +100,16 @@ export function buildComponentDraft(
   }
 
   const trimmedIngredients = state.ingredientsText.trim();
+  // Merge pre-computed OFF tags with anything re-tokenized from the (possibly
+  // user-edited) ingredient text — never let one side win outright. See
+  // formModel.ts's buildLogEntry for the additive-only rationale. For a
+  // grouped meal's edit screen this is safe: the text field holds component
+  // names, whose normalized forms are already in unionComponentTags, so
+  // merging adds nothing spurious.
   const existingTags = parseTagsJson(state.tagsJson);
-  const finalTagsJson =
-    existingTags.length > 0
-      ? state.tagsJson
-      : trimmedIngredients.length > 0
-        ? serializeTags(
-            extractTags({ ingredientsText: trimmedIngredients, allergensTags: null, additivesTags: null }),
-          )
-        : null;
+  const textTags = extractTags({ ingredientsText: trimmedIngredients, allergensTags: null, additivesTags: null });
+  const mergedTags = mergeTags(existingTags, textTags);
+  const finalTagsJson = mergedTags.length > 0 ? serializeTags(mergedTags) : null;
 
   const draft: MealComponentDraft = {
     name,
