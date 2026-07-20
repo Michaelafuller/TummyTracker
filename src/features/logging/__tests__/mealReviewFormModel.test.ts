@@ -90,6 +90,18 @@ describe('buildMealEntry', () => {
     expect(result.entry?.servingG).toBe(40);
   });
 
+  it('keeps the full ingredient text (not just the name) for a single-component meal', () => {
+    const components = [draft('Tofu', { ingredientsText: 'Tofu (water, soybeans, calcium sulfate)' })];
+    const result = buildMealEntry(baseState(), components);
+    expect(result.entry?.ingredientsText).toBe('Tofu (water, soybeans, calcium sulfate)');
+  });
+
+  it('falls back to the name for a single component without ingredient text', () => {
+    const components = [draft('Tofu')];
+    const result = buildMealEntry(baseState(), components);
+    expect(result.entry?.ingredientsText).toBe('Tofu');
+  });
+
   it('nulls barcode/servingG for a multi-component meal', () => {
     const components = [draft('Peas', { barcode: '111' }), draft('Rice', { barcode: '222' })];
     const result = buildMealEntry(baseState(), components);

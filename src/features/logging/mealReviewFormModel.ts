@@ -7,7 +7,13 @@
 import type { LogEntryType, MealSlot } from '@/db/schema';
 import type { SentimentValue } from '@/features/sentiment/scale';
 import { formatDateInput, formatTimeInput, parseDateTime } from '@/lib/datetime';
-import { aggregateComponents, defaultMealName, type MealComponentDraft, unionComponentTags } from '@/lib/mealAggregate';
+import {
+  aggregateComponents,
+  defaultMealName,
+  mealIngredientsText,
+  type MealComponentDraft,
+  unionComponentTags,
+} from '@/lib/mealAggregate';
 import { serializeTags } from '@/lib/ingredients';
 import { validateNotes } from '@/lib/validation';
 import type { BuiltLogEntry } from './formModel';
@@ -51,7 +57,9 @@ export function defaultMealReviewState(components: readonly MealComponentDraft[]
 /**
  * Validate the meal-level fields and build the single aggregate entry. The
  * barcode/servingG fields don't apply to a multi-component meal (they're
- * per-component); ingredientsText becomes the component names joined ", ".
+ * per-component); ingredientsText is the single component's full ingredient
+ * text (single-component meal) or the component names joined ", " (multi).
+ * See `mealIngredientsText`.
  */
 export function buildMealEntry(
   state: MealReviewFormState,
@@ -82,7 +90,7 @@ export function buildMealEntry(
   const trimmedNotes = state.notes.trim();
   const aggregate = aggregateComponents(components);
   const tags = unionComponentTags(components);
-  const ingredientsText = components.map((c) => c.name).join(', ');
+  const ingredientsText = mealIngredientsText(components);
 
   const entry: BuiltLogEntry = {
     type: state.type,
@@ -101,7 +109,7 @@ export function buildMealEntry(
     sugarG: aggregate.sugarG,
     sodiumMg: aggregate.sodiumMg,
     servingG: components.length === 1 ? (components[0].servingG ?? null) : null,
-    ingredientsText: ingredientsText.length > 0 ? ingredientsText : null,
+    ingredientsText,
     tagsJson: tags.length > 0 ? serializeTags(tags) : null,
   };
 

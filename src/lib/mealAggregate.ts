@@ -75,5 +75,24 @@ export function defaultMealName(components: readonly Pick<MealComponentDraft, 'n
   return rest.length === 0 ? first.name : `${first.name} + ${rest.length} more`;
 }
 
+/**
+ * Display ingredient text for the aggregate meal row. A single-component meal
+ * keeps its component's full ingredient list (parity with the old single-item
+ * flow); a multi-component meal condenses to the component names — the full
+ * per-item lists live on the mealComponent rows, and analysis reads tagsJson,
+ * never this field.
+ */
+export function mealIngredientsText(
+  components: readonly Pick<MealComponentDraft, 'name' | 'ingredientsText'>[],
+): string | null {
+  if (components.length === 0) return null;
+  if (components.length === 1) {
+    const only = components[0];
+    return only.ingredientsText?.trim() ? only.ingredientsText : only.name;
+  }
+  const joined = components.map((c) => c.name).join(', ');
+  return joined.length > 0 ? joined : null;
+}
+
 /** Re-export so callers building the review screen don't need a second import for saved rows. */
 export type { MealComponent };

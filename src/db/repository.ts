@@ -4,7 +4,12 @@
 import { asc, desc, eq, inArray } from 'drizzle-orm';
 
 import { createId } from '@/lib/id';
-import { aggregateComponents, unionComponentTags, type MealComponentDraft } from '@/lib/mealAggregate';
+import {
+  aggregateComponents,
+  mealIngredientsText,
+  unionComponentTags,
+  type MealComponentDraft,
+} from '@/lib/mealAggregate';
 import { serializeTags } from '@/lib/ingredients';
 import { db } from './client';
 import {
@@ -49,14 +54,14 @@ export async function createMealWithComponents(
   const now = Date.now();
   const aggregate = aggregateComponents(components);
   const tags = unionComponentTags(components);
-  const ingredientsText = components.map((c) => c.name).join(', ');
+  const ingredientsText = mealIngredientsText(components);
 
   const row: NewLogEntry = {
     ...entry,
     ...aggregate,
     id: createId(),
     componentCount: components.length,
-    ingredientsText: ingredientsText.length > 0 ? ingredientsText : null,
+    ingredientsText,
     tagsJson: tags.length > 0 ? serializeTags(tags) : null,
     createdAt: now,
     updatedAt: now,

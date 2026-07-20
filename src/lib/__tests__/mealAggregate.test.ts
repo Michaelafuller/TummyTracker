@@ -1,4 +1,10 @@
-import { aggregateComponents, defaultMealName, type MealComponentDraft, unionComponentTags } from '../mealAggregate';
+import {
+  aggregateComponents,
+  defaultMealName,
+  mealIngredientsText,
+  type MealComponentDraft,
+  unionComponentTags,
+} from '../mealAggregate';
 
 function draft(overrides: Partial<MealComponentDraft> & { name: string }): MealComponentDraft {
   return {
@@ -88,6 +94,35 @@ describe('unionComponentTags', () => {
   it('normalizes the component name (lowercase, trimmed, language-prefix stripped)', () => {
     const components = [draft({ name: '  Chicken Broth  ', tagsJson: null })];
     expect(unionComponentTags(components)).toEqual(['chicken broth']);
+  });
+});
+
+describe('mealIngredientsText', () => {
+  it('returns null for no components', () => {
+    expect(mealIngredientsText([])).toBeNull();
+  });
+
+  it('keeps the full ingredient text for a single component that has one', () => {
+    const components = [draft({ name: 'Tofu', ingredientsText: 'Tofu (water, soybeans, calcium sulfate)' })];
+    expect(mealIngredientsText(components)).toBe('Tofu (water, soybeans, calcium sulfate)');
+  });
+
+  it('falls back to the name for a single component without ingredient text', () => {
+    const components = [draft({ name: 'Tofu', ingredientsText: null })];
+    expect(mealIngredientsText(components)).toBe('Tofu');
+  });
+
+  it('falls back to the name for a single component with blank ingredient text', () => {
+    const components = [draft({ name: 'Tofu', ingredientsText: '   ' })];
+    expect(mealIngredientsText(components)).toBe('Tofu');
+  });
+
+  it('condenses to the joined component names for multiple components', () => {
+    const components = [
+      draft({ name: 'Tofu', ingredientsText: 'Tofu (water, soybeans)' }),
+      draft({ name: 'Eggs', ingredientsText: 'Eggs' }),
+    ];
+    expect(mealIngredientsText(components)).toBe('Tofu, Eggs');
   });
 });
 
