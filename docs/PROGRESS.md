@@ -30,12 +30,12 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   regression 2026-07-03: **18/19** (best-ever clean run); the one red
   (`e-temporal-insights`) is a classified flow-bug with the fix applied — re-run
   pending, not an app defect (`docs/RESULTS.md`).
-- **In flight (2026-07-19 plan cycle):** ingredient-capture hardening — audit found
-  meal collation preserves full tag granularity (union of per-component OFF tags);
-  fixing the three real gaps found (parenthetical sub-ingredients dropped by
-  `extractTags`, single-component meals losing full ingredient text on the parent
-  row, edited ingredient text never merged into tags). Specced in `docs/HANDOFF.md`.
-- **Queued next cycle (decided 2026-08-15):** migrate name search off the failing
+- **Ingredient-capture hardening cycle — ✅ complete 2026-08-15** (on branch
+  `claude/tummytracker-api-lookup-c6906a`, pending merge to `main`): all four
+  HANDOFF phases executed, rungs green (44 suites / 333 tests). Owed next device
+  session: targeted Maestro re-run of `ab-satfat-ingredients` + `01b-manual-entry`
+  only (lib-level changes, no UI) — no new flows.
+- **Next cycle (decided 2026-08-15):** migrate name search off the failing
   legacy `cgi/search.pl` endpoint to Search-a-licious (Tier 3 row + Decision 6),
   plus the owner-approved historical tag re-derive backfill (Tier 1 row).
 - **Owner on-device checklist (carried):** iOS app icon (needs EAS build), iOS
@@ -44,11 +44,16 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
 
 ### Shipped last cycle (overwrite each plan cycle; full history = `git log`)
 
-2026-07-03 cycle (planned Fable 5, executed Sonnet 5):
-- **OFF search re-ranking:** wider candidate pool (24) + client-side genericity
-  scoring (name-closeness, unbranded, produce-vs-processed category hints) so plain
-  foods outrank branded lookalikes; USDA FDC migration evaluated & deferred
-  (Decision 6). New app icon. Full Maestro regression run (18/19, see Health).
+2026-07-19 cycle, closed 2026-08-15 (planned Fable 5, executed Sonnet 5):
+- **Ingredient-capture hardening:** audit verdict — meal collation already
+  preserved full tag granularity; closed the three real gaps: parenthetical
+  sub-ingredients now captured as tags (with per-word stopword filtering),
+  single-component meals keep full ingredient text on the parent row (new shared
+  `mealIngredientsText`), user-edited ingredient text merges into tags
+  (**additive-only policy**: a removed word never deletes a tag). Collation
+  invariant locked by an end-to-end regression test over the real
+  scan→draft→collate pipeline. Side effect: editing any pre-hardening entry
+  re-tokenizes with the new extractor, so old entries upgrade organically.
 
 ---
 
@@ -64,12 +69,12 @@ recent quick-add — all shipped.
 
 ## Tier 1 — The differentiator (the actual product)
 
-Ingredient/allergen capture, ingredient→sentiment correlation, symptom logging, and
-temporal meal→outcome correlation are **✅ shipped**. Remaining:
+Ingredient/allergen capture, ingredient→sentiment correlation, symptom logging,
+temporal meal→outcome correlation, and ingredient-capture hardening (2026-08-15)
+are **✅ shipped**. Remaining:
 
 | Item | Why it matters | Effort | Notes |
 |------|----------------|:--:|------|
-| **Ingredient-capture hardening** | Sub-ingredients in parentheses are currently dropped at extraction — the exact "brand X's soybean isolate" signal the analysis exists for | S | **in flight** — `docs/HANDOFF.md` 2026-07-19 |
 | **Trigger watchlist / elimination mode** | Mark suspected ingredients, flag entries containing them, track reactions — how food journals are *actually* used therapeutically | M | builds on ingredient capture |
 | **Historical tag re-derive (backfill)** | Recover parenthetical sub-ingredient tags for entries saved before the hardening fix; additive-only union is safe | S | **owner-approved 2026-08-15** — rides along with the search-migration cycle |
 
