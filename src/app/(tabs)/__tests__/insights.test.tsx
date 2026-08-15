@@ -22,6 +22,15 @@ jest.mock('@/features/logging/useEntries', () => ({
   useAllEntries: () => mockEntries,
 }));
 
+// The Watchlist section/finding-card Watch button pull from db/repository via
+// the watchlist store — mock it so this screen test never touches the real
+// (native-only) expo-sqlite client.
+jest.mock('@/db/repository', () => ({
+  listWatchlistItems: jest.fn().mockResolvedValue([]),
+  addWatchlistItem: jest.fn(),
+  removeWatchlistItem: jest.fn(),
+}));
+
 const TEST_INSETS: Metrics = {
   frame: { x: 0, y: 0, width: 320, height: 640 },
   insets: { top: 0, left: 0, right: 0, bottom: 0 },

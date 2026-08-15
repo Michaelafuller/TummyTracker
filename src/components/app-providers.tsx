@@ -7,6 +7,7 @@ import { useDatabaseMigrations } from '@/db/migrate';
 import { runTagBackfillOnce } from '@/db/tagBackfillRunner';
 import { configureNotificationHandler } from '@/features/notifications/service';
 import { usePrefsStore } from '@/features/prefs/prefsStore';
+import { useWatchlistStore } from '@/features/watchlist/watchlistStore';
 import { ThemedText } from './themed-text';
 
 // One QueryClient for the app lifetime (react-query is used for the barcode lookup).
@@ -26,7 +27,11 @@ function MigrationGate({ children }: { children: ReactNode }) {
   // Fire-and-forget: additive-only, so stale-until-repaired reads for one
   // launch are acceptable. Do not gate rendering on it.
   useEffect(() => {
-    if (success) void runTagBackfillOnce();
+    if (success) {
+      void runTagBackfillOnce();
+      // Watchlist reads must not race the migration gate — hydrate here too.
+      void useWatchlistStore.getState().load();
+    }
   }, [success]);
 
   if (error) {

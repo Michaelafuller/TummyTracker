@@ -17,6 +17,8 @@ import {
   type TemporalFinding,
 } from '@/features/analysis/insights';
 import { useAllEntries } from '@/features/logging/useEntries';
+import { WatchButton } from '@/features/watchlist/WatchButton';
+import { WatchlistSection } from '@/features/watchlist/WatchlistSection';
 import { useTheme } from '@/hooks/use-theme';
 import { weeklySentiment } from '@/lib/chartData';
 import { NUTRITION_NOUNS } from '@/lib/nutrition';
@@ -151,6 +153,8 @@ export default function InsightsScreen() {
           </View>
         ) : null}
 
+        <WatchlistSection entries={entries} now={now} />
+
         {ingredientFindings.length > 0 ? (
           <View style={styles.section}>
             <ThemedText type="subtitle">Ingredients you react to</ThemedText>
@@ -161,8 +165,9 @@ export default function InsightsScreen() {
                 body={ingredientSentence(finding)}
                 confidence={finding.confidence}
                 n={finding.occurrences}
-                histogram={finding.sentimentCounts}
-              />
+                histogram={finding.sentimentCounts}>
+                <WatchButton tag={finding.tag} />
+              </Card>
             ))}
           </View>
         ) : null}
