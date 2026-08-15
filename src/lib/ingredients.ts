@@ -13,6 +13,21 @@ export function normalizeTag(raw: string): string {
   return raw.replace(/^[a-z]{2}:/, '').toLowerCase().trim();
 }
 
+/**
+ * Shared token normalization: lowercase, strip everything outside
+ * `[a-z0-9 -]`, collapse runs of whitespace to a single space, trim. Used by
+ * ingredient-text tokenization below and reused verbatim by
+ * `src/lib/watchlist.ts` `normalizeWatchTerm` so watchlist terms line up with
+ * how tags are derived — do not duplicate this regex chain elsewhere.
+ */
+export function normalizeToken(raw: string): string {
+  return raw
+    .toLowerCase()
+    .replace(/[^a-z0-9 -]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function coerceStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter((v): v is string => typeof v === 'string');
@@ -63,7 +78,7 @@ export function extractTags({
       .replace(/\d+(\.\d+)?%/g, '') // strip percentage figures (e.g. "13%", "8.7%")
       .replace(/[()[\]]/g, ',') // treat brackets as delimiters, capturing sub-ingredients as tags
       .split(/[,;]+/)
-      .map((t) => t.toLowerCase().replace(/[^a-z0-9 -]/g, '').trim())
+      .map(normalizeToken)
       .map((t) =>
         t
           .split(/\s+/)
