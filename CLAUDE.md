@@ -45,6 +45,18 @@
   `import { File, Paths } from 'expo-file-system'` → `new File(Paths.cache, 'name.json')`
   → `file.write(text)` / `await file.text()` / `file.uri`. File picking:
   `File.pickFileAsync({ mimeTypes: ['…'] })` — no `expo-document-picker` needed.
+- **Device install strategy (owner-decided 2026-08-15).** Routine device sessions:
+  build locally with `eas build --local --profile preview --platform android`
+  (same build profile + remote EAS credentials as cloud → same signature → safe
+  in-place update) and install over USB with `adb install`. When a cycle is pure
+  JS/TS (no new dependency, no native/config/icon change), skip the build
+  entirely and load from Metro (`npx expo start`) into the installed dev client.
+  Reserve EAS **cloud** builds (monthly quota) for distribution rehearsals,
+  production-profile builds, and the iOS pass. **Signing caveat:** Android
+  refuses in-place updates on a signature mismatch, and the forced uninstall
+  wipes the on-device journal (local-first SQLite) — never install a debug- or
+  unknown-signed .apk over the real install; export an in-app backup first when
+  in doubt. `bundle:check` still gates every EAS build, local or cloud.
 - **The three rungs don't bundle the app — run `npm run bundle:check` before an EAS
   build.** `tsc`/`lint`/`jest` never run Metro, so bundler/transform config bugs
   slip past them (e.g. Drizzle's `.sql` imports needed `babel-plugin-inline-import`
