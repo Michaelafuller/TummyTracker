@@ -2,9 +2,11 @@ import { File, Paths } from 'expo-file-system';
 
 export type AppPrefs = {
   offlineMode: boolean;
+  /** Set once the one-time historical tag re-derive backfill has run successfully. */
+  tagBackfillV1Done: boolean;
 };
 
-const DEFAULT_PREFS: AppPrefs = { offlineMode: false };
+const DEFAULT_PREFS: AppPrefs = { offlineMode: false, tagBackfillV1Done: false };
 const PREFS_FILENAME = 'prefs.json';
 
 function prefsFile(): File {

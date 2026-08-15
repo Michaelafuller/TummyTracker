@@ -4,6 +4,7 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { Spacing } from '@/constants/theme';
 import { useDatabaseMigrations } from '@/db/migrate';
+import { runTagBackfillOnce } from '@/db/tagBackfillRunner';
 import { configureNotificationHandler } from '@/features/notifications/service';
 import { usePrefsStore } from '@/features/prefs/prefsStore';
 import { ThemedText } from './themed-text';
@@ -21,6 +22,12 @@ function Centered({ children }: { children: ReactNode }) {
 /** Gates the app on the SQLite migrations being applied before any DB access. */
 function MigrationGate({ children }: { children: ReactNode }) {
   const { success, error } = useDatabaseMigrations();
+
+  // Fire-and-forget: additive-only, so stale-until-repaired reads for one
+  // launch are acceptable. Do not gate rendering on it.
+  useEffect(() => {
+    if (success) void runTagBackfillOnce();
+  }, [success]);
 
   if (error) {
     return (

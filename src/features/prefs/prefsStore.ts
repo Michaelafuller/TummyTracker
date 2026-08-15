@@ -10,6 +10,7 @@ type PrefsStore = AppPrefs & {
 
 export const usePrefsStore = create<PrefsStore>((set, get) => ({
   offlineMode: false,
+  tagBackfillV1Done: false,
   loaded: false,
   load: async () => {
     const prefs = await loadPrefs();

@@ -11,6 +11,7 @@ import {
   type MealComponentDraft,
 } from '@/lib/mealAggregate';
 import { serializeTags } from '@/lib/ingredients';
+import type { TagBackfillRowUpdate } from '@/lib/tagBackfill';
 import { db } from './client';
 import {
   FOOD_TYPES,
@@ -147,6 +148,29 @@ export async function updateLogEntry(id: string, patch: UpdateLogEntryInput): Pr
     .update(logEntry)
     .set({ ...patch, updatedAt: Date.now() })
     .where(eq(logEntry.id, id));
+}
+
+/**
+ * Applies a historical tag re-derive backfill plan (src/lib/tagBackfill.ts) —
+ * one transaction, patching only `tagsJson` per row by id. Deliberately does
+ * NOT bump `updatedAt`: this repairs derived data, not a user edit, and
+ * bumping would falsify the edit history. That's why this doesn't reuse
+ * `updateLogEntry`, which always stamps `updatedAt`.
+ */
+export async function applyTagBackfill(
+  entryUpdates: readonly TagBackfillRowUpdate[],
+  componentUpdates: readonly TagBackfillRowUpdate[],
+): Promise<void> {
+  if (entryUpdates.length === 0 && componentUpdates.length === 0) return;
+
+  await db.transaction(async (tx) => {
+    for (const update of entryUpdates) {
+      await tx.update(logEntry).set({ tagsJson: update.tagsJson }).where(eq(logEntry.id, update.id));
+    }
+    for (const update of componentUpdates) {
+      await tx.update(mealComponent).set({ tagsJson: update.tagsJson }).where(eq(mealComponent.id, update.id));
+    }
+  });
 }
 
 /**
