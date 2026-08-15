@@ -65,7 +65,7 @@ const EMPTY_NUTRITION: OffNutrition = {
 
 /**
  * Parse one raw OFF product node — the shape found at `root.product` in a
- * product-lookup response, or one entry of `root.products` in a search
+ * product-lookup response, or one entry of `root.hits` in a Search-a-licious
  * response — into an OffProduct. `barcode` is the caller's authoritative code
  * for a product lookup; pass null to fall back to the node's own `code` field
  * (search results carry their own, and may have none).
@@ -75,7 +75,11 @@ function mapOffProductJson(barcode: string | null, product: Record<string, unkno
 
   const resolvedBarcode = barcode ?? (typeof product.code === 'string' ? product.code : null);
 
-  const nameRaw = product.product_name;
+  // Prefer the English name (product_name_en) when present, falling back to
+  // product_name. This also serves the barcode path, so scanned foreign
+  // products gain English names for free when OFF has a translation — intended.
+  const nameEnRaw = product.product_name_en;
+  const nameRaw = typeof nameEnRaw === 'string' && nameEnRaw.trim().length > 0 ? nameEnRaw : product.product_name;
   const name = typeof nameRaw === 'string' && nameRaw.trim().length > 0 ? nameRaw.trim() : null;
 
   const brandsRaw = product.brands;
@@ -227,17 +231,19 @@ function genericityScore(product: OffProduct, query: string): number {
 }
 
 /**
- * Map a raw OFF `/cgi/search.pl` (Generic_Search) response into candidate
- * products. Entries with no product name are dropped — OFF search returns
- * plenty of incomplete community entries. Remaining candidates are re-ranked
- * by `genericityScore` (stable sort, so OFF's own most-scanned ordering is
- * the tiebreak) before being capped at 5 — this favors generic/unbranded
- * matches (e.g. a plain "Banana") over specific branded products when the
- * user typed a bare, generic query.
+ * Map a raw Search-a-licious (`search.openfoodfacts.org/search`) response into
+ * candidate products. Entries with no product name are dropped — OFF search
+ * returns plenty of incomplete community entries. Remaining candidates are
+ * re-ranked by `genericityScore` (stable sort, so Search-a-licious's own
+ * relevance ordering is the tiebreak — strictly better than the old
+ * most-scanned tiebreak, since relevance already favors on-topic results)
+ * before being capped at 5 — this favors generic/unbranded matches (e.g. a
+ * plain "Banana") over specific branded products when the user typed a bare,
+ * generic query.
  */
 export function mapOffSearchResponse(json: unknown, query: string): OffProduct[] {
   const root = asRecord(json);
-  const products = Array.isArray(root.products) ? root.products : [];
+  const products = Array.isArray(root.hits) ? root.hits : [];
   return products
     .map((p) => mapOffProductJson(null, asRecord(p)))
     .filter((p) => p.name != null)

@@ -74,15 +74,33 @@ describe('mapOffResponse', () => {
     const json = { status: 1, product: { product_name: 'Loose', nutriments: {} } };
     expect(mapOffResponse('1', json).servingG).toBeNull();
   });
+
+  it('prefers product_name_en over product_name when both are present and differ', () => {
+    const json = { status: 1, product: { product_name: 'Banane', product_name_en: 'Banana', nutriments: {} } };
+    expect(mapOffResponse('1', json).name).toBe('Banana');
+  });
+
+  it('falls back to product_name when product_name_en is absent or blank', () => {
+    const absent = { status: 1, product: { product_name: 'Banane', nutriments: {} } };
+    expect(mapOffResponse('1', absent).name).toBe('Banane');
+
+    const blank = { status: 1, product: { product_name: 'Banane', product_name_en: '   ', nutriments: {} } };
+    expect(mapOffResponse('1', blank).name).toBe('Banane');
+  });
+
+  it('returns null when both product_name and product_name_en are empty', () => {
+    const json = { status: 1, product: { product_name: '', product_name_en: '', nutriments: {} } };
+    expect(mapOffResponse('1', json).name).toBeNull();
+  });
 });
 
 describe('mapOffSearchResponse', () => {
-  it('maps each product node and caps at 5, most-scanned order preserved when scores tie', () => {
+  it('maps each hit and caps at 5, relevance order preserved when scores tie', () => {
     // All 7 fixtures are unbranded, uncategorized, and the same name length relative
     // to the query, so genericityScore ties across the board — the stable sort falls
-    // back to OFF's own most-scanned order (the array's original order).
+    // back to Search-a-licious's own relevance order (the array's original order).
     const json = {
-      products: Array.from({ length: 7 }, (_, i) => ({
+      hits: Array.from({ length: 7 }, (_, i) => ({
         code: `${i}`,
         product_name: `Product ${i}`,
         nutriments: { 'energy-kcal_100g': 100 + i },
@@ -96,7 +114,7 @@ describe('mapOffSearchResponse', () => {
 
   it('drops products with no product_name', () => {
     const json = {
-      products: [
+      hits: [
         { code: '1', product_name: 'Has a name', nutriments: {} },
         { code: '2', nutriments: {} },
         { code: '3', product_name: '', nutriments: {} },
@@ -109,48 +127,48 @@ describe('mapOffSearchResponse', () => {
 
   it('extracts the first brand from a comma-separated brands field', () => {
     const json = {
-      products: [{ code: '1', product_name: 'Chips', brands: 'Chiquita, Something Else', nutriments: {} }],
+      hits: [{ code: '1', product_name: 'Chips', brands: 'Chiquita, Something Else', nutriments: {} }],
     };
     expect(mapOffSearchResponse(json, 'chips')[0].brand).toBe('Chiquita');
   });
 
   it('reports barcode null when the product node has no code', () => {
-    const json = { products: [{ product_name: 'Homemade-ish', nutriments: {} }] };
+    const json = { hits: [{ product_name: 'Homemade-ish', nutriments: {} }] };
     expect(mapOffSearchResponse(json, 'homemade-ish')[0].barcode).toBeNull();
   });
 
-  it('is defensive against a missing/garbage products array', () => {
+  it('is defensive against a missing/garbage hits array', () => {
     expect(mapOffSearchResponse(null, 'x')).toEqual([]);
     expect(mapOffSearchResponse({}, 'x')).toEqual([]);
-    expect(mapOffSearchResponse({ products: 'not-an-array' }, 'x')).toEqual([]);
+    expect(mapOffSearchResponse({ hits: 'not-an-array' }, 'x')).toEqual([]);
   });
 
   it('extracts categoriesTags defensively', () => {
     const withTags = {
-      products: [{ code: '1', product_name: 'Banana', categories_tags: ['en:fruits', 'en:bananas'] }],
+      hits: [{ code: '1', product_name: 'Banana', categories_tags: ['en:fruits', 'en:bananas'] }],
     };
     expect(mapOffSearchResponse(withTags, 'banana')[0].categoriesTags).toEqual(['en:fruits', 'en:bananas']);
 
     const garbageTags = {
-      products: [{ code: '2', product_name: 'Weird', categories_tags: 'not-an-array' }],
+      hits: [{ code: '2', product_name: 'Weird', categories_tags: 'not-an-array' }],
     };
     expect(mapOffSearchResponse(garbageTags, 'weird')[0].categoriesTags).toEqual([]);
 
     const mixedTags = {
-      products: [{ code: '3', product_name: 'Mixed', categories_tags: ['en:fruits', 42, null] }],
+      hits: [{ code: '3', product_name: 'Mixed', categories_tags: ['en:fruits', 42, null] }],
     };
     expect(mapOffSearchResponse(mixedTags, 'mixed')[0].categoriesTags).toEqual(['en:fruits']);
 
     const noTags = {
-      products: [{ code: '4', product_name: 'No Tags' }],
+      hits: [{ code: '4', product_name: 'No Tags' }],
     };
     expect(mapOffSearchResponse(noTags, 'no tags')[0].categoriesTags).toEqual([]);
   });
 
   it('ranks an unbranded generic match above a branded product for the same query', () => {
     const json = {
-      products: [
-        // Branded, listed first (higher unique_scans_n) — should be outranked.
+      hits: [
+        // Branded, listed first (higher relevance) — should be outranked.
         { code: '1', product_name: 'Chiquita Banana Chips', brands: 'Chiquita', nutriments: {} },
         // Unbranded, generic, listed second — should rank first after re-ranking.
         { code: '2', product_name: 'Banana', nutriments: {}, categories_tags: ['en:fruits'] },
@@ -164,7 +182,7 @@ describe('mapOffSearchResponse', () => {
 
   it('breaks ties toward produce-category hints over processed-category hints', () => {
     const json = {
-      products: [
+      hits: [
         // Both unbranded, both name-length-neutral relative to the query — the
         // category hint is the only differentiator.
         { code: '1', product_name: 'Snack Mix', nutriments: {}, categories_tags: ['en:snacks'] },
@@ -174,6 +192,26 @@ describe('mapOffSearchResponse', () => {
     const results = mapOffSearchResponse(json, 'mix');
     expect(results[0].name).toBe('Fresh Mix');
     expect(results[1].name).toBe('Snack Mix');
+  });
+
+  it('prefers product_name_en over product_name when both are present and differ', () => {
+    const json = {
+      hits: [{ code: '1', product_name: 'Banane', product_name_en: 'Banana', nutriments: {} }],
+    };
+    expect(mapOffSearchResponse(json, 'banana')[0].name).toBe('Banana');
+  });
+
+  it('falls back to product_name when product_name_en is absent or blank', () => {
+    const absent = { hits: [{ code: '1', product_name: 'Banane', nutriments: {} }] };
+    expect(mapOffSearchResponse(absent, 'banana')[0].name).toBe('Banane');
+
+    const blank = { hits: [{ code: '2', product_name: 'Banane', product_name_en: '   ', nutriments: {} }] };
+    expect(mapOffSearchResponse(blank, 'banana')[0].name).toBe('Banane');
+  });
+
+  it('drops an entry when both product_name and product_name_en are empty', () => {
+    const json = { hits: [{ code: '1', product_name: '', product_name_en: '', nutriments: {} }] };
+    expect(mapOffSearchResponse(json, 'x')).toEqual([]);
   });
 });
 
