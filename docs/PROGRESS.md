@@ -35,6 +35,8 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   fixing the three real gaps found (parenthetical sub-ingredients dropped by
   `extractTags`, single-component meals losing full ingredient text on the parent
   row, edited ingredient text never merged into tags). Specced in `docs/HANDOFF.md`.
+- **Queued next cycle (decided 2026-08-15):** migrate name search off the failing
+  legacy `cgi/search.pl` endpoint to Search-a-licious — see Tier 3 row + Decision 6.
 - **Owner on-device checklist (carried):** iOS app icon (needs EAS build), iOS
   time-picker Done-button feel, light-mode look, migration 0006 against a real
   database, and the full scan → add-next → finish-meal → review → save loop (camera).
@@ -77,6 +79,8 @@ Sentiment trend chart, confidence labeling, and ingredient-pair analysis **✅ s
 
 | Item | Why | Effort | Notes |
 |------|-----|:--:|------|
+| **Goals tab: daily nutrition tally** (owner-specced 2026-08-15) | 5th nav tab aggregating today's nutrients across food entries — the foundation for goals below | S–M | pure-lib day aggregation (count parent meal rows only, not components); flag entries with missing nutrient data so totals stay trustworthy; later: 7-day mini-trend (see intake-charts row) |
+| **Nutrient threshold goals + daily check-in** (owner-specced 2026-08-15) | Per-nutrient floors (≥, e.g. 50g protein) and caps (≤, e.g. 20g fat), opt-in per nutrient | M | additive `goal` migration (nutrient, direction, threshold, enabled); **one global daily check-in time** — notification body lists unmet floors, recomputed/rescheduled on every save + app-open, cancelled when all floors met (totals can't change outside the app, so body is never stale; recompute on day rollover); **caps alert in-app at save time** (only a save can cross one), red state in tab; reuse `features/notifications` service pattern; sequenced **after search migration** |
 | **Per-food / ingredient drill-down** | Tap a finding → every instance + outcomes | S–M | no dep; natural follow-on to insights v2 |
 | **BM-regularity + intake charts** | Complete the trends story beyond sentiment | S–M | reuse the zero-dep chart components |
 | **Meal-component editing after save** | v1 meal builder saves components immutably; edit/remove with re-aggregation is the obvious next ask | S–M | builds on migration 0006 |
@@ -84,10 +88,14 @@ Sentiment trend chart, confidence labeling, and ingredient-pair analysis **✅ s
 
 ## Tier 3 — Quality of life
 
-**OFF search-by-name + unbranded re-ranking — ✅ shipped (2026-07-03).**
-Recovers buried generic entries (e.g. "banana") but can't manufacture ones OFF
-lacks entirely (e.g. "apple"); if that gap keeps biting in real use, see
-Decision 6 before re-scoping.
+**OFF search-by-name + unbranded re-ranking — ✅ shipped (2026-07-03), but the
+endpoint under it is dying.** Recovers buried generic entries (e.g. "banana") but
+can't manufacture ones OFF lacks entirely (e.g. "apple"); see Decision 6.
+
+| Item | Why it matters | Effort | Notes |
+|------|----------------|:--:|------|
+| **Search migration → Search-a-licious** | Legacy `cgi/search.pl` now 503s on unfiltered queries (verified 2026-08-15) — name search is user-facing broken — and it returned native-language names anyway. New endpoint: English results (`langs=en` + `product_name_en` fallback), generic entries ranked top by default relevance | S | **committed next cycle** (Decision 6 rev. 2026-08-15). Parse `hits` not `products`; drop `sort_by=unique_scans_n` (resurfaces French products); keep genericity re-ranker as tiebreak; add contact email to User-Agent (OFF terms); stay search-on-submit (10 req/min limit) |
+
 Remaining Tier 3: photo attachment ⚠ · save-confirmation toasts + haptics ·
 onboarding + better empty states · swipe-to-delete · reminder **deep-link** into
 the add-entry form · settings (force theme, first-day-of-week — currently
@@ -134,6 +142,18 @@ once entry volume grows.
    preference. **Decision: stay OFF-only for now**, reassess only if the apple/orange-
    class gap keeps coming up in real use after the ranking fix. Don't re-open without new
    signal — see this item before re-scoping.
+   **Re-evaluated 2026-08-15 (new signal: legacy search endpoint failing).** Full
+   landscape re-survey: still no free API matches OFF on barcode + allergen/additive
+   tags; the alternatives market got *worse* (Nutritionix free tier discontinued,
+   Edamam free plan removed, CalorieNinjas paywalled calories/protein, FatSecret
+   requires an IP-whitelisted proxy — violates no-backend). USDA FDC re-verified:
+   fallback-only integration is now ~2 days but still key-required, no real barcode
+   endpoint, no allergen taxonomy. **Decision: stay OFF-only; migrate name search to
+   Search-a-licious (`search.openfoodfacts.org`) next cycle** — live-tested to fix
+   both the language problem and generic-food ranking. Generic-food gap: re-test
+   after migration; if it still bites, the preferred fix is a **bundled on-device
+   USDA SR Legacy subset** (CC0, ~300 foods ≈ 50 KB or ~7,800 ≈ 1.5 MB SQLite,
+   zero network/keys, local-first-aligned) over an FDC API fallback.
 
 ## Definition of done (see CLAUDE.md §4)
 
