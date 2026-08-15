@@ -1,202 +1,172 @@
-# HANDOFF.md — Cycle: Search-a-licious migration + historical tag backfill
+# HANDOFF.md — Cycle: trigger watchlist / elimination mode
 
-> **Read first:** root `CLAUDE.md` (auto-loaded). No other protocol doc is needed —
-> every task below is fully specced with file paths from the current tree.
+> **Read first:** root `CLAUDE.md` (auto-loaded). Every task below is specced
+> with file paths from the current tree; discover exact insertion points by
+> reading the named files before editing.
 >
 > **Session type:** execute. Definition of done per CLAUDE.md §4:
 > `npm run typecheck && npm run lint && npm test` green, tests ship with each
 > change, one logical change per commit, imperative scoped commit messages.
-> No schema change (no migration), no new dependency, no native/Babel change —
-> `npm run bundle:check` is not required this cycle. The only UI-adjacent touch
-> is a fire-and-forget effect in `app-providers.tsx` (Phase 2); no visible UI
-> changes.
+> **This cycle adds a schema migration, so `npm run bundle:check` IS required**
+> at closeout (a new migration `.sql` file must be inlined by
+> `babel-plugin-inline-import` — exactly the class of bug the three rungs
+> can't see).
 >
-> **Source of these requirements:** owner planning session 2026-08-15
-> (PROGRESS.md Decision 6 revision + owner-approved backfill). Context: the
-> legacy OFF search endpoint (`world.openfoodfacts.org/cgi/search.pl`) now
-> returns HTTP 503 on unfiltered queries — name search is user-facing broken —
-> and it returned each product's *native-language* name anyway. OFF's
-> officially recommended replacement is Search-a-licious
-> (`search.openfoodfacts.org`), live-verified 2026-08-15 to return all-English
-> results with generic entries ranked at the top by default relevance.
-> **Do not touch `docs/PROGRESS.md`, `docs/RESULTS.md`, `docs/ACCEPTANCE.md`,
-> or `docs/E2E.md`** — the plan session closes those out.
+> **Source of these requirements:** owner planning session 2026-08-15;
+> PROGRESS.md Tier 1 "Trigger watchlist / elimination mode" — *mark suspected
+> ingredients, flag entries containing them, track reactions — how food
+> journals are actually used therapeutically.* This is the top-ranked unshipped
+> differentiator item. It builds on the hardened ingredient capture: entry
+> `tagsJson` now carries parenthetical sub-ingredients, allergens, and
+> additives, and the backfill repaired historical rows.
 
 ---
 
-## Phase 1 — migrate name search to Search-a-licious
+## Design contract (decided in planning — do not re-litigate)
 
-### 1a. `src/features/barcode/api.ts`
-
-- Replace `SEARCH_URL` with `https://search.openfoodfacts.org/search`.
-- In `fetchOffSearchResults`, replace the params wholesale:
-  - `q`: the query (plain text; Search-a-licious treats unrecognized words as
-    full-text search).
-  - `langs`: `'en'` — selects which language-specific name fields are searched
-    and returned.
-  - `page_size`: `'24'` (unchanged — the genericity re-ranker wants a wide pool).
-  - `fields`: the existing list **plus `product_name_en`** (i.e.
-    `code,product_name,product_name_en,brands,nutriments,serving_quantity,ingredients_text,allergens_tags,additives_tags,categories_tags`).
-  - **Remove** `search_terms`, `search_simple`, `action`, `json`, and
-    `sort_by`. The `sort_by=unique_scans_n` habit must NOT be ported: on
-    Search-a-licious it ranks by *global* popularity, which resurfaces French
-    products. Default sort is descending relevance — live-tested to rank
-    generic English entries ("Fresh Banana", plain "Bananas") at the top.
-    Leave a one-line comment in the code stating exactly that, so a future
-    session doesn't "helpfully" re-add popularity sorting.
-- **Deliberately no country filter** (`countries_tags`): live testing showed
-  `langs=en` alone ranks generic entries best; a US-only filter would exclude
-  the UK/international generic produce entries that are OFF's de-facto
-  "generic food" rows. Note this in the function's doc comment.
-- Update `USER_AGENT` to `TummyTracker/1.0 (michaellovesellen@gmail.com)` —
-  OFF's terms now ask for a contact email in the User-Agent. (Applies to both
-  the barcode lookup and search; it's one shared constant.)
-- Barcode lookup (`fetchOffProduct`, `BASE_URL`) is otherwise **unchanged**.
-- Documented OFF limits as of 2026-08: 10 search req/min/IP, 15 product req/min/IP,
-  applied per end user for mobile apps. The existing UX already complies
-  (search fires on commit, not per keystroke — `useOffSearch` gates on a
-  committed query); do not add polling or retry storms. `retry: 1` is fine.
-
-### 1b. `src/lib/openFoodFacts.ts`
-
-- `mapOffSearchResponse`: read `root.hits` (Search-a-licious's array name)
-  instead of `root.products`. Everything downstream (drop nameless entries,
-  `genericityScore` re-rank, cap at 5) stays. The re-ranker's stable sort now
-  tiebreaks on *relevance* order instead of most-scanned order — that's
-  strictly better; update its doc comment to say so.
-- `mapOffProductJson`: prefer the English name —
-  `product_name_en` when it's a non-empty trimmed string, else `product_name`
-  (same trimmed-non-empty rule). This helper also serves the barcode path, so
-  scanned foreign products gain English names for free when OFF has a
-  translation — intended, note it in the comment.
-- `nutriments` sub-keys are identical on Search-a-licious (verified live:
-  `energy-kcal_100g`, `fat_100g`, `carbohydrates_100g`, `proteins_100g`,
-  `fiber_100g`, `sugars_100g`, `sodium_100g`/`salt_100g`) — no mapper changes
-  beyond the name fallback.
-- Update stale doc comments referencing `cgi/search.pl` / "Generic_Search"
-  (file header of `api.ts`, `mapOffSearchResponse` docstring).
-
-### 1c. Tests
-
-- `src/features/barcode/__tests__/useOffSearch.test.ts` and
-  `src/lib/__tests__/openFoodFacts*.test.ts` (wherever `mapOffSearchResponse`
-  fixtures live): rename fixture root key `products` → `hits`; assert the
-  request URL hits `search.openfoodfacts.org/search` with `q`/`langs` and
-  **without** `sort_by`.
-- New name-fallback cases: `product_name_en` present and different → English
-  name wins (both search and barcode-lookup mappers); `product_name_en` absent
-  or empty/whitespace → falls back to `product_name`; both empty → entry
-  dropped from search results (existing rule).
-
-**Commit:** `feat(barcode): migrate name search to Search-a-licious endpoint`
+- A **watchlist item** is a normalized text term the user suspects ("soy",
+  "dairy", "e322"). Watching starts at `createdAt` — that timestamp doubles as
+  the **elimination start date**. v1 has no pause/status; removing an item
+  stops watching it.
+- **Matching is prefix-at-word-boundary**, not substring: a term matches a tag
+  when `tag === term` OR the term appears in the tag starting at a word
+  boundary (start of tag, or after a space/hyphen). So `soy` matches
+  `soybeans` and `soy lecithin` and `hydrolyzed soy protein`, but `milk` does
+  **NOT** match `buttermilk`. Rationale (mirror of the additive-tags policy,
+  inverted for alerts): a warning that cries wolf erodes trust faster than a
+  missed match disappoints. Multi-word terms work via the same rule
+  (`soy protein` matches `isolated soy protein`). Document this in the
+  matcher's doc comment with the buttermilk example.
+- **Analysis-side stats reuse the parent-row convention:** stats are computed
+  over `logEntry` rows' `tagsJson` only (never component rows), matching how
+  `src/features/analysis/insights.ts` reads tags.
+- **Where it lives in the UI:** a Watchlist section on the Insights tab
+  (manage + stats), a one-tap "Watch" action on each ingredient finding card
+  (the therapeutic loop: insight → watch → confirm), a warning banner on the
+  entry view for entries containing watched ingredients, and a non-blocking
+  notice on the meal review screen before save (the elimination-mode value
+  moment). No notifications this cycle.
 
 ---
 
-## Phase 2 — historical tag re-derive backfill (owner-approved 2026-08-15)
+## Phase 1 — schema, migration, repository
 
-Entries saved before the 2026-08-15 ingredient-capture hardening lack
-parenthetical sub-ingredient tags (the old `extractTags` deleted `(...)`
-content). Re-derive tags for stored rows as an **additive-only union** —
-existing tags are never removed or reordered, new ones are appended. This is
-the same policy as the Phase-3 merge in `formModel.ts` (see its comment).
+- `src/db/schema.ts`: new `watchlistItem` table (`watchlist_item`):
+  `id` (text pk), `term` (text, not null, **unique**), `createdAt` (int ms).
+  Follow the existing table definitions' style. Export `WatchlistItem` /
+  `NewWatchlistItem` inferred types like the others.
+- Generate migration 0007 with the project's drizzle-kit setup (see
+  `drizzle.config.ts` / package.json scripts; migrations live in
+  `src/db/migrations/` and are registered in `migrations/migrations.js` by the
+  generator). Additive only — do not touch prior migrations.
+- `src/db/repository.ts`: `listWatchlistItems(): Promise<WatchlistItem[]>`
+  (ordered by `createdAt` asc), `addWatchlistItem(term: string)` (id/createdAt
+  filled in, per `createLogEntry`'s pattern; caller passes an
+  already-normalized term), `removeWatchlistItem(id: string)`.
 
-### 2a. Pure derivation — `src/lib/tagBackfill.ts` (new)
-
-Pure, no I/O, unit-testable. Using `mergeTags`, `extractTags`, `parseTagsJson`,
-`serializeTags` from `@/lib/ingredients`:
-
-- `rederiveRowTags(tagsJson: string | null, ingredientsText: string | null): string | null`
-  — returns the **new** serialized tags when the union
-  `mergeTags(existing, extractTags({ ingredientsText, allergensTags: null, additivesTags: null }))`
-  grew, else `null` (no update needed). Because the union is additive and
-  order-preserving, "grew" is simply `merged.length > existing.length`.
-- `planTagBackfill(entries, componentsByEntryId)` — takes food-type `LogEntry`
-  rows (filter with `FOOD_TYPES` from `@/db/schema`; skip bm/symptom rows) and
-  a map of each entry's `MealComponent` rows. Returns
-  `{ entryUpdates: { id, tagsJson }[], componentUpdates: { id, tagsJson }[] }`:
-  1. Each component row re-derives from its **own** `ingredientsText`.
-  2. Each entry re-derives from its own `ingredientsText`, **then** unions in
-     every tag of its (post-re-derive) component rows — multi-component
-     parents saved before hardening gain any newly recovered sub-ingredient
-     tags; the parent must remain a superset of its components' tags (the
-     collation invariant).
-  3. Rows whose union didn't grow produce no update. Running the plan twice
-     must produce zero updates the second time (idempotent — assert in tests).
-
-### 2b. Persistence — `src/db/repository.ts`
-
-Add `applyTagBackfill(entryUpdates, componentUpdates): Promise<void>`: one
-transaction, `set({ tagsJson })` per row by id. **Do not bump `updatedAt`** —
-this is a repair of derived data, not a user edit; bumping would falsify the
-edit history (comment this; it's why the function doesn't reuse
-`updateLogEntry`). No-op fast-path when both arrays are empty.
-
-### 2c. Run-once gate — `src/lib/prefs.ts` + runner
-
-- Add `tagBackfillV1Done: boolean` to `AppPrefs`, default `false` in
-  `DEFAULT_PREFS` (the `{ ...DEFAULT_PREFS, ...JSON.parse(text) }` load
-  pattern makes the new field backward-compatible with existing pref files).
-- New `src/db/tagBackfillRunner.ts`: `runTagBackfillOnce()` —
-  `loadPrefs()`; return early if `tagBackfillV1Done`; else
-  `listLogEntries()` + `listAllMealComponents()` → `planTagBackfill` →
-  `applyTagBackfill` → `savePrefs({ ...prefs, tagBackfillV1Done: true })`.
-  Set the flag **only after** a successful apply — on throw, swallow with
-  `console.warn` and leave the flag unset so the next launch retries
-  (idempotence makes retry safe).
-- `src/components/app-providers.tsx`: inside `MigrationGate`, fire-and-forget
-  after migrations succeed:
-  `useEffect(() => { if (success) void runTagBackfillOnce(); }, [success]);`
-  Do not gate rendering on it — the backfill is additive; stale-until-repaired
-  reads are acceptable for one launch.
-
-### 2d. Tests
-
-`src/lib/__tests__/tagBackfill.test.ts` (pure-function tests carry the load):
-
-- Pre-hardening row: `tagsJson` lacking parenthetical sub-ingredients +
-  `ingredientsText` `"Tofu (water, soybeans, calcium sulfate)"` → update adds
-  `soybeans`, `calcium sulfate` etc., existing tags first, order preserved.
-- Additive-only: a tag whose word no longer appears in `ingredientsText`
-  survives; no update produced when the text is a subset of existing tags.
-- Idempotent: re-planning over updated rows yields zero updates.
-- Multi-component parent: gains a tag recovered on a component; parent stays
-  a superset of component tags.
-- Skips: non-food types untouched; `null`/empty `ingredientsText` handled
-  (component-union step still runs for parents).
-- Runner: one test that a set `tagBackfillV1Done` flag short-circuits before
-  any DB read (mock `@/lib/prefs` and the repository module).
-
-**Commit:** `feat(db): additive tag re-derive backfill for pre-hardening entries`
+**Commit:** `feat(db): add watchlist table and repository (migration 0007)`
 
 ---
 
-## Phase 3 — constitution touch-up (root `CLAUDE.md` only)
+## Phase 2 — pure matching + stats (`src/lib/watchlist.ts`, new)
 
-§3 tech-stack table, Nutrition API row → `**Open Food Facts** (product lookup
-`world.openfoodfacts.org` + search `search.openfoodfacts.org`, no key)`. Do not
-edit `docs/CLAUDE.md` (historical spec — stays as-is per its §0 note).
+Pure, no React, no I/O — this is where the test leverage lives.
 
-**Commit:** `docs(claude): record Search-a-licious as the OFF search endpoint`
+- `normalizeWatchTerm(input: string): string | null` — same normalization as
+  tag extraction (lowercase, strip chars outside `[a-z0-9 -]`, collapse/trim
+  whitespace); null when the result is shorter than 2 chars. If
+  `src/lib/ingredients.ts` doesn't already export its normalization step,
+  extract/export it there and reuse — do not duplicate the regex chain.
+- `matchesWatchTerm(tag: string, term: string): boolean` — the
+  prefix-at-word-boundary rule from the design contract. Escape the term
+  before building any RegExp.
+- `findWatchedTags(tagsJson: string | null, items: readonly WatchlistItem[])`
+  → `{ item: WatchlistItem; matchedTags: string[] }[]` — which watched terms an
+  entry trips, with the tags that matched (for banner copy). Empty array when
+  no matches / null tagsJson.
+- `computeWatchStats(item: WatchlistItem, entries: readonly LogEntry[], now: number)`
+  → per-item stats over **food-type parent rows** (filter `FOOD_TYPES`):
+  - `timesSinceWatch`: matching entries with `loggedAt >= item.createdAt`;
+  - `lastEatenAt`: max `loggedAt` of matching entries overall, or null;
+  - `cleanDays`: full days from `max(lastEatenAt, item.createdAt)` to `now`
+    (never negative) — "clean since watching" when never eaten since;
+  - `avgSentiment` + `ratedCount` over matching rated entries (all-time).
+  Take `now` as a parameter — no `Date.now()` inside lib functions.
+
+**Tests** (`src/lib/__tests__/watchlist.test.ts`): matching — exact, word
+start, mid-tag word boundary, hyphen boundary, the `milk`/`buttermilk`
+negative, multi-word term, regex-special chars in a term; normalization —
+case/punctuation/short-input-null; stats — timesSinceWatch respects
+`createdAt`, cleanDays for eaten-after-watch vs never-eaten, unrated entries
+excluded from avg, non-food rows ignored.
+
+**Commit:** `feat(watchlist): tag matching and per-term stats helpers`
+
+---
+
+## Phase 3 — store + Insights-tab watchlist section
+
+- `src/features/watchlist/watchlistStore.ts`: minimal zustand store mirroring
+  `src/features/prefs/prefsStore.ts`'s shape — `items`, `load()` (from
+  repository), `add(term)`, `remove(id)` (each calls the repository then
+  refreshes/updates state). Hydrate it in `src/components/app-providers.tsx`'s
+  `MigrationGate` success effect (alongside `runTagBackfillOnce()`) — watchlist
+  reads must not race the migration gate.
+- Insights tab (`src/app/(tabs)/insights.tsx`):
+  - New **Watchlist section**: per item show the term, times-since-watch,
+    clean-days streak (or "clean since watching"), avg sentiment where rated
+    (render sentiment via `src/features/sentiment/scale.ts` — never hard-code
+    emoji), and a remove control. Manual add: a `TextInput` + add button that
+    runs `normalizeWatchTerm` and rejects dupes (the DB `unique` constraint is
+    the backstop, not the UX). Empty state: one line inviting the user to add
+    a suspect or watch one from a finding.
+  - Each **ingredient finding card** (`TagFinding` list) gets a one-tap
+    "Watch"/"Watching" affordance keyed on whether the tag is already covered
+    by `matchesWatchTerm` against current items.
+  - Every interactive element gets an `accessibilityLabel` (CLAUDE.md §8);
+    follow the tab's existing styling/theme constants. No new chart types.
+- Component tests (async RNTL v14 — await `render`/`fireEvent`, destructure
+  queries from the awaited result): section renders items + stats; add
+  normalizes and persists; remove removes; finding-card Watch adds the tag;
+  already-watched tag shows "Watching". Mock the repository module the way
+  existing screen tests mock DB access.
+
+**Commit:** `feat(watchlist): insights-tab section with stats and quick-watch`
+
+---
+
+## Phase 4 — flag watched ingredients at the point of use
+
+- Entry view (`src/app/entry/[id].tsx`): when `findWatchedTags` on the loaded
+  entry is non-empty, render a warning banner naming the matched terms (and
+  the matching tags when they differ, e.g. "soy — matched: soybeans"). Styled
+  with existing theme constants; `accessibilityLabel` on the banner.
+- Meal review (`src/app/meal/review.tsx`): compute the union of component
+  tags (the same union that will be saved — see `unionComponentTags` usage)
+  and show a **non-blocking** notice above the save button when watched
+  ingredients are present. It must never prevent saving — elimination mode is
+  the user's choice to break, and the journal must capture the lapse.
+- Component tests for both: banner/notice appears when tags match a watched
+  term, absent otherwise, save still works with the notice showing.
+
+**Commit:** `feat(watchlist): flag watched ingredients on entry view and meal review`
 
 ---
 
 ## Explicitly out of scope (do not do these)
 
-- **USDA anything** (API fallback or bundled dataset) — Decision 6: re-test the
-  generic-food gap after this migration before adding any second source.
-- **Any visible UI change**, including result-list copy or layout.
-- **Country filtering or popularity sorting** on search (see Phase 1 rationale).
-- **Search-as-you-type** — OFF terms; keep commit-gated queries.
-- **Schema changes/migrations** — the backfill mutates only `tagsJson` values.
-- **Editing `docs/PROGRESS.md` / `docs/RESULTS.md`** — plan session's job.
+- Pause/snooze/status on watchlist items; editing a term (remove + re-add).
+- Notifications of any kind (Goals cycle owns notification UX later).
+- Badges in the browse/calendar lists (candidate follow-on; note it, skip it).
+- Component-row-level matching or any change to analysis/insights math.
+- Any OFF/search/backfill changes; Goals feature; PROGRESS/RESULTS edits.
 
 ## After the phases (execute-session closeout)
 
-1. Full rungs green (`npm run typecheck && npm run lint && npm test`).
+1. Full rungs green, **plus `npm run bundle:check`** (new migration `.sql`
+   must survive Metro export).
 2. Summarize per phase; call out any spec deviation explicitly.
-3. Note for the next test-plan session: the search endpoint change is
-   runtime-visible — the next device session owes an on-device search-by-name
-   smoke ("banana" → English, generic-first results) on top of the two
-   targeted Maestro flows already owed from the hardening cycle
-   (`ab-satfat-ingredients`, `01b-manual-entry`); the backfill needs a
-   one-launch check that pre-existing entries gained tags (owner checklist).
+3. Note for the next test-plan session: new Maestro coverage owed for the
+   watchlist loop (add from finding → see review notice → entry banner), and
+   the owner's device checklist gains "migration 0007 against a real
+   database".
