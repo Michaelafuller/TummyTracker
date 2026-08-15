@@ -30,19 +30,30 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   regression 2026-07-03: **18/19** (best-ever clean run); the one red
   (`e-temporal-insights`) is a classified flow-bug with the fix applied — re-run
   pending, not an app defect (`docs/RESULTS.md`).
-- **Ingredient-capture hardening cycle — ✅ complete 2026-08-15** (on branch
-  `claude/tummytracker-api-lookup-c6906a`, pending merge to `main`): all four
-  HANDOFF phases executed, rungs green (44 suites / 333 tests). Owed next device
-  session: targeted Maestro re-run of `ab-satfat-ingredients` + `01b-manual-entry`
-  only (lib-level changes, no UI) — no new flows.
-- **Next cycle (decided 2026-08-15):** migrate name search off the failing
-  legacy `cgi/search.pl` endpoint to Search-a-licious (Tier 3 row + Decision 6),
-  plus the owner-approved historical tag re-derive backfill (Tier 1 row).
+- **Two cycles complete 2026-08-15** on branch `claude/tummytracker-api-lookup-c6906a`
+  (pending merge to `main`): ingredient-capture hardening + Search-a-licious
+  migration & tag backfill. Rungs green at branch HEAD (46 suites / 353 tests).
+- **Owed next device session:** targeted Maestro re-run of `ab-satfat-ingredients`
+  + `01b-manual-entry` (no new flows) · on-device search-by-name smoke ("banana" →
+  English, generic-first results — endpoint changed) · one-launch check that
+  pre-existing entries gained parenthetical tags (backfill runs once after the
+  migration gate).
 - **Owner on-device checklist (carried):** iOS app icon (needs EAS build), iOS
   time-picker Done-button feel, light-mode look, migration 0006 against a real
   database, and the full scan → add-next → finish-meal → review → save loop (camera).
 
 ### Shipped last cycle (overwrite each plan cycle; full history = `git log`)
+
+2026-08-15 cycle (planned Fable 5, executed Sonnet 5):
+- **Search-a-licious migration:** name search moved off the dead legacy
+  `cgi/search.pl` (was 503-ing) to `search.openfoodfacts.org` — `langs=en`,
+  `product_name_en` fallback (also upgrades scanned foreign products), default
+  relevance sort (no popularity sort, no country filter — both documented in-code),
+  contact email in User-Agent. Genericity re-ranker retained as tiebreak.
+- **Historical tag backfill (owner-approved):** run-once additive-only re-derive
+  over pre-hardening rows — pure plan in `lib/tagBackfill.ts`, `updatedAt`
+  untouched (derived-data repair, not an edit), flag set only after successful
+  apply, idempotent retry on failure.
 
 2026-07-19 cycle, closed 2026-08-15 (planned Fable 5, executed Sonnet 5):
 - **Ingredient-capture hardening:** audit verdict — meal collation already
@@ -76,7 +87,7 @@ are **✅ shipped**. Remaining:
 | Item | Why it matters | Effort | Notes |
 |------|----------------|:--:|------|
 | **Trigger watchlist / elimination mode** | Mark suspected ingredients, flag entries containing them, track reactions — how food journals are *actually* used therapeutically | M | builds on ingredient capture |
-| **Historical tag re-derive (backfill)** | Recover parenthetical sub-ingredient tags for entries saved before the hardening fix; additive-only union is safe | S | **owner-approved 2026-08-15** — rides along with the search-migration cycle |
+| **Historical tag re-derive (backfill)** | Recover parenthetical sub-ingredient tags for entries saved before the hardening fix | S | **✅ shipped 2026-08-15** — one-launch device check owed (see Status) |
 
 ## Tier 2 — The payoff (turn data into trust + motivation)
 
@@ -100,7 +111,7 @@ can't manufacture ones OFF lacks entirely (e.g. "apple"); see Decision 6.
 
 | Item | Why it matters | Effort | Notes |
 |------|----------------|:--:|------|
-| **Search migration → Search-a-licious** | Legacy `cgi/search.pl` now 503s on unfiltered queries (verified 2026-08-15) — name search is user-facing broken — and it returned native-language names anyway. New endpoint: English results (`langs=en` + `product_name_en` fallback), generic entries ranked top by default relevance | S | **committed next cycle** (Decision 6 rev. 2026-08-15). Parse `hits` not `products`; drop `sort_by=unique_scans_n` (resurfaces French products); keep genericity re-ranker as tiebreak; add contact email to User-Agent (OFF terms); stay search-on-submit (10 req/min limit) |
+| **Search migration → Search-a-licious** | Legacy `cgi/search.pl` was 503-ing and returned native-language names | S | **✅ shipped 2026-08-15** — device smoke owed (see Status). Re-test the apple/orange generic gap in real use before any USDA layer (Decision 6) |
 
 Remaining Tier 3: photo attachment ⚠ · save-confirmation toasts + haptics ·
 onboarding + better empty states · swipe-to-delete · reminder **deep-link** into
