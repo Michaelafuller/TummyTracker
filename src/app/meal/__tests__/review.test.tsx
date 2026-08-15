@@ -1,7 +1,9 @@
 import { fireEvent, render } from '@testing-library/react-native';
 
 import { createMealWithComponents } from '@/db/repository';
+import type { WatchlistItem } from '@/db/schema';
 import { useMealBuilderStore } from '@/features/logging/mealBuilderStore';
+import { useWatchlistStore } from '@/features/watchlist/watchlistStore';
 import type { MealComponentDraft } from '@/lib/mealAggregate';
 import MealReviewScreen from '../review';
 
@@ -12,6 +14,9 @@ jest.mock('expo-router', () => ({
 
 jest.mock('@/db/repository', () => ({
   createMealWithComponents: jest.fn().mockResolvedValue(undefined),
+  listWatchlistItems: jest.fn(),
+  addWatchlistItem: jest.fn(),
+  removeWatchlistItem: jest.fn(),
 }));
 
 function draft(name: string, overrides: Partial<MealComponentDraft> = {}): MealComponentDraft {
@@ -38,6 +43,7 @@ function draft(name: string, overrides: Partial<MealComponentDraft> = {}): MealC
 beforeEach(() => {
   jest.clearAllMocks();
   useMealBuilderStore.setState({ components: [draft('Peas', { calories: 100 }), draft('Rice', { calories: 200 })] });
+  useWatchlistStore.setState({ items: [], loaded: false });
 });
 
 describe('MealReviewScreen', () => {
@@ -75,5 +81,41 @@ describe('MealReviewScreen', () => {
     await fireEvent.changeText(getByLabelText('Meal name'), '');
     await fireEvent.press(getByLabelText('Save meal'));
     expect(createMealWithComponents).not.toHaveBeenCalled();
+  });
+});
+
+describe('MealReviewScreen watched-ingredient notice', () => {
+  const SOY_WATCH: WatchlistItem = { id: 'w1', term: 'soy', createdAt: 0 };
+
+  it('does not render when nothing is watched', async () => {
+    const { queryByText } = await render(<MealReviewScreen />);
+    expect(queryByText('Contains a watched ingredient')).toBeNull();
+  });
+
+  it('does not render when a watched term matches no component tag', async () => {
+    useWatchlistStore.setState({ items: [SOY_WATCH], loaded: true });
+    const { queryByText } = await render(<MealReviewScreen />);
+    expect(queryByText('Contains a watched ingredient')).toBeNull();
+  });
+
+  it('renders the notice when a component tag matches a watched term', async () => {
+    useWatchlistStore.setState({ items: [SOY_WATCH], loaded: true });
+    useMealBuilderStore.setState({
+      components: [draft('Tofu', { tagsJson: '["soybeans"]' }), draft('Rice')],
+    });
+    const { findByText } = await render(<MealReviewScreen />);
+    expect(await findByText('Contains a watched ingredient')).toBeTruthy();
+    expect(await findByText('soy — matched: soybeans')).toBeTruthy();
+  });
+
+  it('does not block saving while the notice is showing', async () => {
+    useWatchlistStore.setState({ items: [SOY_WATCH], loaded: true });
+    useMealBuilderStore.setState({
+      components: [draft('Tofu', { tagsJson: '["soybeans"]' }), draft('Rice')],
+    });
+    const { getByLabelText, findByText } = await render(<MealReviewScreen />);
+    expect(await findByText('Contains a watched ingredient')).toBeTruthy();
+    await fireEvent.press(getByLabelText('Save meal'));
+    expect(createMealWithComponents).toHaveBeenCalled();
   });
 });

@@ -55,6 +55,17 @@ export interface WatchedTagMatch {
   matchedTags: string[];
 }
 
+function matchWatchedItems(tags: readonly string[], items: readonly WatchlistItem[]): WatchedTagMatch[] {
+  if (tags.length === 0 || items.length === 0) return [];
+
+  const results: WatchedTagMatch[] = [];
+  for (const item of items) {
+    const matchedTags = tags.filter((tag) => matchesWatchTerm(tag, item.term));
+    if (matchedTags.length > 0) results.push({ item, matchedTags });
+  }
+  return results;
+}
+
 /**
  * Which watched terms an entry trips, with the specific tags that matched
  * (for banner/notice copy, e.g. "soy — matched: soybeans"). Empty array when
@@ -64,15 +75,35 @@ export function findWatchedTags(
   tagsJson: string | null,
   items: readonly WatchlistItem[],
 ): WatchedTagMatch[] {
-  const tags = parseTagsJson(tagsJson);
-  if (tags.length === 0 || items.length === 0) return [];
+  return matchWatchedItems(parseTagsJson(tagsJson), items);
+}
 
-  const results: WatchedTagMatch[] = [];
-  for (const item of items) {
-    const matchedTags = tags.filter((tag) => matchesWatchTerm(tag, item.term));
-    if (matchedTags.length > 0) results.push({ item, matchedTags });
-  }
-  return results;
+/**
+ * Same as `findWatchedTags`, but for callers that already have a plain tag
+ * array rather than a serialized `tagsJson` string — e.g. the meal review
+ * screen, which checks the pre-save union of component tags
+ * (`unionComponentTags`) before a `logEntry` row (and its `tagsJson`) exists.
+ */
+export function findWatchedTagsInTags(
+  tags: readonly string[],
+  items: readonly WatchlistItem[],
+): WatchedTagMatch[] {
+  return matchWatchedItems(tags, items);
+}
+
+/**
+ * Human-readable summary of watched-term matches for banner/notice copy.
+ * Names each matched term, and the matching tags too when they differ from
+ * the term itself (e.g. "soy — matched: soybeans"); a term whose only match
+ * is itself is shown bare.
+ */
+export function describeWatchedMatches(matches: readonly WatchedTagMatch[]): string {
+  return matches
+    .map(({ item, matchedTags }) => {
+      const isExactSelfMatch = matchedTags.length === 1 && matchedTags[0] === item.term;
+      return isExactSelfMatch ? item.term : `${item.term} — matched: ${matchedTags.join(', ')}`;
+    })
+    .join(', ');
 }
 
 function isFoodEntry(entry: LogEntry): boolean {

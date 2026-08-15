@@ -14,7 +14,9 @@ import { logEntryToFormState } from '@/features/logging/formModel';
 import { LogEntryForm } from '@/features/logging/LogEntryForm';
 import { SymptomForm } from '@/features/symptoms/SymptomForm';
 import { symptomEntryToFormState, type BuiltSymptomEntry } from '@/features/symptoms/formModel';
+import { useWatchlistStore } from '@/features/watchlist/watchlistStore';
 import { useTheme } from '@/hooks/use-theme';
+import { describeWatchedMatches, findWatchedTags } from '@/lib/watchlist';
 
 // undefined = still loading, null = not found.
 type LoadState = LogEntry | null | undefined;
@@ -26,6 +28,8 @@ export default function EditEntryScreen() {
   const [entry, setEntry] = useState<LoadState>(undefined);
   const [components, setComponents] = useState<MealComponent[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const watchlistItems = useWatchlistStore((state) => state.items);
+  const watchedMatches = entry ? findWatchedTags(entry.tagsJson, watchlistItems) : [];
 
   useEffect(() => {
     let active = true;
@@ -98,6 +102,17 @@ export default function EditEntryScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      {watchedMatches.length > 0 ? (
+        <View
+          accessibilityRole="alert"
+          accessibilityLabel={`Contains a watched ingredient: ${describeWatchedMatches(watchedMatches)}`}
+          style={[styles.watchBanner, { backgroundColor: theme.backgroundSelected, borderColor: theme.danger }]}>
+          <ThemedText type="smallBold" themeColor="danger">
+            Contains a watched ingredient
+          </ThemedText>
+          <ThemedText type="small">{describeWatchedMatches(watchedMatches)}</ThemedText>
+        </View>
+      ) : null}
       {entry.type === 'bowel_movement' ? (
         <BmForm
           initial={bmEntryToFormState(entry)}
@@ -176,6 +191,12 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   componentRow: {
+    padding: Spacing.three,
+    borderRadius: Spacing.three,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  watchBanner: {
+    gap: Spacing.half,
     padding: Spacing.three,
     borderRadius: Spacing.three,
     borderWidth: StyleSheet.hairlineWidth,

@@ -1,5 +1,12 @@
 import type { LogEntry, WatchlistItem } from '@/db/schema';
-import { computeWatchStats, findWatchedTags, matchesWatchTerm, normalizeWatchTerm } from '../watchlist';
+import {
+  computeWatchStats,
+  describeWatchedMatches,
+  findWatchedTags,
+  findWatchedTagsInTags,
+  matchesWatchTerm,
+  normalizeWatchTerm,
+} from '../watchlist';
 
 function watchItem(term: string, createdAt = 0): WatchlistItem {
   return { id: `w-${term}`, term, createdAt };
@@ -218,5 +225,51 @@ describe('computeWatchStats', () => {
     expect(stats.timesSinceWatch).toBe(0);
     expect(stats.ratedCount).toBe(1);
     expect(stats.avgSentiment).toBe(1);
+  });
+});
+
+describe('findWatchedTagsInTags', () => {
+  const items = [watchItem('soy'), watchItem('dairy')];
+
+  it('matches against a plain tag array (pre-save union of component tags)', () => {
+    const result = findWatchedTagsInTags(['soy lecithin', 'onion'], items);
+    expect(result).toEqual([{ item: items[0], matchedTags: ['soy lecithin'] }]);
+  });
+
+  it('returns empty array for an empty tag array', () => {
+    expect(findWatchedTagsInTags([], items)).toEqual([]);
+  });
+
+  it('returns empty array when no watchlist items', () => {
+    expect(findWatchedTagsInTags(['soybeans'], [])).toEqual([]);
+  });
+
+  it('agrees with findWatchedTags for the same tags via tagsJson', () => {
+    const tags = ['soybeans', 'non-dairy'];
+    expect(findWatchedTagsInTags(tags, items)).toEqual(findWatchedTags(JSON.stringify(tags), items));
+  });
+});
+
+describe('describeWatchedMatches', () => {
+  it('shows a bare term when its only match is itself', () => {
+    const matches = [{ item: watchItem('soy'), matchedTags: ['soy'] }];
+    expect(describeWatchedMatches(matches)).toBe('soy');
+  });
+
+  it('shows "term — matched: tags" when the matched tags differ from the term', () => {
+    const matches = [{ item: watchItem('soy'), matchedTags: ['soybeans', 'soy lecithin'] }];
+    expect(describeWatchedMatches(matches)).toBe('soy — matched: soybeans, soy lecithin');
+  });
+
+  it('joins multiple matches with a comma', () => {
+    const matches = [
+      { item: watchItem('soy'), matchedTags: ['soybeans'] },
+      { item: watchItem('dairy'), matchedTags: ['dairy'] },
+    ];
+    expect(describeWatchedMatches(matches)).toBe('soy — matched: soybeans, dairy');
+  });
+
+  it('returns an empty string for no matches', () => {
+    expect(describeWatchedMatches([])).toBe('');
   });
 });

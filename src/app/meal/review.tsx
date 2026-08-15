@@ -17,9 +17,11 @@ import {
   type MealReviewFormState,
 } from '@/features/logging/mealReviewFormModel';
 import { SentimentSelector } from '@/features/sentiment/SentimentSelector';
+import { useWatchlistStore } from '@/features/watchlist/watchlistStore';
 import { useTheme } from '@/hooks/use-theme';
-import { aggregateComponents } from '@/lib/mealAggregate';
+import { aggregateComponents, unionComponentTags } from '@/lib/mealAggregate';
 import { MAX_NOTES_LENGTH } from '@/lib/validation';
+import { describeWatchedMatches, findWatchedTagsInTags } from '@/lib/watchlist';
 
 const TYPE_OPTIONS = FOOD_TYPES.map((value) => ({
   value,
@@ -50,6 +52,15 @@ export default function MealReviewScreen() {
 
   const aggregate = useMemo(() => aggregateComponents(components), [components]);
   const noteCount = state.notes.length;
+
+  // Same tag union createMealWithComponents will save to the entry's
+  // tagsJson (HANDOFF Phase 4) — a non-blocking heads-up, never a save gate.
+  const watchlistItems = useWatchlistStore((s) => s.items);
+  const unionTags = useMemo(() => unionComponentTags(components), [components]);
+  const watchedMatches = useMemo(
+    () => findWatchedTagsInTags(unionTags, watchlistItems),
+    [unionTags, watchlistItems],
+  );
 
   const set = useMemo(
     () =>
@@ -160,6 +171,18 @@ export default function MealReviewScreen() {
           />
         </FormField>
 
+        {watchedMatches.length > 0 ? (
+          <View
+            accessibilityRole="alert"
+            accessibilityLabel={`This meal contains a watched ingredient: ${describeWatchedMatches(watchedMatches)}`}
+            style={[styles.watchNotice, { backgroundColor: theme.backgroundSelected, borderColor: theme.danger }]}>
+            <ThemedText type="smallBold" themeColor="danger">
+              Contains a watched ingredient
+            </ThemedText>
+            <ThemedText type="small">{describeWatchedMatches(watchedMatches)}</ThemedText>
+          </View>
+        ) : null}
+
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Save meal"
@@ -202,6 +225,12 @@ const styles = StyleSheet.create({
   },
   componentBody: {
     flex: 1,
+  },
+  watchNotice: {
+    gap: Spacing.half,
+    padding: Spacing.three,
+    borderRadius: Spacing.three,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   submit: {
     borderRadius: Spacing.three,
