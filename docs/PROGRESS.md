@@ -36,7 +36,8 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   `extractTags`, single-component meals losing full ingredient text on the parent
   row, edited ingredient text never merged into tags). Specced in `docs/HANDOFF.md`.
 - **Queued next cycle (decided 2026-08-15):** migrate name search off the failing
-  legacy `cgi/search.pl` endpoint to Search-a-licious — see Tier 3 row + Decision 6.
+  legacy `cgi/search.pl` endpoint to Search-a-licious (Tier 3 row + Decision 6),
+  plus the owner-approved historical tag re-derive backfill (Tier 1 row).
 - **Owner on-device checklist (carried):** iOS app icon (needs EAS build), iOS
   time-picker Done-button feel, light-mode look, migration 0006 against a real
   database, and the full scan → add-next → finish-meal → review → save loop (camera).
@@ -70,7 +71,7 @@ temporal meal→outcome correlation are **✅ shipped**. Remaining:
 |------|----------------|:--:|------|
 | **Ingredient-capture hardening** | Sub-ingredients in parentheses are currently dropped at extraction — the exact "brand X's soybean isolate" signal the analysis exists for | S | **in flight** — `docs/HANDOFF.md` 2026-07-19 |
 | **Trigger watchlist / elimination mode** | Mark suspected ingredients, flag entries containing them, track reactions — how food journals are *actually* used therapeutically | M | builds on ingredient capture |
-| **Historical tag re-derive (backfill)** | Recover parenthetical sub-ingredient tags for entries saved before the hardening fix; additive-only union is safe | S | **needs owner sign-off** (mutates saved rows); decide next plan cycle |
+| **Historical tag re-derive (backfill)** | Recover parenthetical sub-ingredient tags for entries saved before the hardening fix; additive-only union is safe | S | **owner-approved 2026-08-15** — rides along with the search-migration cycle |
 
 ## Tier 2 — The payoff (turn data into trust + motivation)
 
