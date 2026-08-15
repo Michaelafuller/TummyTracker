@@ -30,21 +30,32 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   regression 2026-07-03: **18/19** (best-ever clean run); the one red
   (`e-temporal-insights`) is a classified flow-bug with the fix applied — re-run
   pending, not an app defect (`docs/RESULTS.md`).
-- **Two cycles complete 2026-08-15** on branch `claude/tummytracker-api-lookup-c6906a`
-  (pending merge to `main`): ingredient-capture hardening + Search-a-licious
-  migration & tag backfill. Rungs green at branch HEAD (46 suites / 353 tests).
-- **Owed next device session:** targeted Maestro re-run of `ab-satfat-ingredients`
-  + `01b-manual-entry` (no new flows) · on-device search-by-name smoke ("banana" →
-  English, generic-first results — endpoint changed) · one-launch check that
-  pre-existing entries gained parenthetical tags (backfill runs once after the
-  migration gate).
+- **Three cycles complete 2026-08-15** (all merged to `main`): ingredient-capture
+  hardening · Search-a-licious migration & tag backfill · **trigger watchlist /
+  elimination mode**. Rungs green at HEAD (50 suites / 407 tests) + `bundle:check`
+  (migration 0007 survives Metro export).
+- **Owed next device session (do this before further cycles):** migration 0007
+  against a real database · targeted Maestro re-run of `ab-satfat-ingredients` +
+  `01b-manual-entry` · on-device search-by-name smoke ("banana" → English,
+  generic-first — endpoint changed) · one-launch check that pre-existing entries
+  gained parenthetical tags (backfill) · new Maestro flow owed for the watchlist
+  loop (watch from a finding → review notice → entry banner).
 - **Owner on-device checklist (carried):** iOS app icon (needs EAS build), iOS
   time-picker Done-button feel, light-mode look, migration 0006 against a real
   database, and the full scan → add-next → finish-meal → review → save loop (camera).
 
 ### Shipped last cycle (overwrite each plan cycle; full history = `git log`)
 
-2026-08-15 cycle (planned Fable 5, executed Sonnet 5):
+2026-08-15 cycle 3 (planned Fable 5, executed Sonnet 5):
+- **Trigger watchlist / elimination mode:** `watchlist_item` table (migration
+  0007), prefix-at-word-boundary matching ("soy" hits "soybeans", never
+  "buttermilk" from "milk" — precision over recall for alerts), per-term stats
+  (times-since-watch, clean-day streak, avg sentiment), Insights-tab section
+  with manual add + one-tap Watch on finding cards, warning banner on entry
+  view, non-blocking notice on meal review (never gates saving — the journal
+  must capture the lapse). `createdAt` doubles as elimination start date.
+
+2026-08-15 cycle 2 (planned Fable 5, executed Sonnet 5):
 - **Search-a-licious migration:** name search moved off the dead legacy
   `cgi/search.pl` (was 503-ing) to `search.openfoodfacts.org` — `langs=en`,
   `product_name_en` fallback (also upgrades scanned foreign products), default
@@ -86,7 +97,7 @@ are **✅ shipped**. Remaining:
 
 | Item | Why it matters | Effort | Notes |
 |------|----------------|:--:|------|
-| **Trigger watchlist / elimination mode** | Mark suspected ingredients, flag entries containing them, track reactions — how food journals are *actually* used therapeutically | M | builds on ingredient capture |
+| **Trigger watchlist / elimination mode** | Mark suspected ingredients, flag entries, track reactions | M | **✅ shipped 2026-08-15** — device checks owed (see Status); follow-on candidates: browse/calendar list badges, term editing |
 | **Historical tag re-derive (backfill)** | Recover parenthetical sub-ingredient tags for entries saved before the hardening fix | S | **✅ shipped 2026-08-15** — one-launch device check owed (see Status) |
 
 ## Tier 2 — The payoff (turn data into trust + motivation)
