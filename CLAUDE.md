@@ -45,14 +45,15 @@
   `import { File, Paths } from 'expo-file-system'` → `new File(Paths.cache, 'name.json')`
   → `file.write(text)` / `await file.text()` / `file.uri`. File picking:
   `File.pickFileAsync({ mimeTypes: ['…'] })` — no `expo-document-picker` needed.
-- **Device install strategy (owner-decided 2026-08-15).** Routine device sessions:
-  build locally with `eas build --local --profile preview --platform android`
-  (same build profile + remote EAS credentials as cloud → same signature → safe
-  in-place update) and install over USB with `adb install`. When a cycle is pure
-  JS/TS (no new dependency, no native/config/icon change), skip the build
-  entirely and load from Metro (`npx expo start`) into the installed dev client.
-  Reserve EAS **cloud** builds (monthly quota) for distribution rehearsals,
-  production-profile builds, and the iOS pass. **Signing caveat:** Android
+- **Device install strategy (owner-decided 2026-08-15).** When a cycle is pure
+  JS/TS (no new dependency, no native/config/icon change), no build at all:
+  `adb reverse tcp:8081 tcp:8081` + `npx expo start` into the installed dev
+  client. When an .apk is needed: cloud `eas build --profile preview --platform
+  android`, delivered over USB with `eas build:run --platform android --latest`
+  (or `adb install -r`) instead of the QR download. Note `eas build --local`
+  (zero quota) is **macOS/Linux-only** — on this Windows machine it requires
+  WSL2; set that up only if build cadence ever makes quota feel tight. Reserve
+  cloud builds for real .apk needs, distribution rehearsals, and the iOS pass. **Signing caveat:** Android
   refuses in-place updates on a signature mismatch, and the forced uninstall
   wipes the on-device journal (local-first SQLite) — never install a debug- or
   unknown-signed .apk over the real install; export an in-app backup first when
