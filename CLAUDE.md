@@ -88,7 +88,7 @@ to learn **autonomous, agentic coding workflows** with Claude Code. Therefore:
 | UI state       | `zustand` (keep it minimal)                          |
 | Data fetching  | `@tanstack/react-query` for the barcode lookup       |
 | Barcode scan   | `expo-camera` (built-in barcode scanning)            |
-| Nutrition API  | **Open Food Facts** (`world.openfoodfacts.org`, no key) |
+| Nutrition API  | **Open Food Facts** (product lookup `world.openfoodfacts.org` + search `search.openfoodfacts.org`, no key) |
 | Notifications  | `expo-notifications` (**local scheduled** reminders) |
 | Calendar       | `expo-calendar` (native calendar interop)            |
 | Calendar UI    | `react-native-calendars` for day/week/month picker   |
