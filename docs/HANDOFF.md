@@ -1,229 +1,202 @@
-# HANDOFF.md — Cycle: ingredient-capture hardening (meal-collation granularity audit)
+# HANDOFF.md — Cycle: Search-a-licious migration + historical tag backfill
 
 > **Read first:** root `CLAUDE.md` (auto-loaded). No other protocol doc is needed —
-> every task below is fully specced with file paths and line numbers from the
-> current tree.
+> every task below is fully specced with file paths from the current tree.
 >
 > **Session type:** execute. Definition of done per CLAUDE.md §4:
 > `npm run typecheck && npm run lint && npm test` green, tests ship with each
 > change, one logical change per commit, imperative scoped commit messages.
-> No schema change (no migration), no UI change, no new dependency, no
-> native/Babel change — `npm run bundle:check` is not required this cycle.
+> No schema change (no migration), no new dependency, no native/Babel change —
+> `npm run bundle:check` is not required this cycle. The only UI-adjacent touch
+> is a fire-and-forget effect in `app-providers.tsx` (Phase 2); no visible UI
+> changes.
 >
-> **Source of these requirements:** owner planning session, 2026-07-19. The
-> owner's question: *when multiple scanned items (tofu, eggs, cheese, beans) are
-> collated into one meal, is the per-item ingredient granularity lost?* The
-> ingredient→sentiment correlation is the heart of the app — an analysis must be
-> able to indict "soy protein isolate", not just "tofu".
+> **Source of these requirements:** owner planning session 2026-08-15
+> (PROGRESS.md Decision 6 revision + owner-approved backfill). Context: the
+> legacy OFF search endpoint (`world.openfoodfacts.org/cgi/search.pl`) now
+> returns HTTP 503 on unfiltered queries — name search is user-facing broken —
+> and it returned each product's *native-language* name anyway. OFF's
+> officially recommended replacement is Search-a-licious
+> (`search.openfoodfacts.org`), live-verified 2026-08-15 to return all-English
+> results with generic entries ranked at the top by default relevance.
+> **Do not touch `docs/PROGRESS.md`, `docs/RESULTS.md`, `docs/ACCEPTANCE.md`,
+> or `docs/E2E.md`** — the plan session closes those out.
 
 ---
 
-## Audit verdict (context — read once, then execute the phases)
+## Phase 1 — migrate name search to Search-a-licious
 
-**No analytic granularity is lost at collation.** The verified chain:
+### 1a. `src/features/barcode/api.ts`
 
-1. Scan → `mapOffProductJson` derives tags from the **full** OFF
-   `ingredients_text` + `allergens_tags` + `additives_tags`
-   (`src/lib/openFoodFacts.ts:93-97`), and `offProductToComponentFormState`
-   seeds the component form with both the full ingredient text and the
-   serialized tags (`src/lib/openFoodFacts.ts:275-288`).
-2. Component confirm → `buildComponentDraft` keeps a non-empty `tagsJson`
-   verbatim (`src/features/logging/componentFormModel.ts:103-111`).
-3. Save → `createMealWithComponents` stores the parent `tagsJson` as
-   `unionComponentTags` (every component's tags + each normalized component
-   name) and persists each component row with its own full `ingredientsText` +
-   `tagsJson` (`src/db/repository.ts:45-70`, `src/lib/mealAggregate.ts:50-69`).
-4. Analysis (`insights.ts`, `temporal.ts`) reads the parent `tagsJson` only —
-   so the full ingredient/allergen/additive set flows into correlation,
-   including pair analysis.
-5. Later edits (e.g. rating sentiment afterward) preserve stored tags:
-   `logEntryToFormState` hydrates `tagsJson` and `buildLogEntry` reuses
-   non-empty tags (`src/features/logging/formModel.ts:150-158`).
-6. Recents quick-add copies `tagsJson` through (`src/app/(tabs)/index.tsx:29-42`),
-   and backup v2 round-trips `mealComponent` rows.
+- Replace `SEARCH_URL` with `https://search.openfoodfacts.org/search`.
+- In `fetchOffSearchResults`, replace the params wholesale:
+  - `q`: the query (plain text; Search-a-licious treats unrecognized words as
+    full-text search).
+  - `langs`: `'en'` — selects which language-specific name fields are searched
+    and returned.
+  - `page_size`: `'24'` (unchanged — the genericity re-ranker wants a wide pool).
+  - `fields`: the existing list **plus `product_name_en`** (i.e.
+    `code,product_name,product_name_en,brands,nutriments,serving_quantity,ingredients_text,allergens_tags,additives_tags,categories_tags`).
+  - **Remove** `search_terms`, `search_simple`, `action`, `json`, and
+    `sort_by`. The `sort_by=unique_scans_n` habit must NOT be ported: on
+    Search-a-licious it ranks by *global* popularity, which resurfaces French
+    products. Default sort is descending relevance — live-tested to rank
+    generic English entries ("Fresh Banana", plain "Bananas") at the top.
+    Leave a one-line comment in the code stating exactly that, so a future
+    session doesn't "helpfully" re-add popularity sorting.
+- **Deliberately no country filter** (`countries_tags`): live testing showed
+  `langs=en` alone ranks generic entries best; a US-only filter would exclude
+  the UK/international generic produce entries that are OFF's de-facto
+  "generic food" rows. Note this in the function's doc comment.
+- Update `USER_AGENT` to `TummyTracker/1.0 (michaellovesellen@gmail.com)` —
+  OFF's terms now ask for a contact email in the User-Agent. (Applies to both
+  the barcode lookup and search; it's one shared constant.)
+- Barcode lookup (`fetchOffProduct`, `BASE_URL`) is otherwise **unchanged**.
+- Documented OFF limits as of 2026-08: 10 search req/min/IP, 15 product req/min/IP,
+  applied per end user for mobile apps. The existing UX already complies
+  (search fires on commit, not per keystroke — `useOffSearch` gates on a
+  committed query); do not add polling or retry storms. `retry: 1` is fine.
 
-The condensed "Tofu, Eggs, Cheese, Beans" the owner sees is **only** the
-parent's display `ingredientsText` (`src/features/logging/mealReviewFormModel.ts:85`,
-`src/db/repository.ts:52`). Analysis never reads `ingredientsText`. **Keep the
-condensed display — it is owner-approved UX. Do not add any UI.**
+### 1b. `src/lib/openFoodFacts.ts`
 
-However, the audit found three real capture gaps — none specific to collation,
-all UI-invisible to fix. This cycle closes them and locks the collation
-invariant with a regression test.
+- `mapOffSearchResponse`: read `root.hits` (Search-a-licious's array name)
+  instead of `root.products`. Everything downstream (drop nameless entries,
+  `genericityScore` re-rank, cap at 5) stays. The re-ranker's stable sort now
+  tiebreaks on *relevance* order instead of most-scanned order — that's
+  strictly better; update its doc comment to say so.
+- `mapOffProductJson`: prefer the English name —
+  `product_name_en` when it's a non-empty trimmed string, else `product_name`
+  (same trimmed-non-empty rule). This helper also serves the barcode path, so
+  scanned foreign products gain English names for free when OFF has a
+  translation — intended, note it in the comment.
+- `nutriments` sub-keys are identical on Search-a-licious (verified live:
+  `energy-kcal_100g`, `fat_100g`, `carbohydrates_100g`, `proteins_100g`,
+  `fiber_100g`, `sugars_100g`, `sodium_100g`/`salt_100g`) — no mapper changes
+  beyond the name fallback.
+- Update stale doc comments referencing `cgi/search.pl` / "Generic_Search"
+  (file header of `api.ts`, `mapOffSearchResponse` docstring).
 
----
+### 1c. Tests
 
-## Phase 1 — stop dropping parenthetical sub-ingredients in `extractTags`
+- `src/features/barcode/__tests__/useOffSearch.test.ts` and
+  `src/lib/__tests__/openFoodFacts*.test.ts` (wherever `mapOffSearchResponse`
+  fixtures live): rename fixture root key `products` → `hits`; assert the
+  request URL hits `search.openfoodfacts.org/search` with `q`/`langs` and
+  **without** `sort_by`.
+- New name-fallback cases: `product_name_en` present and different → English
+  name wins (both search and barcode-lookup mappers); `product_name_en` absent
+  or empty/whitespace → falls back to `product_name`; both empty → entry
+  dropped from search results (existing rule).
 
-**The one genuine granularity loss found, and it affects every entry.**
-`src/lib/ingredients.ts:58` deletes parenthetical content wholesale:
-`.replace(/\([^)]*\)/g, '')`. OFF ingredient lists lean on parentheses for
-compound-ingredient breakdowns — `"Tofu (water, soybeans, calcium sulfate),
-seasoning (onion powder, garlic)"` currently yields only `tofu, seasoning`,
-throwing away exactly the sub-ingredient signal (soybeans, calcium sulfate,
-onion powder) the owner cares about.
-
-**Change** (in `extractTags`, `src/lib/ingredients.ts:55-63`): keep the
-percentage strip, then treat brackets as *delimiters* instead of deleting their
-content:
-
-```ts
-.replace(/\d+(\.\d+)?%/g, '')   // unchanged
-.replace(/[()[\]]/g, ',')       // was: .replace(/\([^)]*\)/g, '')
-```
-
-Nested parens flatten correctly under this rule (every bracket becomes a comma;
-empty/short tokens are already filtered by the `length >= 2` check, and the
-existing `[^a-z0-9 -]` char strip still cleans stray punctuation). Update the
-function's doc comment (lines 21-31): parenthetical content is now *captured as
-separate tags*, not stripped.
-
-**Tests** (`src/lib/__tests__/ingredients.test.ts`): existing assertions that
-expect parenthetical content to be *dropped* must be deliberately inverted —
-that behavior is the bug. Add cases: compound ingredient with sub-ingredients
-(all captured as separate tags); nested parens; percentages inside parens still
-stripped (`"cheese (milk 13%)"` → `cheese`, `milk`); stopwords inside parens
-still filtered (`"(may contain traces of nuts)"` contributes `nuts` at most,
-never `may`/`contain`/`traces`).
-
-Note: tags are computed at capture time, so this improves **future** entries
-only. Historical re-derivation is explicitly out of scope (see below).
-
-**Commit:** `feat(ingredients): capture parenthetical sub-ingredients as tags`
+**Commit:** `feat(barcode): migrate name search to Search-a-licious endpoint`
 
 ---
 
-## Phase 2 — single-component meals keep their full ingredient text
+## Phase 2 — historical tag re-derive backfill (owner-approved 2026-08-15)
 
-Since the 2026-07-02 cycle, *every* food entry goes through the meal builder
-(Home's "+ Add manually" targets `/meal/component`; scan lands there too). For a
-single-component meal, `buildMealEntry` sets the parent `ingredientsText` to the
-component's **name** (`mealReviewFormModel.ts:85`) — so a scanned single item
-shows "Tofu" in the edit screen's Ingredients field where the old single-item
-flow showed the real ingredient list. (Tags are unaffected; this is a display /
-data-fidelity regression on the parent row. The edit screen also doesn't render
-component rows when `componentCount <= 1` — `src/app/entry/[id].tsx:43` — so the
-full text is currently unreachable for these entries.)
+Entries saved before the 2026-08-15 ingredient-capture hardening lack
+parenthetical sub-ingredient tags (the old `extractTags` deleted `(...)`
+content). Re-derive tags for stored rows as an **additive-only union** —
+existing tags are never removed or reordered, new ones are appended. This is
+the same policy as the Phase-3 merge in `formModel.ts` (see its comment).
 
-Note the derivation is **duplicated**: `buildMealEntry`
-(`mealReviewFormModel.ts:85`) and `createMealWithComponents`
-(`repository.ts:52`) each compute the names-join independently. Consolidate:
+### 2a. Pure derivation — `src/lib/tagBackfill.ts` (new)
 
-- Add to `src/lib/mealAggregate.ts`:
+Pure, no I/O, unit-testable. Using `mergeTags`, `extractTags`, `parseTagsJson`,
+`serializeTags` from `@/lib/ingredients`:
 
-  ```ts
-  /**
-   * Display ingredient text for the aggregate meal row. A single-component meal
-   * keeps its component's full ingredient list (parity with the old single-item
-   * flow); a multi-component meal condenses to the component names — the full
-   * per-item lists live on the mealComponent rows, and analysis reads tagsJson,
-   * never this field.
-   */
-  export function mealIngredientsText(
-    components: readonly Pick<MealComponentDraft, 'name' | 'ingredientsText'>[],
-  ): string | null {
-    if (components.length === 0) return null;
-    if (components.length === 1) {
-      const only = components[0];
-      return only.ingredientsText?.trim() ? only.ingredientsText : only.name;
-    }
-    const joined = components.map((c) => c.name).join(', ');
-    return joined.length > 0 ? joined : null;
-  }
-  ```
+- `rederiveRowTags(tagsJson: string | null, ingredientsText: string | null): string | null`
+  — returns the **new** serialized tags when the union
+  `mergeTags(existing, extractTags({ ingredientsText, allergensTags: null, additivesTags: null }))`
+  grew, else `null` (no update needed). Because the union is additive and
+  order-preserving, "grew" is simply `merged.length > existing.length`.
+- `planTagBackfill(entries, componentsByEntryId)` — takes food-type `LogEntry`
+  rows (filter with `FOOD_TYPES` from `@/db/schema`; skip bm/symptom rows) and
+  a map of each entry's `MealComponent` rows. Returns
+  `{ entryUpdates: { id, tagsJson }[], componentUpdates: { id, tagsJson }[] }`:
+  1. Each component row re-derives from its **own** `ingredientsText`.
+  2. Each entry re-derives from its own `ingredientsText`, **then** unions in
+     every tag of its (post-re-derive) component rows — multi-component
+     parents saved before hardening gain any newly recovered sub-ingredient
+     tags; the parent must remain a superset of its components' tags (the
+     collation invariant).
+  3. Rows whose union didn't grow produce no update. Running the plan twice
+     must produce zero updates the second time (idempotent — assert in tests).
 
-- Use it in **both** call sites (`mealReviewFormModel.ts:85` and
-  `repository.ts:52`), replacing the inline joins.
+### 2b. Persistence — `src/db/repository.ts`
 
-**Tests:** `src/lib/__tests__/mealAggregate.test.ts` (single component with
-text → full text; single without text → name; multi → names join; empty → null)
-and adjust `src/features/logging/__tests__/mealReviewFormModel.test.ts` if it
-asserts the old single-component behavior.
+Add `applyTagBackfill(entryUpdates, componentUpdates): Promise<void>`: one
+transaction, `set({ tagsJson })` per row by id. **Do not bump `updatedAt`** —
+this is a repair of derived data, not a user edit; bumping would falsify the
+edit history (comment this; it's why the function doesn't reuse
+`updateLogEntry`). No-op fast-path when both arrays are empty.
 
-**Commit:** `fix(logging): keep full ingredient text on single-component meals`
+### 2c. Run-once gate — `src/lib/prefs.ts` + runner
 
----
+- Add `tagBackfillV1Done: boolean` to `AppPrefs`, default `false` in
+  `DEFAULT_PREFS` (the `{ ...DEFAULT_PREFS, ...JSON.parse(text) }` load
+  pattern makes the new field backward-compatible with existing pref files).
+- New `src/db/tagBackfillRunner.ts`: `runTagBackfillOnce()` —
+  `loadPrefs()`; return early if `tagBackfillV1Done`; else
+  `listLogEntries()` + `listAllMealComponents()` → `planTagBackfill` →
+  `applyTagBackfill` → `savePrefs({ ...prefs, tagBackfillV1Done: true })`.
+  Set the flag **only after** a successful apply — on throw, swallow with
+  `console.warn` and leave the flag unset so the next launch retries
+  (idempotence makes retry safe).
+- `src/components/app-providers.tsx`: inside `MigrationGate`, fire-and-forget
+  after migrations succeed:
+  `useEffect(() => { if (success) void runTagBackfillOnce(); }, [success]);`
+  Do not gate rendering on it — the backfill is additive; stale-until-repaired
+  reads are acceptable for one launch.
 
-## Phase 3 — merge user-edited ingredient text into tags (never ignore it)
+### 2d. Tests
 
-In both `buildLogEntry` (`formModel.ts:150-158`) and `buildComponentDraft`
-(`componentFormModel.ts:103-111`), pre-computed tags **win outright**: when
-`tagsJson` is non-empty, the ingredient text field is never re-tokenized. So if
-the owner types "hot sauce" into the Ingredients field of a scanned item (or an
-existing entry), it never becomes a tag — invisible to the correlation engine.
+`src/lib/__tests__/tagBackfill.test.ts` (pure-function tests carry the load):
 
-**Change:** in both places, merge instead of preferring one side —
-`finalTags = existingTags ∪ extractTags(trimmedIngredients)`, existing tags
-first (allergens/additives keep their lead position). Add a small helper to
-`src/lib/ingredients.ts`:
+- Pre-hardening row: `tagsJson` lacking parenthetical sub-ingredients +
+  `ingredientsText` `"Tofu (water, soybeans, calcium sulfate)"` → update adds
+  `soybeans`, `calcium sulfate` etc., existing tags first, order preserved.
+- Additive-only: a tag whose word no longer appears in `ingredientsText`
+  survives; no update produced when the text is a subset of existing tags.
+- Idempotent: re-planning over updated rows yields zero updates.
+- Multi-component parent: gains a tag recovered on a component; parent stays
+  a superset of component tags.
+- Skips: non-food types untouched; `null`/empty `ingredientsText` handled
+  (component-union step still runs for parents).
+- Runner: one test that a set `tagBackfillV1Done` flag short-circuits before
+  any DB read (mock `@/lib/prefs` and the repository module).
 
-```ts
-/** Order-preserving union of tag arrays (first occurrence wins). */
-export function mergeTags(...lists: readonly string[][]): string[]
-```
-
-and rewrite both `finalTagsJson` computations to use
-`mergeTags(existingTags, extractTags({ ingredientsText: trimmedIngredients, allergensTags: null, additivesTags: null }))`
-(when the text is empty, this degrades to the existing tags; when tags are
-empty, to the text extraction — both current behaviors preserved). Deliberate
-asymmetry, add a code comment: tag capture is **additive-only** — deleting a
-word from the text does not remove its tag, because we can't tell a removed
-ingredient from a shortened note, and false-negative capture is worse than a
-stale tag.
-
-For a grouped meal's edit screen this is safe: the text field holds component
-names, whose normalized forms are already in the union (`unionComponentTags`
-adds them), so merging adds nothing spurious.
-
-**Tests:** `formModel.test.ts` + `componentFormModel.test.ts` — edited text
-adds new tags while OFF tags survive; OFF-only and text-only paths unchanged;
-tag order (existing first) asserted.
-
-**Commit:** `feat(logging): merge edited ingredient text into existing tags`
+**Commit:** `feat(db): additive tag re-derive backfill for pre-hardening entries`
 
 ---
 
-## Phase 4 — regression test locking the collation invariant
+## Phase 3 — constitution touch-up (root `CLAUDE.md` only)
 
-Extend `src/features/analysis/__tests__/mealBuilderCompat.test.ts` with an
-end-to-end tripwire over the *real* pipeline (no hand-rolled tagsJson): build
-3–4 realistic OFF-style products (allergens_tags + additives_tags + multi-token
-`ingredients_text` including parenthetical sub-ingredients), run each through
-`mapOffResponse` → `offProductToComponentFormState` → `buildComponentDraft`,
-collate with `buildMealEntry`, then assert:
+§3 tech-stack table, Nutrition API row → `**Open Food Facts** (product lookup
+`world.openfoodfacts.org` + search `search.openfoodfacts.org`, no key)`. Do not
+edit `docs/CLAUDE.md` (historical spec — stays as-is per its §0 note).
 
-1. **Every** tag derivable from every component (including the parenthetical
-   sub-ingredients from Phase 1 and every allergen/additive) appears in the
-   parent entry's `tagsJson` — i.e. nothing is smoothed out by collation.
-2. Each component draft retains its full `ingredientsText`.
-3. The parent `ingredientsText` stays the condensed names-join for the
-   multi-component case (the owner-approved display contract).
-
-Name the test so its intent is unmissable, e.g.
-`'collating components into a meal never drops a component tag'`.
-
-**Commit:** `test(analysis): lock meal-collation tag-granularity invariant`
+**Commit:** `docs(claude): record Search-a-licious as the OFF search endpoint`
 
 ---
 
 ## Explicitly out of scope (do not do these)
 
-- **Historical tag re-derivation/backfill.** Phase 1 widens capture for new
-  entries; recomputing tags for already-saved rows mutates user data and needs
-  an owner decision first (an additive-only union re-derive would be safe and
-  cheap — flagged for the next planning session, not this one).
-- **Any UI change** — no per-component ingredient display on the edit screen,
-  no new fields, no copy changes. The condensed meal display is the contract.
-- **Meal-component editing after save** (already Tier 2 backlog).
-- **OFF/USDA sourcing changes** (PROGRESS.md Decision 6 — don't re-open).
+- **USDA anything** (API fallback or bundled dataset) — Decision 6: re-test the
+  generic-food gap after this migration before adding any second source.
+- **Any visible UI change**, including result-list copy or layout.
+- **Country filtering or popularity sorting** on search (see Phase 1 rationale).
+- **Search-as-you-type** — OFF terms; keep commit-gated queries.
+- **Schema changes/migrations** — the backfill mutates only `tagsJson` values.
+- **Editing `docs/PROGRESS.md` / `docs/RESULTS.md`** — plan session's job.
 
 ## After the phases (execute-session closeout)
 
 1. Full rungs green (`npm run typecheck && npm run lint && npm test`).
-2. Summarize: the audit verdict (granularity was already preserved through
-   collation), what each phase hardened, and the additive-only tag policy.
-3. Note for the next test-plan session: all changes are `lib/`/form-model
-   level with no observable UI change — targeted Maestro re-run of
-   `flows/ab-satfat-ingredients.yaml` + `flows/01b-manual-entry.yaml` on the
-   next device session is sufficient; no new flows owed. Do not touch
-   `docs/RESULTS.md`, `docs/ACCEPTANCE.md`, or `docs/E2E.md`.
+2. Summarize per phase; call out any spec deviation explicitly.
+3. Note for the next test-plan session: the search endpoint change is
+   runtime-visible — the next device session owes an on-device search-by-name
+   smoke ("banana" → English, generic-first results) on top of the two
+   targeted Maestro flows already owed from the hardening cycle
+   (`ab-satfat-ingredients`, `01b-manual-entry`); the backfill needs a
+   one-launch check that pre-existing entries gained tags (owner checklist).
