@@ -8,6 +8,7 @@ import m0003 from './0003_supreme_vengeance.sql';
 import m0004 from './0004_gorgeous_beyonder.sql';
 import m0005 from './0005_mature_mad_thinker.sql';
 import m0006 from './0006_high_brood.sql';
+import m0007 from './0007_red_nico_minoru.sql';
 
   export default {
     journal,
@@ -18,7 +19,8 @@ m0002,
 m0003,
 m0004,
 m0005,
-m0006
+m0006,
+m0007
     }
   }
   

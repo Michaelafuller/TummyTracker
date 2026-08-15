@@ -95,3 +95,19 @@ export const mealComponent = sqliteTable(
 
 export type MealComponent = typeof mealComponent.$inferSelect;
 export type NewMealComponent = typeof mealComponent.$inferInsert;
+
+/**
+ * A suspected trigger ingredient the user is watching (trigger watchlist /
+ * elimination mode, HANDOFF.md). `term` is a normalized (lowercase,
+ * `[a-z0-9 -]`) text term matched against entry tags via prefix-at-word-
+ * boundary (src/lib/watchlist.ts). `createdAt` doubles as the elimination
+ * start date — v1 has no pause/status; removing a row stops watching it.
+ */
+export const watchlistItem = sqliteTable('watchlist_item', {
+  id: text('id').primaryKey(),
+  term: text('term').notNull().unique(),
+  createdAt: integer('created_at').notNull(),
+});
+
+export type WatchlistItem = typeof watchlistItem.$inferSelect;
+export type NewWatchlistItem = typeof watchlistItem.$inferInsert;

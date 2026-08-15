@@ -17,10 +17,12 @@ import {
   FOOD_TYPES,
   logEntry,
   mealComponent,
+  watchlistItem,
   type LogEntry,
   type MealComponent,
   type NewLogEntry,
   type NewMealComponent,
+  type WatchlistItem,
 } from './schema';
 
 /** Fields a caller supplies on create — id and timestamps are filled in here. */
@@ -183,4 +185,28 @@ export async function deleteLogEntry(id: string): Promise<void> {
     await tx.delete(mealComponent).where(eq(mealComponent.entryId, id));
     await tx.delete(logEntry).where(eq(logEntry.id, id));
   });
+}
+
+/** Watched trigger-ingredient terms, oldest-watched first. */
+export async function listWatchlistItems(): Promise<WatchlistItem[]> {
+  return db.select().from(watchlistItem).orderBy(asc(watchlistItem.createdAt));
+}
+
+/**
+ * Adds a term to the watchlist; `createdAt` doubles as the elimination start
+ * date. Caller passes an already-normalized term (src/lib/watchlist.ts
+ * `normalizeWatchTerm`) — this only persists it.
+ */
+export async function addWatchlistItem(term: string): Promise<WatchlistItem> {
+  const row: WatchlistItem = {
+    id: createId(),
+    term,
+    createdAt: Date.now(),
+  };
+  await db.insert(watchlistItem).values(row);
+  return row;
+}
+
+export async function removeWatchlistItem(id: string): Promise<void> {
+  await db.delete(watchlistItem).where(eq(watchlistItem.id, id));
 }
