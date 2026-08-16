@@ -56,3 +56,14 @@ export const NUTRITION_NOUNS: Record<NutritionField, string> = {
   sugarG: 'sugar',
   sodiumMg: 'sodium',
 };
+
+/**
+ * Unit suffix parsed out of NUTRITION_LABELS' "(unit)" parenthetical, e.g. "g",
+ * "mg", or "" for calories (which has no unit). Single source of truth so goal
+ * progress/check-in copy never hand-writes a unit (CLAUDE.md-adjacent
+ * convention: labels/units always derive from NUTRITION_LABELS).
+ */
+export function nutritionUnit(field: NutritionField): string {
+  const match = /\(([^)]+)\)/.exec(NUTRITION_LABELS[field]);
+  return match ? match[1] : '';
+}

@@ -12,12 +12,16 @@ import {
 } from '@/lib/mealAggregate';
 import { serializeTags } from '@/lib/ingredients';
 import type { TagBackfillRowUpdate } from '@/lib/tagBackfill';
+import type { NutritionField } from '@/lib/validation';
 import { db } from './client';
 import {
   FOOD_TYPES,
+  goal,
   logEntry,
   mealComponent,
   watchlistItem,
+  type Goal,
+  type GoalDirection,
   type LogEntry,
   type MealComponent,
   type NewLogEntry,
@@ -209,4 +213,44 @@ export async function addWatchlistItem(term: string): Promise<WatchlistItem> {
 
 export async function removeWatchlistItem(id: string): Promise<void> {
   await db.delete(watchlistItem).where(eq(watchlistItem.id, id));
+}
+
+/** All nutrient threshold goals, alphabetical by nutrient. */
+export async function listGoals(): Promise<Goal[]> {
+  return db.select().from(goal).orderBy(asc(goal.nutrient));
+}
+
+/**
+ * Insert-or-replace on the nutrient key (at most one goal per nutrient, design
+ * contract). Keeps the original `createdAt` on replace — a select-first read is
+ * already required to know whether this is an insert or a replace, so reusing
+ * that row's `createdAt` is free; it also means "when this goal was first set"
+ * survives a threshold/direction edit instead of resetting.
+ */
+export async function upsertGoal(
+  nutrient: NutritionField,
+  direction: GoalDirection,
+  threshold: number,
+): Promise<Goal> {
+  const existing = await db.select().from(goal).where(eq(goal.nutrient, nutrient)).limit(1);
+  const row: Goal = {
+    id: existing[0]?.id ?? createId(),
+    nutrient,
+    direction,
+    threshold,
+    createdAt: existing[0]?.createdAt ?? Date.now(),
+  };
+  if (existing[0]) {
+    await db
+      .update(goal)
+      .set({ direction, threshold })
+      .where(eq(goal.nutrient, nutrient));
+  } else {
+    await db.insert(goal).values(row);
+  }
+  return row;
+}
+
+export async function removeGoal(nutrient: NutritionField): Promise<void> {
+  await db.delete(goal).where(eq(goal.nutrient, nutrient));
 }
