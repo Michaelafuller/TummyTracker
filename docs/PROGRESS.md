@@ -34,12 +34,14 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   hardening · Search-a-licious migration & tag backfill · **trigger watchlist /
   elimination mode**. Rungs green at HEAD (50 suites / 407 tests) + `bundle:check`
   (migration 0007 survives Metro export).
-- **Owed next device session (do this before further cycles):** migration 0007
-  against a real database · targeted Maestro re-run of `ab-satfat-ingredients` +
-  `01b-manual-entry` · on-device search-by-name smoke ("banana" → English,
-  generic-first — endpoint changed) · one-launch check that pre-existing entries
-  gained parenthetical tags (backfill) · new Maestro flow owed for the watchlist
-  loop (watch from a finding → review notice → entry banner).
+- **✅ Device-verified 2026-08-15 (owner, EAS preview build):** new search API
+  works great on the Pixel — search smoke passed; migration 0007 + backfill ran
+  against the real install without incident (implied by a working post-migration
+  build; explicit tag spot-check still worthwhile).
+- **Still owed (test sessions):** targeted Maestro re-run of
+  `ab-satfat-ingredients` + `01b-manual-entry` · new Maestro flow for the
+  watchlist loop (watch from a finding → review notice → entry banner) ·
+  spot-check that a pre-hardening entry gained parenthetical tags.
 - **Owner on-device checklist (carried):** iOS app icon (needs EAS build), iOS
   time-picker Done-button feel, light-mode look, migration 0006 against a real
   database, and the full scan → add-next → finish-meal → review → save loop (camera).
