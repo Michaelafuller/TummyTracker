@@ -64,36 +64,19 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
 
 ### Shipped last cycle (overwrite each plan cycle; full history = `git log`)
 
-2026-08-15 cycle 3 (planned Fable 5, executed Sonnet 5):
-- **Trigger watchlist / elimination mode:** `watchlist_item` table (migration
-  0007), prefix-at-word-boundary matching ("soy" hits "soybeans", never
-  "buttermilk" from "milk" — precision over recall for alerts), per-term stats
-  (times-since-watch, clean-day streak, avg sentiment), Insights-tab section
-  with manual add + one-tap Watch on finding cards, warning banner on entry
-  view, non-blocking notice on meal review (never gates saving — the journal
-  must capture the lapse). `createdAt` doubles as elimination start date.
-
-2026-08-15 cycle 2 (planned Fable 5, executed Sonnet 5):
-- **Search-a-licious migration:** name search moved off the dead legacy
-  `cgi/search.pl` (was 503-ing) to `search.openfoodfacts.org` — `langs=en`,
-  `product_name_en` fallback (also upgrades scanned foreign products), default
-  relevance sort (no popularity sort, no country filter — both documented in-code),
-  contact email in User-Agent. Genericity re-ranker retained as tiebreak.
-- **Historical tag backfill (owner-approved):** run-once additive-only re-derive
-  over pre-hardening rows — pure plan in `lib/tagBackfill.ts`, `updatedAt`
-  untouched (derived-data repair, not an edit), flag set only after successful
-  apply, idempotent retry on failure.
-
-2026-07-19 cycle, closed 2026-08-15 (planned Fable 5, executed Sonnet 5):
-- **Ingredient-capture hardening:** audit verdict — meal collation already
-  preserved full tag granularity; closed the three real gaps: parenthetical
-  sub-ingredients now captured as tags (with per-word stopword filtering),
-  single-component meals keep full ingredient text on the parent row (new shared
-  `mealIngredientsText`), user-edited ingredient text merges into tags
-  (**additive-only policy**: a removed word never deletes a tag). Collation
-  invariant locked by an end-to-end regression test over the real
-  scan→draft→collate pipeline. Side effect: editing any pre-hardening entry
-  re-tokenizes with the new extractor, so old entries upgrade organically.
+2026-08-15 (five cycles, planned Fable 5, executed Sonnet 5 — details in `git log`):
+- **Ingredient-capture hardening** — parenthetical sub-ingredients captured as
+  tags; additive-only tag policy (a removed word never deletes a tag).
+- **Search-a-licious migration + historical tag backfill** — English
+  generic-first search off the dead legacy endpoint; run-once additive
+  re-derive over pre-hardening rows.
+- **Trigger watchlist / elimination mode** (migration 0007) —
+  prefix-at-word-boundary matching, clean-streak stats, quick-watch from
+  findings, non-blocking flags on entry view + review.
+- **Goals tab parts 1+2** (migration 0008) — daily tally with missing-data
+  honesty; floor/cap thresholds; one-shot self-re-arming daily check-in
+  (floors notify, caps alert in-app at save, never gating the save).
+- **Fix:** clearing the Name field resets the search session.
 
 ---
 
