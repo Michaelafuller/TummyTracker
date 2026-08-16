@@ -72,6 +72,20 @@ export function ComponentForm({
     setCommittedQuery(trimmedName);
   }
 
+  function handleNameChange(value: string) {
+    if (value.trim().length === 0) {
+      // A fully cleared Name means "look up something else": drop the previous
+      // product's barcode (its identity left with the name) and reset the
+      // search session. Without this, the scanned-item guard in handleNameBlur
+      // blocks every later search on this form once a result was picked, and
+      // the same-query guard swallows a re-typed identical term.
+      setCommittedQuery(null);
+      setState((prev) => ({ ...prev, name: value, barcode: null }));
+      return;
+    }
+    set('name', value);
+  }
+
   function handleSelectSearchResult(product: OffProduct) {
     setState((prev) => ({ ...prev, ...offProductToComponentFormState(product) }));
     setCommittedQuery(null);
@@ -126,7 +140,7 @@ export function ComponentForm({
       <FormField label="Name" error={errors.name}>
         <ThemedTextInput
           value={state.name}
-          onChangeText={(value) => set('name', value)}
+          onChangeText={handleNameChange}
           onBlur={handleNameBlur}
           placeholder="e.g. Canned peas"
           accessibilityLabel="Component name"

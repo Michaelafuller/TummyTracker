@@ -138,6 +138,80 @@ describe('ComponentForm', () => {
       expect(queryByLabelText('Use Banana, raw by Chiquita')).toBeNull();
     });
 
+    it('searches a new term after clearing the name following a suggestion tap', async () => {
+      // Owner-reported bug (2026-08-15): picking a result sets the barcode,
+      // and the scanned-item guard then blocked every later search on the
+      // form. Clearing the Name must reset the search session (and the stale
+      // barcode) so the next committed term searches again.
+      mockedFetchOffSearchResults.mockResolvedValue([
+        {
+          barcode: '999',
+          brand: 'Chiquita',
+          found: true,
+          name: 'Banana, raw',
+          nutrition: {
+            calories: 89,
+            fatG: 0.3,
+            saturatedFatG: 0.1,
+            carbsG: 23,
+            proteinG: 1.1,
+            fiberG: 2.6,
+            sugarG: 12,
+            sodiumMg: 1,
+          },
+          servingG: 118,
+          ingredientsText: null,
+          tags: [],
+          categoriesTags: [],
+        },
+      ]);
+      const { getByLabelText, findByLabelText } = await renderForm();
+      await fireEvent.changeText(getByLabelText('Component name'), 'banana');
+      await fireEvent(getByLabelText('Component name'), 'blur');
+      await fireEvent.press(await findByLabelText('Use Banana, raw by Chiquita'));
+
+      await fireEvent.changeText(getByLabelText('Component name'), '');
+      await fireEvent.changeText(getByLabelText('Component name'), 'apple');
+      await fireEvent(getByLabelText('Component name'), 'blur');
+      await waitFor(() => expect(mockedFetchOffSearchResults).toHaveBeenCalledWith('apple', expect.anything()));
+    });
+
+    it('shows results again when the same term is re-entered after clearing', async () => {
+      mockedFetchOffSearchResults.mockResolvedValue([
+        {
+          barcode: '999',
+          brand: 'Chiquita',
+          found: true,
+          name: 'Banana, raw',
+          nutrition: {
+            calories: 89,
+            fatG: 0.3,
+            saturatedFatG: 0.1,
+            carbsG: 23,
+            proteinG: 1.1,
+            fiberG: 2.6,
+            sugarG: 12,
+            sodiumMg: 1,
+          },
+          servingG: 118,
+          ingredientsText: null,
+          tags: [],
+          categoriesTags: [],
+        },
+      ]);
+      const { getByLabelText, findByLabelText } = await renderForm();
+      await fireEvent.changeText(getByLabelText('Component name'), 'banana');
+      await fireEvent(getByLabelText('Component name'), 'blur');
+      await fireEvent.press(await findByLabelText('Use Banana, raw by Chiquita'));
+
+      await fireEvent.changeText(getByLabelText('Component name'), '');
+      await fireEvent.changeText(getByLabelText('Component name'), 'banana');
+      await fireEvent(getByLabelText('Component name'), 'blur');
+      // Results may come from the react-query cache rather than a refetch —
+      // what matters is that the suggestion list is visible again.
+      expect(await findByLabelText('Use Banana, raw by Chiquita')).toBeTruthy();
+    });
+
     it('shows a short-lived notice on zero results and hides it when the name changes', async () => {
       mockedFetchOffSearchResults.mockResolvedValue([]);
       const { getByLabelText, findByText, queryByText } = await renderForm();
