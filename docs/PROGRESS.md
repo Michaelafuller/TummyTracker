@@ -30,18 +30,23 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   regression 2026-07-03: **18/19** (best-ever clean run); the one red
   (`e-temporal-insights`) is a classified flow-bug with the fix applied — re-run
   pending, not an app defect (`docs/RESULTS.md`).
-- **Three cycles complete 2026-08-15** (all merged to `main`): ingredient-capture
-  hardening · Search-a-licious migration & tag backfill · **trigger watchlist /
-  elimination mode**. Rungs green at HEAD (50 suites / 407 tests) + `bundle:check`
-  (migration 0007 survives Metro export).
+- **Four cycles complete 2026-08-15** (all merged to `main`): ingredient-capture
+  hardening · Search-a-licious migration & tag backfill · trigger watchlist /
+  elimination mode · **Goals tab part 1 (daily nutrition tally, new 5th tab)**.
+  Plus a same-day owner-reported bugfix: clearing the Name field now resets the
+  search session (picking a result used to block all later searches via the
+  barcode guard). Rungs green at HEAD (52 suites / 422 tests) + `bundle:check`.
 - **✅ Device-verified 2026-08-15 (owner, EAS preview build):** new search API
   works great on the Pixel — search smoke passed; migration 0007 + backfill ran
   against the real install without incident (implied by a working post-migration
   build; explicit tag spot-check still worthwhile).
 - **Still owed (test sessions):** targeted Maestro re-run of
-  `ab-satfat-ingredients` + `01b-manual-entry` · new Maestro flow for the
-  watchlist loop (watch from a finding → review notice → entry banner) ·
-  spot-check that a pre-hardening entry gained parenthetical tags.
+  `ab-satfat-ingredients` + `01b-manual-entry` · new Maestro flows for the
+  watchlist loop (watch from a finding → review notice → entry banner) and the
+  Goals tab (log a meal → tally shows it) · spot-check that a pre-hardening
+  entry gained parenthetical tags · on-device check of the cleared-name
+  search fix (pick result → clear name → search again). All pure-JS since the
+  owner's EAS build — Metro-into-dev-client suffices.
 - **Owner on-device checklist (carried):** iOS app icon (needs EAS build), iOS
   time-picker Done-button feel, light-mode look, migration 0006 against a real
   database, and the full scan → add-next → finish-meal → review → save loop (camera).
@@ -109,7 +114,7 @@ Sentiment trend chart, confidence labeling, and ingredient-pair analysis **✅ s
 
 | Item | Why | Effort | Notes |
 |------|-----|:--:|------|
-| **Goals tab: daily nutrition tally** (owner-specced 2026-08-15) | 5th nav tab aggregating today's nutrients across food entries — the foundation for goals below | S–M | pure-lib day aggregation (count parent meal rows only, not components); flag entries with missing nutrient data so totals stay trustworthy; later: 7-day mini-trend (see intake-charts row) |
+| **Goals tab: daily nutrition tally** | 5th nav tab aggregating today's nutrients | S–M | **✅ shipped 2026-08-15** — missing-data caveats included; follow-on: 7-day mini-trend (see intake-charts row) |
 | **Nutrient threshold goals + daily check-in** (owner-specced 2026-08-15) | Per-nutrient floors (≥, e.g. 50g protein) and caps (≤, e.g. 20g fat), opt-in per nutrient | M | additive `goal` migration (nutrient, direction, threshold, enabled); **one global daily check-in time** — notification body lists unmet floors, recomputed/rescheduled on every save + app-open, cancelled when all floors met (totals can't change outside the app, so body is never stale; recompute on day rollover); **caps alert in-app at save time** (only a save can cross one), red state in tab; reuse `features/notifications` service pattern; sequenced **after search migration** |
 | **Per-food / ingredient drill-down** | Tap a finding → every instance + outcomes | S–M | no dep; natural follow-on to insights v2 |
 | **BM-regularity + intake charts** | Complete the trends story beyond sentiment | S–M | reuse the zero-dep chart components |
