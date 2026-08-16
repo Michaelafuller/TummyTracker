@@ -2,6 +2,8 @@
 // Timestamps are stored as Unix epoch milliseconds (integers).
 import { index, integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
+import { NUTRITION_FIELDS } from '@/lib/validation';
+
 /** What kind of thing was logged. */
 export const LOG_ENTRY_TYPES = ['meal', 'snack', 'bowel_movement', 'symptom'] as const;
 export type LogEntryType = (typeof LOG_ENTRY_TYPES)[number];
@@ -111,3 +113,24 @@ export const watchlistItem = sqliteTable('watchlist_item', {
 
 export type WatchlistItem = typeof watchlistItem.$inferSelect;
 export type NewWatchlistItem = typeof watchlistItem.$inferInsert;
+
+/** A goal's direction: at-least ("floor") or at-most ("cap") its threshold. */
+export const GOAL_DIRECTIONS = ['floor', 'cap'] as const;
+export type GoalDirection = (typeof GOAL_DIRECTIONS)[number];
+
+/**
+ * A per-nutrient threshold goal (nutrient threshold goals, HANDOFF.md). At most
+ * one goal per nutrient — `nutrient` is unique, so setting again overwrites via
+ * `upsertGoal` (src/db/repository.ts). Floors alert through the daily check-in
+ * notification; caps alert in-app at save time (design contract, HANDOFF.md).
+ */
+export const goal = sqliteTable('goal', {
+  id: text('id').primaryKey(),
+  nutrient: text('nutrient', { enum: NUTRITION_FIELDS }).notNull().unique(),
+  direction: text('direction', { enum: GOAL_DIRECTIONS }).notNull(),
+  threshold: real('threshold').notNull(),
+  createdAt: integer('created_at').notNull(),
+});
+
+export type Goal = typeof goal.$inferSelect;
+export type NewGoal = typeof goal.$inferInsert;

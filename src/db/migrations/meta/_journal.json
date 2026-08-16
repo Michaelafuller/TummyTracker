@@ -57,6 +57,13 @@
       "when": 1786833980877,
       "tag": "0007_red_nico_minoru",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1786840315300,
+      "tag": "0008_sticky_menace",
+      "breakpoints": true
     }
   ]
 }
