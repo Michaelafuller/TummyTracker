@@ -1,15 +1,15 @@
-# HANDOFF.md — Cycles: check-in persistence fix · dictation-safe inputs · light-theme palette pass
+# HANDOFF.md — Cycles: check-in persistence fix · dictation-safe inputs · light-theme palette pass · splash/notification palette
 
 > **Read first:** root `CLAUDE.md` (auto-loaded). File paths are from the
 > current tree; read the named files before editing.
 >
-> **Session type:** execute — three independent cycles, in order (each is
+> **Session type:** execute — four independent cycles, in order (each is
 > shippable alone; commit per logical change). Definition of done per
 > CLAUDE.md §4: `npm run typecheck && npm run lint && npm test` green, tests
-> ship with each change. **`npm run bundle:check` is NOT required** — all
-> three cycles are pure JS/TS (no new deps, no `.sql`, no native/config
-> changes), so no EAS build is triggered; Metro-into-dev-client suffices for
-> device checks later.
+> ship with each change. Cycles A–C are pure JS/TS (no new deps, no `.sql`).
+> **Cycle D touches `app.json` (native config, baked at build time), so run
+> `npm run bundle:check` at closeout** — the owner's next EAS preview build
+> will carry this cycle plus the already-pending icon-layer fix.
 >
 > **Source of these requirements:** owner bug reports + preference direction
 > 2026-08-16 (plan session). Root causes below were verified against the code
@@ -221,13 +221,8 @@ mode's `textSecondary #B7ADCF`; light mode replaced that hue with teal-gray.
    chips `GoalsSection.tsx:118-119,125`, and the calendar in
    `(tabs)/explore.tsx:62,72-74` (selected-day background, dots, arrows —
    currently `theme.text`, i.e. black circles in light mode).
-6. **Out of scope (owner: ride with the next native build):** the
-   off-palette splash/notification blues — `app.json` splash
-   `#208AEF` + notifications `color`, and the matching
-   `animated-icon.tsx:122,129` / `animated-icon.module.css` gradient. These
-   are template-leftover blues, but the JS gradient must change in lockstep
-   with the native splash background or boot will visibly clash, and
-   `app.json` changes are baked only at build time. Tracked in PROGRESS.md.
+6. The off-palette splash/notification blues are **Cycle D** (owner rolled
+   them into this release 2026-08-16).
 
 ### Tests
 
@@ -246,11 +241,61 @@ for light mode` · `feat(theme): palette-driven navigation themes` ·
 
 ---
 
+## Cycle D — Splash & notification colors onto the palette (owner preference)
+
+**Owner direction:** replace the template-leftover blues (`#208AEF` family)
+with palette colors; color choice delegated — decisions below.
+
+**Verified state:** the native splash (`app.json` expo-splash-screen plugin,
+line 45) is blue `#208AEF`; the JS splash overlay
+(`src/components/animated-icon.tsx:129`, `backgroundSolidColor`) is the same
+blue and MUST stay identical to the native splash or boot visibly clashes.
+`assets/images/splash-icon.png` is a white stomach-logo silhouette (checked
+visually — it needs a colored field behind it). The `expo-notifications`
+plugin color (`app.json:62`) is also `#208AEF`, while the top-level
+`notification.color` (`app.json:37`) is already correct teal `#5BC0BE`.
+The `AnimatedIcon` component (blue gradient + `expo-logo.png`) is **dead
+code** — grep-verified: only `AnimatedSplashOverlay` is imported anywhere
+(`_layout.tsx:4`).
+
+### Design contract (decided in planning — do not re-litigate)
+
+1. **Splash background → `#0D1C20`** (the palette's dark background) in BOTH
+   places, exactly matching: `app.json` expo-splash-screen `backgroundColor`
+   AND `animated-icon.tsx` `backgroundSolidColor`. This matches the adaptive
+   icon background (`app.json:20`), making launcher-tap → splash seamless,
+   and the white logo silhouette sits on it cleanly. One dark brand splash
+   for both modes — no `dark` variant config needed.
+2. **`expo-notifications` plugin color → `#5BC0BE`** (align with
+   `notification.color` at `app.json:37`).
+3. **Delete the dead `AnimatedIcon` export** rather than recoloring its
+   gradient: remove `AnimatedIcon` from `animated-icon.tsx` and
+   `animated-icon.web.tsx`, plus whatever becomes unreferenced with it
+   (`animated-icon.module.css` gradient, `expo-logo.png`, `logo-glow.png`,
+   the unused keyframes) — verify each is truly unreferenced (grep, then
+   rungs) before deleting; keep `AnimatedSplashOverlay` working on both
+   platforms. If anything turns out to be referenced after all, recolor its
+   gradient to `#5BC0BE → #0F6E6C` instead and note it in the summary.
+
+### Tests / verification
+
+- Rungs green + **`npm run bundle:check`** (this cycle's changes are exactly
+  the kind the three rungs can't see).
+- Splash/notification colors are baked at build time — **visible only after
+  the owner's next EAS preview build** (which also delivers the pending
+  icon-layer fix). Flag in the execute summary.
+
+**Commits (suggested):** `feat(assets): palette splash and notification
+colors` · `chore(components): remove dead AnimatedIcon template leftovers`.
+
+---
+
 ## Closeout
 
-- All three rungs green at HEAD; no bundle:check needed (pure JS/TS).
+- All three rungs green at HEAD, plus `npm run bundle:check` (Cycle D).
 - Brief execute summary (what shipped, deviations, anything discovered) for
   the next test-plan session, which owes: check-in re-arm live test update
   (the PROGRESS "live check-in test" steps change — re-arm is now
   horizon-based), dictation manual ACCEPTANCE line, light/dark visual pass,
-  full Maestro re-run after the theme change.
+  full Maestro re-run after the theme change, and the splash/notification
+  visual check after the owner's next EAS build.

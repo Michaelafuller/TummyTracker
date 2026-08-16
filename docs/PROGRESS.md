@@ -45,7 +45,7 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   works great on the Pixel — search smoke passed; migration 0007 + backfill ran
   against the real install without incident (implied by a working post-migration
   build; explicit tag spot-check still worthwhile).
-- **Next up (planned 2026-08-16, specced in `docs/HANDOFF.md` — three cycles):**
+- **Next up (planned 2026-08-16, specced in `docs/HANDOFF.md` — four cycles):**
   1. **Check-in persistence fix** — owner-reported: the daily check-in fires
      once then dies with the toggle reading OFF. Confirmed real statefulness
      bug: "enabled" lives only as the pending OS notification, which firing
@@ -60,6 +60,11 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
      `PrimaryButton` on `primary` tokens (replacing ~10 inverted black/white
      fills), new violet `accent` tokens + plum light `textSecondary`
      (brings the purples to light mode; all pairs computed ≥7:1).
+  4. **Splash/notification blues → palette** — splash to `#0D1C20` (matches
+     adaptive icon bg; white logo silhouette sits on it), notifications
+     plugin to `#5BC0BE`, dead `AnimatedIcon` template leftovers deleted.
+     `app.json` changes are baked at build time — **visible on the next EAS
+     preview build**, which also delivers the pending icon-layer fix.
 - **Still owed (test sessions):** targeted Maestro re-run of
   `ab-satfat-ingredients` + `01b-manual-entry` · new Maestro flows: watchlist
   loop, Goals tally, goal editor (set floor → progress shows → remove), cap
@@ -140,10 +145,7 @@ can't manufacture ones OFF lacks entirely (e.g. "apple"); see Decision 6.
 Remaining Tier 3: photo attachment ⚠ · save-confirmation toasts + haptics ·
 onboarding + better empty states · swipe-to-delete · reminder **deep-link** into
 the add-entry form · settings (force theme, first-day-of-week — currently
-hardcoded Sunday, default meal slot by time of day) · **splash/notification
-blues → palette** (template-leftover `#208AEF` in `app.json` ×2 +
-`animated-icon` gradient; JS gradient and native splash must change in
-lockstep — **ride with the next EAS build**, S).
+hardcoded Sunday, default meal slot by time of day).
 
 ## Tier 4 — Platform / infra
 
