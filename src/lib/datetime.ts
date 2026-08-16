@@ -98,3 +98,19 @@ export function formatTime12h(epochMs: number): string {
   const d = new Date(epochMs);
   return formatClock12h(d.getHours(), d.getMinutes());
 }
+
+/**
+ * Local-time day bounds for the day containing `epochMs`: midnight
+ * (00:00:00.000 local) through the following midnight — `end` is exclusive,
+ * so a timestamp `t` falls in this day iff `start <= t < end`. Built by
+ * mutating a `Date` to local midnight and stepping the day field forward by
+ * one, so DST transitions (23/25-hour local days) are handled by the `Date`
+ * engine rather than a fixed-24h-offset assumption.
+ */
+export function dayBounds(epochMs: number): { start: number; end: number } {
+  const d = new Date(epochMs);
+  d.setHours(0, 0, 0, 0);
+  const start = d.getTime();
+  const end = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 0, 0, 0, 0).getTime();
+  return { start, end };
+}
