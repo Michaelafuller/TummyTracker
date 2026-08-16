@@ -5,6 +5,7 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { Spacing } from '@/constants/theme';
 import { useDatabaseMigrations } from '@/db/migrate';
 import { runTagBackfillOnce } from '@/db/tagBackfillRunner';
+import { refreshCheckInIfEnabled } from '@/features/goals/checkInService';
 import { useGoalsStore } from '@/features/goals/goalsStore';
 import { configureNotificationHandler } from '@/features/notifications/service';
 import { usePrefsStore } from '@/features/prefs/prefsStore';
@@ -33,6 +34,9 @@ function MigrationGate({ children }: { children: ReactNode }) {
       // Watchlist/goals reads must not race the migration gate — hydrate here too.
       void useWatchlistStore.getState().load();
       void useGoalsStore.getState().load();
+      // Day rollover re-arming: if the check-in is enabled, its last-scheduled
+      // fire may be stale (yesterday's totals) by the time the app reopens.
+      void refreshCheckInIfEnabled();
     }
   }, [success]);
 

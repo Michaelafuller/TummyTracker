@@ -19,6 +19,16 @@ jest.mock('@/db/repository', () => ({
   removeGoal: jest.fn(),
 }));
 
+// The check-in UI/service touches expo-notifications, which isn't relevant to
+// this screen's tally/editor behavior — stub it out so these tests stay focused.
+jest.mock('@/features/goals/checkInService', () => ({
+  getCheckIn: jest.fn().mockResolvedValue({ enabled: false, hour: 20, minute: 0 }),
+  ensureNotificationPermission: jest.fn(),
+  refreshCheckIn: jest.fn(),
+  disableCheckIn: jest.fn(),
+  refreshCheckInIfEnabled: jest.fn().mockResolvedValue(undefined),
+}));
+
 const TEST_INSETS: Metrics = {
   frame: { x: 0, y: 0, width: 320, height: 640 },
   insets: { top: 0, left: 0, right: 0, bottom: 0 },

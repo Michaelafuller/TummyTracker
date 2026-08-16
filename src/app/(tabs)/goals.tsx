@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Spacing, type ThemeColor } from '@/constants/theme';
+import { CheckInSection } from '@/features/goals/CheckInSection';
 import { GoalsSection } from '@/features/goals/GoalsSection';
 import { useAllEntries } from '@/features/logging/useEntries';
 import { useGoalsStore } from '@/features/goals/goalsStore';
@@ -120,6 +121,8 @@ export default function GoalsScreen() {
         )}
 
         <GoalsSection />
+
+        <CheckInSection />
       </ScrollView>
     </ThemedView>
   );

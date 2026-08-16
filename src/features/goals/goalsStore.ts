@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 import { listGoals, removeGoal, upsertGoal } from '@/db/repository';
 import type { Goal, GoalDirection } from '@/db/schema';
+import { refreshCheckInIfEnabled } from '@/features/goals/checkInService';
 import type { NutritionField } from '@/lib/validation';
 
 /**
@@ -29,9 +30,13 @@ export const useGoalsStore = create<GoalsStore>((set) => ({
   upsert: async (nutrient, direction, threshold) => {
     await upsertGoal(nutrient, direction, threshold);
     set({ goals: await listGoals() });
+    // A goal edit can change which floors are unmet — re-arm the check-in
+    // with fresh copy (design contract: the check-in body is never stale).
+    void refreshCheckInIfEnabled();
   },
   remove: async (nutrient) => {
     await removeGoal(nutrient);
     set({ goals: await listGoals() });
+    void refreshCheckInIfEnabled();
   },
 }));

@@ -9,7 +9,11 @@ import {
   reminderTitle,
 } from './model';
 
-const CHANNEL_ID = 'reminders';
+// Exported so other local-notification features (e.g. the goals daily check-in,
+// src/features/goals/checkInService.ts) reuse this channel instead of creating
+// their own (CLAUDE.md §9 — device permissions/channels are pre-approved for
+// reminders only; a new channel would be scope creep).
+export const CHANNEL_ID = 'reminders';
 
 /** Show reminders as a banner even when the app is foregrounded. Call once at startup. */
 export function configureNotificationHandler() {
@@ -23,7 +27,7 @@ export function configureNotificationHandler() {
   });
 }
 
-async function ensureAndroidChannel() {
+export async function ensureAndroidChannel() {
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
       name: 'Logging reminders',

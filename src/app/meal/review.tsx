@@ -9,6 +9,8 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { FOOD_TYPES, MEAL_SLOTS, type MealSlot } from '@/db/schema';
 import { createMealWithComponents } from '@/db/repository';
+import { refreshCheckInIfEnabled } from '@/features/goals/checkInService';
+import { useGoalsStore } from '@/features/goals/goalsStore';
 import { useMealBuilderStore } from '@/features/logging/mealBuilderStore';
 import {
   buildMealEntry,
@@ -16,12 +18,25 @@ import {
   type MealReviewErrors,
   type MealReviewFormState,
 } from '@/features/logging/mealReviewFormModel';
+import { useAllEntries } from '@/features/logging/useEntries';
 import { SentimentSelector } from '@/features/sentiment/SentimentSelector';
 import { useWatchlistStore } from '@/features/watchlist/watchlistStore';
 import { useTheme } from '@/hooks/use-theme';
+import { tallyDailyNutrition } from '@/lib/dailyTally';
+import { dayBounds } from '@/lib/datetime';
+import { evaluateGoals, exceededCaps, withPendingNutrition, type GoalEvaluation } from '@/lib/goals';
 import { aggregateComponents, unionComponentTags } from '@/lib/mealAggregate';
+import { NUTRITION_NOUNS, nutritionUnit } from '@/lib/nutrition';
 import { MAX_NOTES_LENGTH } from '@/lib/validation';
 import { describeWatchedMatches, findWatchedTagsInTags } from '@/lib/watchlist';
+
+/** "Saving puts fat at 24g — over your 20g cap." */
+function capNoticeLine(evaluation: GoalEvaluation): string {
+  const unit = nutritionUnit(evaluation.goal.nutrient);
+  const amount = (value: number) => (unit.length > 0 ? `${value}${unit}` : String(value));
+  const noun = NUTRITION_NOUNS[evaluation.goal.nutrient];
+  return `Saving puts ${noun} at ${amount(evaluation.total)} — over your ${amount(evaluation.goal.threshold)} cap`;
+}
 
 const TYPE_OPTIONS = FOOD_TYPES.map((value) => ({
   value,
@@ -62,6 +77,18 @@ export default function MealReviewScreen() {
     [unionTags, watchlistItems],
   );
 
+  // Save-time cap notice (design contract, HANDOFF.md): only a save can move
+  // the total, so this previews what TODAY's tally would become if the
+  // pending meal were saved right now — never blocks the save button.
+  const [now] = useState(() => Date.now());
+  const goals = useGoalsStore((s) => s.goals);
+  const allEntries = useAllEntries();
+  const exceededCapEvaluations = useMemo(() => {
+    const { start, end } = dayBounds(now);
+    const todayTally = tallyDailyNutrition(allEntries, start, end);
+    return exceededCaps(evaluateGoals(goals, withPendingNutrition(todayTally, aggregate)));
+  }, [allEntries, goals, aggregate, now]);
+
   const set = useMemo(
     () =>
       <K extends keyof MealReviewFormState>(key: K, value: MealReviewFormState[K]) =>
@@ -77,6 +104,9 @@ export default function MealReviewScreen() {
     setSubmitting(true);
     try {
       await createMealWithComponents(result.entry, components);
+      // Fire-and-forget: today's totals just changed, so re-arm the check-in
+      // with fresh copy if it's enabled (design contract — never stale).
+      void refreshCheckInIfEnabled();
       clearBuilder();
       router.dismissAll();
     } finally {
@@ -180,6 +210,22 @@ export default function MealReviewScreen() {
               Contains a watched ingredient
             </ThemedText>
             <ThemedText type="small">{describeWatchedMatches(watchedMatches)}</ThemedText>
+          </View>
+        ) : null}
+
+        {exceededCapEvaluations.length > 0 ? (
+          <View
+            accessibilityRole="alert"
+            accessibilityLabel={`Saving would exceed a goal cap: ${exceededCapEvaluations.map(capNoticeLine).join('; ')}`}
+            style={[styles.watchNotice, { backgroundColor: theme.backgroundSelected, borderColor: theme.danger }]}>
+            <ThemedText type="smallBold" themeColor="danger">
+              This save goes over a goal
+            </ThemedText>
+            {exceededCapEvaluations.map((evaluation) => (
+              <ThemedText key={evaluation.goal.id} type="small">
+                {capNoticeLine(evaluation)}
+              </ThemedText>
+            ))}
           </View>
         ) : null}
 

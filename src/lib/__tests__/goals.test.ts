@@ -1,6 +1,6 @@
 import type { Goal, GoalDirection } from '@/db/schema';
 import type { DailyTally } from '../dailyTally';
-import { evaluateGoals, exceededCaps, parseGoalThreshold, unmetFloors } from '../goals';
+import { evaluateGoals, exceededCaps, parseGoalThreshold, unmetFloors, withPendingNutrition } from '../goals';
 import { NUTRITION_FIELDS, type NutritionField } from '../validation';
 
 function makeGoal(nutrient: NutritionField, direction: GoalDirection, threshold: number, id: string = nutrient): Goal {
@@ -95,6 +95,30 @@ describe('unmetFloors / exceededCaps', () => {
   it('exceededCaps returns only exceeded cap goals', () => {
     const result = exceededCaps(evaluations);
     expect(result.map((e) => e.goal.id)).toEqual(['fat-goal']);
+  });
+});
+
+describe('withPendingNutrition', () => {
+  it('adds a pending amount onto an existing total', () => {
+    const combined = withPendingNutrition(makeTally({ fatG: 15 }), { fatG: 9 });
+    expect(combined.nutrients.fatG.total).toBe(24);
+  });
+
+  it('treats a null tally total as 0', () => {
+    const combined = withPendingNutrition(makeTally({}), { proteinG: 12 });
+    expect(combined.nutrients.proteinG.total).toBe(12);
+  });
+
+  it('treats a missing pending value as 0', () => {
+    const combined = withPendingNutrition(makeTally({ sugarG: 5 }), {});
+    expect(combined.nutrients.sugarG.total).toBe(5);
+  });
+
+  it('leaves loggedCount/missingCount untouched (only total changes)', () => {
+    const tally = makeTally({ fatG: 15 });
+    const combined = withPendingNutrition(tally, { fatG: 9 });
+    expect(combined.nutrients.fatG.loggedCount).toBe(tally.nutrients.fatG.loggedCount);
+    expect(combined.nutrients.fatG.missingCount).toBe(tally.nutrients.fatG.missingCount);
   });
 });
 

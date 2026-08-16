@@ -10,6 +10,7 @@
 
 import type { Goal } from '@/db/schema';
 import type { DailyTally } from './dailyTally';
+import { NUTRITION_FIELDS, type NutritionField } from './validation';
 
 export interface GoalEvaluation {
   goal: Goal;
@@ -43,6 +44,26 @@ export function unmetFloors(evaluations: readonly GoalEvaluation[]): GoalEvaluat
 /** Cap goals whose total has gone over — the set the save-time notice names. */
 export function exceededCaps(evaluations: readonly GoalEvaluation[]): GoalEvaluation[] {
   return evaluations.filter((e) => e.goal.direction === 'cap' && !e.met);
+}
+
+/**
+ * Merges a not-yet-saved nutrition aggregate into today's tally totals — the
+ * "what would today look like after this save" preview behind the save-time
+ * cap notice (HANDOFF.md Phase 4). Missing values on either side count as 0,
+ * the same rule `evaluateGoals` already applies, so the result is safe to
+ * evaluate directly.
+ */
+export function withPendingNutrition(
+  tally: DailyTally,
+  pending: Partial<Record<NutritionField, number | null | undefined>>,
+): DailyTally {
+  const nutrients = {} as DailyTally['nutrients'];
+  for (const field of NUTRITION_FIELDS) {
+    const current = tally.nutrients[field];
+    const total = (current.total ?? 0) + (pending[field] ?? 0);
+    nutrients[field] = { ...current, total };
+  }
+  return { ...tally, nutrients };
 }
 
 /**
