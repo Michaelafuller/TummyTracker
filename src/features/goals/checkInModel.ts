@@ -5,7 +5,7 @@
 // reconstructs UI state from it and builds the copy that goes in the body.
 
 import type { Goal } from '@/db/schema';
-import { NUTRITION_LABELS, NUTRITION_NOUNS } from '@/lib/nutrition';
+import { NUTRITION_NOUNS, nutritionUnit } from '@/lib/nutrition';
 import type { NutritionField } from '@/lib/validation';
 import type { GoalEvaluation } from '@/lib/goals';
 
@@ -56,14 +56,8 @@ export function nextCheckInFireDate(now: number, hour: number, minute: number, s
   return d;
 }
 
-/** Unit suffix parsed out of NUTRITION_LABELS' "(unit)" parenthetical, e.g. "g", "mg", or "" for calories. */
-function unitFor(field: NutritionField): string {
-  const match = /\(([^)]+)\)/.exec(NUTRITION_LABELS[field]);
-  return match ? match[1] : '';
-}
-
 function amountText(field: NutritionField, amount: number): string {
-  const unit = unitFor(field);
+  const unit = nutritionUnit(field);
   return unit.length > 0 ? `${amount}${unit}` : String(amount);
 }
 

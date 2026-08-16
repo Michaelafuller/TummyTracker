@@ -1,13 +1,22 @@
 import type { ReactElement } from 'react';
-import { render } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
 import { SafeAreaProvider, type Metrics } from 'react-native-safe-area-context';
 
-import type { LogEntry } from '@/db/schema';
+import { Colors } from '@/constants/theme';
+import { listGoals, removeGoal, upsertGoal } from '@/db/repository';
+import type { Goal, LogEntry } from '@/db/schema';
+import { useGoalsStore } from '@/features/goals/goalsStore';
 import GoalsScreen from '../goals';
 
 let mockEntries: LogEntry[] = [];
 jest.mock('@/features/logging/useEntries', () => ({
   useAllEntries: () => mockEntries,
+}));
+
+jest.mock('@/db/repository', () => ({
+  listGoals: jest.fn(),
+  upsertGoal: jest.fn(),
+  removeGoal: jest.fn(),
 }));
 
 const TEST_INSETS: Metrics = {
@@ -54,6 +63,8 @@ function entry(overrides: Partial<LogEntry> & { type: LogEntry['type'] }): LogEn
 beforeEach(() => {
   seq = 0;
   mockEntries = [];
+  useGoalsStore.setState({ goals: [], loaded: false });
+  jest.clearAllMocks();
 });
 
 describe('GoalsScreen', () => {
@@ -96,5 +107,77 @@ describe('GoalsScreen', () => {
     const { getByText } = await renderScreen(<GoalsScreen />);
     expect(getByText('From 1 entry today')).toBeTruthy();
     expect(getByText('100')).toBeTruthy();
+  });
+});
+
+function goal(overrides: Partial<Goal> & { nutrient: Goal['nutrient']; direction: Goal['direction']; threshold: number }): Goal {
+  return { id: `goal-${overrides.nutrient}`, createdAt: 0, ...overrides };
+}
+
+describe('GoalsScreen goal-aware tally progress', () => {
+  it('renders a cap-exceeded total in the danger color', async () => {
+    useGoalsStore.setState({ goals: [goal({ nutrient: 'fatG', direction: 'cap', threshold: 20 })], loaded: true });
+    mockEntries = [entry({ type: 'meal', fatG: 25 })];
+    const { getByText } = await renderScreen(<GoalsScreen />);
+    expect(getByText('25g / 20g')).toHaveStyle({ color: Colors.light.danger });
+  });
+
+  it('renders a met floor in the positive color and an unmet floor in the neutral color', async () => {
+    useGoalsStore.setState({
+      goals: [
+        goal({ nutrient: 'proteinG', direction: 'floor', threshold: 50 }),
+        goal({ nutrient: 'fiberG', direction: 'floor', threshold: 30 }),
+      ],
+      loaded: true,
+    });
+    mockEntries = [entry({ type: 'meal', proteinG: 60, fiberG: 10 })];
+    const { getByText } = await renderScreen(<GoalsScreen />);
+    expect(getByText('60g / 50g')).toHaveStyle({ color: Colors.light.primary });
+    expect(getByText('10g / 30g')).toHaveStyle({ color: Colors.light.textSecondary });
+  });
+
+  it('a cap still within budget renders in the positive color', async () => {
+    useGoalsStore.setState({ goals: [goal({ nutrient: 'sugarG', direction: 'cap', threshold: 30 })], loaded: true });
+    mockEntries = [entry({ type: 'meal', sugarG: 10 })];
+    const { getByText } = await renderScreen(<GoalsScreen />);
+    expect(getByText('10g / 30g')).toHaveStyle({ color: Colors.light.primary });
+  });
+});
+
+describe('GoalsScreen goal editor', () => {
+  it('setting a floor persists via the repository and shows on the row', async () => {
+    (upsertGoal as jest.Mock).mockResolvedValue(undefined);
+    (listGoals as jest.Mock).mockResolvedValue([goal({ nutrient: 'proteinG', direction: 'floor', threshold: 50 })]);
+
+    const { getByLabelText, findByText } = await renderScreen(<GoalsScreen />);
+    await fireEvent.press(getByLabelText('Protein goal: no goal set'));
+    await fireEvent.changeText(getByLabelText('Set protein goal'), '50');
+    await fireEvent.press(getByLabelText('Save protein goal'));
+
+    expect(upsertGoal).toHaveBeenCalledWith('proteinG', 'floor', 50);
+    expect(await findByText('≥ 50g')).toBeTruthy();
+  });
+
+  it('rejects an invalid threshold and does not call the repository', async () => {
+    const { getByLabelText, findByText } = await renderScreen(<GoalsScreen />);
+    await fireEvent.press(getByLabelText('Protein goal: no goal set'));
+    await fireEvent.changeText(getByLabelText('Set protein goal'), '0');
+    await fireEvent.press(getByLabelText('Save protein goal'));
+
+    expect(await findByText('Enter a positive number.')).toBeTruthy();
+    expect(upsertGoal).not.toHaveBeenCalled();
+  });
+
+  it('remove clears the row back to "No goal"', async () => {
+    useGoalsStore.setState({ goals: [goal({ nutrient: 'proteinG', direction: 'floor', threshold: 50 })], loaded: true });
+    (removeGoal as jest.Mock).mockResolvedValue(undefined);
+    (listGoals as jest.Mock).mockResolvedValue([]);
+
+    const { getByLabelText, findByLabelText } = await renderScreen(<GoalsScreen />);
+    await fireEvent.press(getByLabelText('Protein goal: ≥ 50g'));
+    await fireEvent.press(getByLabelText('Remove protein goal'));
+
+    expect(removeGoal).toHaveBeenCalledWith('proteinG');
+    expect(await findByLabelText('Protein goal: no goal set')).toBeTruthy();
   });
 });
