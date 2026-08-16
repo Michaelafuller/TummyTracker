@@ -35,14 +35,12 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   Goals tab part 1 (daily tally, new 5th tab) · **Goals part 2 (threshold
   goals + daily check-in, migration 0008)**. Plus the cleared-name search-reset
   bugfix. Rungs green at HEAD (56 suites / 479 tests) + `bundle:check`.
-- **Pending owner asset (Android icon):** owner's 2026-08-15 icon refresh
-  (`4b14f21`, on `main`) left `android-icon-foreground.png` as the flattened
-  full icon (opaque, no safe-zone) and the background with baked rounded
-  corners — launchers will crop/zoom it and the background layer never shows.
-  Fix is blocked on a **foreground-only transparent export** from the owner's
-  icon set; then a small cycle pads all three layers into the ~66% safe zone
-  (monochrome PNG is structurally fine — Expo doesn't take SVG there). Check
-  `notification-icon.png` renders as a white silhouette in the same pass.
+- **Android adaptive icon layers — ✅ fixed 2026-08-15:** owner supplied the
+  transparent foreground export; all three layers re-processed (foreground +
+  monochrome padded into the ~62% launcher safe zone at 1024², background made
+  full-bleed). `notification-icon.png` verified as a proper white-alpha
+  silhouette — no change needed. **Icon changes are baked at build time — the
+  next EAS build is when this becomes visible on device.**
 - **✅ Device-verified 2026-08-15 (owner, EAS preview build):** new search API
   works great on the Pixel — search smoke passed; migration 0007 + backfill ran
   against the real install without incident (implied by a working post-migration
