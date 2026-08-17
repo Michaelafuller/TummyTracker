@@ -1,14 +1,30 @@
 appId: com.tummytracker.app
 # A + B — Persistence: sat. fat and ingredient text survive a SQLite round-trip.
-#   - Enter ingredients and sat. fat in manual-entry form, save
+#   - Enter ingredients and sat. fat in the component-confirm form, save
 #   - Reopen the entry in the edit screen and assert the values are pre-filled
+# Rewritten 2026-08-16 test-backfill for the two-screen component -> review
+# chain (Ingredients/Sat. fat live on ComponentForm at /meal/component; name
+# is confirmed on /meal/review) — was stale at "Entry name" / "Save entry".
+#
+# Extended 2026-08-16 (Ingredient-capture hardening item, ACCEPTANCE.md
+# "2026-08-15 release"): "editing ingredients to remove a word never deletes
+# an existing tag" (additive-only policy, src/features/logging/formModel.ts).
+# There is no direct tag-list UI anywhere in the app (confirmed — grep for
+# tagsJson rendering turns up nothing), so the watchlist's watched-ingredient
+# banner ("Contains a watched ingredient", src/app/entry/[id].tsx) is used as
+# a visible proxy for tagsJson contents: watch "garlic", confirm the banner
+# appears (tag present), edit the ingredients text to remove the word
+# "garlic", save, reopen, and confirm the banner STILL appears — proving the
+# tag survived even though the source word left the text.
 ---
 - launchApp:
     clearState: true
 
-# --- Create the entry ---
+# --- Create the entry (component-confirm screen) ---
 - tapOn: "Add an entry manually"
-- tapOn: "Entry name"
+- assertVisible:
+    text: "Component name"
+- tapOn: "Component name"
 - inputText: "Sat Fat Test"
 - hideKeyboard
 
@@ -18,29 +34,42 @@ appId: com.tummytracker.app
       text: "Ingredients (optional)"
     direction: DOWN
 - tapOn: "Ingredients"
-- inputText: "butter, cream"
+- inputText: "butter, cream, garlic"
 - hideKeyboard
 - waitForAnimationToEnd
 
-# Scroll to Sat. fat field and fill it
+# Scroll to Sat. fat field and fill it. Scroll target is "Protein (g)" (one
+# row below Sat. fat), not "Sat. fat (g)" itself — a nutrition-grid label is
+# short enough to satisfy scrollUntilVisible while its taller input box
+# directly below is still entirely off-screen and untappable (confirmed via
+# uiautomator dump: the EditText wasn't even in the laid-out hierarchy at
+# that scroll position). Scrolling one row further gives it margin.
 - scrollUntilVisible:
     element:
-      text: "Sat. fat (g)"
+      text: "Protein \\(g\\)"
     direction: DOWN
-- tapOn: "Sat. fat (g)"
+- tapOn: "Sat. fat \\(g\\)"
 - inputText: "12"
 - hideKeyboard
 
-# Save
+# Finish meal -> review screen -> Save
 - scrollUntilVisible:
     element:
-      text: "Save entry"
+      text: "Finish meal"
     direction: DOWN
-- tapOn: "Save entry"
+- tapOn: "Finish meal"
+- waitForAnimationToEnd
+- assertVisible: "Sat Fat Test"
+- scrollUntilVisible:
+    element:
+      text: "Save meal"
+    direction: DOWN
+- tapOn: "Save meal"
+- waitForAnimationToEnd
 - waitForAnimationToEnd
 - assertVisible: "TummyTracker"
 
-# --- Reopen via Journal ---
+# --- Reopen via Journal: assert ingredients persisted ---
 - tapOn:
     id: "tab-journal"
 - tapOn: "Sat Fat Test"
@@ -50,6 +79,62 @@ appId: com.tummytracker.app
 # is also provided by Jest unit tests for scaleNutrition / validateNutrition)
 - scrollUntilVisible:
     element:
-      text: "butter, cream"
+      text: "butter, cream, garlic"
     direction: DOWN
-- assertVisible: "butter, cream"
+- assertVisible: "butter, cream, garlic"
+
+# entry/[id].tsx is a pushed stack screen — no tab bar visible here. Back out
+# to Journal (which has the tab bar) before switching tabs.
+- back
+- waitForAnimationToEnd
+- assertVisible: "Journal"
+
+# --- Extend: additive-only tag policy proxied via the watchlist banner ---
+- tapOn:
+    id: "tab-insights"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "New watchlist term"
+    direction: DOWN
+- tapOn: "New watchlist term"
+- inputText: "garlic"
+- hideKeyboard
+- tapOn: "Add to watchlist"
+- waitForAnimationToEnd
+# The input field is cleared on a successful add (hideKeyboard above avoids
+# the false-positive where "garlic" would otherwise still just be sitting,
+# unsent, in the input box) — "garlic" here can only match the new item card.
+- assertVisible: "garlic"
+
+# Reopen the entry — the tag from the original save already contains
+# "garlic", so the banner should appear immediately.
+- tapOn:
+    id: "tab-journal"
+- waitForAnimationToEnd
+- tapOn: "Sat Fat Test"
+- waitForAnimationToEnd
+- assertVisible: "Contains a watched ingredient"
+
+# Edit the ingredients text to remove the word "garlic" entirely.
+- scrollUntilVisible:
+    element:
+      text: "butter, cream, garlic"
+    direction: DOWN
+- tapOn: "Ingredients"
+- eraseText: 40
+- inputText: "butter, cream"
+- hideKeyboard
+
+- scrollUntilVisible:
+    element:
+      text: "Save changes"
+    direction: DOWN
+- tapOn: "Save changes"
+- waitForAnimationToEnd
+
+# Reopen again — the banner must still show: the "garlic" tag was never
+# deleted just because the word left the ingredients text (additive-only).
+- tapOn: "Sat Fat Test"
+- waitForAnimationToEnd
+- assertVisible: "Contains a watched ingredient"

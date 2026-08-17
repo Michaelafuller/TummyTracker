@@ -1,6 +1,7 @@
 appId: com.tummytracker.app
-# Nav — all four bottom tabs reachable without crash; each screen renders
-# its landmark content.
+# Nav — all five bottom tabs reachable without crash; each screen renders
+# its landmark content. (Goals tab added 2026-08-15 cycle — this flow was
+# stale at 4 tabs until the 2026-08-16 test-backfill verification pass.)
 # NOTE: Insights screen has no "Insights" subtitle heading (finding — see RESULTS.md).
 # "Your journal so far" is used instead as it is always rendered on that screen.
 ---
@@ -18,6 +19,12 @@ appId: com.tummytracker.app
 - waitForAnimationToEnd
 # Insights screen renders this bold heading unconditionally (insights.tsx:78)
 - assertVisible: "Your journal so far"
+
+- tapOn:
+    id: "tab-goals"
+- waitForAnimationToEnd
+# "Goals" subtitle renders unconditionally (goals.tsx header)
+- assertVisible: "Goals"
 
 - tapOn:
     id: "tab-settings"

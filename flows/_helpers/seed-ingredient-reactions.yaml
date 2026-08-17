@@ -8,13 +8,16 @@ appId: com.tummytracker.app
 # no baseline to compare against and no finding surfaces at all. "Rice" below
 # is that control (sentiment 5, no ingredients tag).
 # Assumes app is already running and the Home screen is visible.
+# Rewritten 2026-08-16 test-backfill for the two-screen component -> review
+# chain (Ingredients now lives on ComponentForm, not the meal-review screen —
+# was stale at "Entry name").
 ---
 - tapOn: "Add an entry manually"
-- tapOn: "Entry name"
+- assertVisible:
+    text: "Component name"
+- tapOn: "Component name"
 - inputText: "Onion Dish"
 - hideKeyboard
-- tapOn:
-    id: "sentiment-1"
 - scrollUntilVisible:
     element:
       text: "Ingredients (optional)"
@@ -25,17 +28,25 @@ appId: com.tummytracker.app
 - waitForAnimationToEnd
 - scrollUntilVisible:
     element:
-      text: "Save entry"
+      text: "Finish meal"
     direction: DOWN
-- tapOn: "Save entry"
+- tapOn: "Finish meal"
 - waitForAnimationToEnd
-
-- tapOn: "Add an entry manually"
-- tapOn: "Entry name"
-- inputText: "Onion Dish"
-- hideKeyboard
 - tapOn:
     id: "sentiment-1"
+- scrollUntilVisible:
+    element:
+      text: "Save meal"
+    direction: DOWN
+- tapOn: "Save meal"
+- waitForAnimationToEnd
+- waitForAnimationToEnd
+- assertVisible: "TummyTracker"
+
+- tapOn: "Add an entry manually"
+- tapOn: "Component name"
+- inputText: "Onion Dish"
+- hideKeyboard
 - scrollUntilVisible:
     element:
       text: "Ingredients (optional)"
@@ -46,17 +57,25 @@ appId: com.tummytracker.app
 - waitForAnimationToEnd
 - scrollUntilVisible:
     element:
-      text: "Save entry"
+      text: "Finish meal"
     direction: DOWN
-- tapOn: "Save entry"
+- tapOn: "Finish meal"
 - waitForAnimationToEnd
-
-- tapOn: "Add an entry manually"
-- tapOn: "Entry name"
-- inputText: "Onion Dish"
-- hideKeyboard
 - tapOn:
     id: "sentiment-1"
+- scrollUntilVisible:
+    element:
+      text: "Save meal"
+    direction: DOWN
+- tapOn: "Save meal"
+- waitForAnimationToEnd
+- waitForAnimationToEnd
+- assertVisible: "TummyTracker"
+
+- tapOn: "Add an entry manually"
+- tapOn: "Component name"
+- inputText: "Onion Dish"
+- hideKeyboard
 - scrollUntilVisible:
     element:
       text: "Ingredients (optional)"
@@ -67,20 +86,38 @@ appId: com.tummytracker.app
 - waitForAnimationToEnd
 - scrollUntilVisible:
     element:
-      text: "Save entry"
+      text: "Finish meal"
     direction: DOWN
-- tapOn: "Save entry"
+- tapOn: "Finish meal"
 - waitForAnimationToEnd
+- tapOn:
+    id: "sentiment-1"
+- scrollUntilVisible:
+    element:
+      text: "Save meal"
+    direction: DOWN
+- tapOn: "Save meal"
+- waitForAnimationToEnd
+- waitForAnimationToEnd
+- assertVisible: "TummyTracker"
 
 - tapOn: "Add an entry manually"
-- tapOn: "Entry name"
+- tapOn: "Component name"
 - inputText: "Rice"
 - hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Finish meal"
+    direction: DOWN
+- tapOn: "Finish meal"
+- waitForAnimationToEnd
 - tapOn:
     id: "sentiment-5"
 - scrollUntilVisible:
     element:
-      text: "Save entry"
+      text: "Save meal"
     direction: DOWN
-- tapOn: "Save entry"
+- tapOn: "Save meal"
 - waitForAnimationToEnd
+- waitForAnimationToEnd
+- assertVisible: "TummyTracker"
