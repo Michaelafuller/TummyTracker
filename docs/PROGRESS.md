@@ -74,7 +74,17 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   migration 0008 against the real DB · after the theme cycle: dictation
   manual check (iOS + Android voice typing), light/dark visual walkthrough,
   full Maestro re-run (shared-infra rule).
-  All pure-JS since the owner's EAS build — Metro-into-dev-client suffices.
+- **⛔ Device loop blocked (found 2026-08-16, diagnosis in `docs/RESULTS.md`):**
+  the Pixel's installed APK is the 2026-08-15 EAS **preview** build — a
+  release build with its JS baked in; it can never load from Metro, so
+  "Metro-into-dev-client" is impossible until the owner installs a
+  **development-profile** build (`eas build --profile development --platform
+  android`; export an in-app backup first per the signing caveat, though
+  same-key EAS builds should update in place). That build also delivers the
+  pending splash/notification/icon changes. Test-execute 2026-08-16 authored
+  all backfill flows (Phases 1–2 complete, committed) and correctly refused
+  to run the suite against the stale bundle — only the run itself (Phases
+  3–4) is owed once the dev build is on.
 - **Owner on-device checklist (carried):** iOS app icon (needs EAS build), iOS
   time-picker Done-button feel, light-mode look, migration 0006 against a real
   database, and the full scan → add-next → finish-meal → review → save loop (camera).
