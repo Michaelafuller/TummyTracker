@@ -47,31 +47,35 @@ maestro test flows/ --format junit --output flows/results.xml
 
 > **App state:** every flow that matters calls `launchApp: clearState: true`
 > at the top, so flows are independent and can run in any order.
+>
+> **Every `launchApp` (including mid-flow relaunches) must be immediately
+> followed by `runFlow: _helpers/reconnect-dev-client.yaml`** — the dev client
+> never auto-reconnects to Metro on its own. See the "Dev-client never
+> auto-reconnects" finding below for why and how it works; the helper's Metro
+> port is hardcoded and needs updating per-session if Metro isn't on the port
+> currently baked into it.
 
 ---
 
 ## Coverage
 
-> **2026-08-16 test-execute run (resumed session):** the dev-client blocker
-> from the prior session is fixed (real `development`-profile build installed,
-> Metro serves fine), but the first real dev-mode run immediately hit a fatal
-> app-bug that blanks the entire app on launch (expo-router `Slot` throws on
-> array-style props passed to `asChild` children — 5 call sites in
-> `src/app/(tabs)/index.tsx` and `src/features/logging/EntryRow.tsx`; see
-> `docs/RESULTS.md`). **All 23/23 flows failed for this one root cause** — the
-> statuses below are NOT re-verified this run; ✅/⏳ marks reflect the
-> 2026-07-03 baseline and earlier authoring sessions, not this run. Nothing
-> below should be trusted as currently passing until the app-bug is fixed and
-> a clean full run completes.
+> **2026-08-16/17 test-execute run (second resume): 23/23 flows passed.** The
+> app-bug that blocked the prior session (expo-router `Slot` dev-mode crash on
+> array-style props) was fixed at `283d147` and is confirmed resolved. This
+> session also found and fixed a **dev-client reconnect gap** (see the
+> "Dev-client never auto-reconnects" finding below) plus three ordinary
+> flow-bugs. Every status below reflects an actual passing `<testcase>` in
+> `flows/results.xml` from this run — see `docs/RESULTS.md` for detail.
 
 | ACCEPTANCE.md item | Flow file | Status |
 |---|---|---|
 | Phase 0 — app launches | `flows/00-launch.yaml` | ✅ Automated |
-| 1b — manual entry (now via meal-builder), notes limit, SQLite persist | `flows/01b-manual-entry.yaml` | ⏳ Authored (rewritten 2026-07-03 for the two-screen ComponentForm → meal/review flow; pending device run) |
+| 1b — manual entry (two-screen ComponentForm → meal/review), notes counter, SQLite persist | `flows/01b-manual-entry.yaml` | ✅ Automated (notes counter *wiring* only — the 500-char overflow clamp is Jest-covered, not re-driven on-device; see the reconnect/text-injection finding below) |
 | 1c — barcode scan (real product) | — | ❌ Camera required |
-| 1c — manual fallback from scan screen | `flows/01c-barcode-fallback.yaml` | ⏳ Authored (stale "Entry name" assertion fixed → "Component name" 2026-07-03; pending device run) |
+| 1c — manual fallback from scan screen | `flows/01c-barcode-fallback.yaml` | ✅ Automated |
 | OFF search-by-name lookup | — | ❌ Manual (network, real product DB — same class as a real barcode scan) |
 | 1d — day/week/month views, edit sentiment | `flows/01d-browse-edit.yaml` | ✅ Automated |
+| 1d — day/week/month + collapse/expand calendar | `flows/journal-calendar.yaml` | ✅ Automated |
 | 1e — reminder toggle, permission prompt | `flows/01e-reminders.yaml` | ⚠️ Partial (fires at scheduled time: manual) |
 | 2 — log BM, filter, coexists with food | `flows/02-bm-tracking.yaml` | ✅ Automated |
 | 3 — Insights renders findings, observation framing | `flows/03-insights.yaml` | ✅ Automated |
@@ -81,38 +85,70 @@ maestro test flows/ --format junit --output flows/results.xml
 | F — serving size saves, 0 doesn't crash | `flows/f-serving-size.yaml` | ⚠️ Partial (rescaling: barcode required) |
 | G — native date/time picker opens | `flows/g-datetime-picker.yaml` | ✅ Automated |
 | H — recent foods quick-add | `flows/h-recent-foods.yaml` | ✅ Automated |
-| I — export/import buttons, no crash | `flows/i-backup.yaml` | ⚠️ Partial (file content + import round-trip: manual) |
-
-### Backfill flows — authored, run 2026-08-16, all failed on the app-bug (not the flows)
-
-These flows were authored in the Maestro backfill session and **run** in the
-2026-08-16 resumed test-execute session — all failed, but for a single shared
-root cause (the Home-screen render crash, see `docs/RESULTS.md`), not because
-any individual flow's YAML is wrong. Status flips to ✅ once a future
-test-execute session re-runs `npm run e2e:ci` against a build with that app-bug
-fixed and `flows/results.xml` confirms a pass.
-
-| ACCEPTANCE.md item | Flow file | Status |
-|---|---|---|
-| A — saturated fat persists (manual path) | `flows/ab-satfat-ingredients.yaml` | ❌ Failed 2026-08-16 (app-bug blocker, not a flow defect — see RESULTS.md) |
-| B — ingredient capture persists on reopen | `flows/ab-satfat-ingredients.yaml` | ❌ Failed 2026-08-16 (same) |
-| Ingredient-capture hardening — additive-only tag policy | `flows/ab-satfat-ingredients.yaml` (extend) | ❌ Failed 2026-08-16 (same) — proxied via the watchlist banner (no direct tag-list UI exists anywhere in the app) |
-| C — symptom log, render, filter, edit reload | `flows/c-symptom-logging.yaml` | ❌ Failed 2026-08-16 (same) |
-| D — "Ingredients you react to" insight | `flows/d-ingredient-insights.yaml` | ❌ Failed 2026-08-16 (same; manual ingredients ARE tagged — confirmed in formModel.ts) |
-| E — summary counts (food · BM · rated) | `flows/e-temporal-insights.yaml` | ❌ Failed 2026-08-16 (same; ⚠️ "Timing patterns" is timing-dependent → manual regardless) |
+| I — export/import buttons, no crash | `flows/i-backup.yaml` · `flows/settings-smoke.yaml` | ⚠️ Partial (file content + import round-trip: manual) |
+| A — saturated fat persists (manual path) | `flows/ab-satfat-ingredients.yaml` | ✅ Automated |
+| B — ingredient capture persists on reopen | `flows/ab-satfat-ingredients.yaml` | ✅ Automated |
+| Ingredient-capture hardening — additive-only tag policy | `flows/ab-satfat-ingredients.yaml` (extend) | ✅ Automated — proxied via the watchlist banner (no direct tag-list UI exists anywhere in the app) |
+| C — symptom log, render, filter, edit reload | `flows/c-symptom-logging.yaml` | ✅ Automated |
+| D — "Ingredients you react to" insight | `flows/d-ingredient-insights.yaml` | ✅ Automated |
+| E — summary counts (food · BM · rated) | `flows/e-temporal-insights.yaml` | ✅ Automated |
 | E — "Timing patterns" section | — | ❌ Manual (24h windowed join can't be constructed deterministically in clearState) |
-| 1d — day/week/month + collapse/expand calendar | `flows/journal-calendar.yaml` | ❌ Failed 2026-08-16 (same) |
-| Nav — 5 bottom tabs reachable | `flows/nav-tabs.yaml` | ❌ Failed 2026-08-16 (same; fixed 2026-08-16 — was stale at 4 tabs, missing the Goals tab added in the 2026-08-15 release) |
-| Settings — offline toggle + sections render | `flows/settings-smoke.yaml` | ❌ Failed 2026-08-16 (same; offline-mode switch value is not assertable in Maestro → manual regardless) |
-| Watchlist — add term, non-blocking flag on review + entry view | `flows/watchlist.yaml` | ❌ Failed 2026-08-16 (same) — targets the **Insights** tab, not Settings (HANDOFF.md's phase-2.1 description was wrong; `WatchlistSection` renders in `src/app/(tabs)/insights.tsx`) |
-| Goals tab — daily tally, missing-data disclosure | `flows/goals-tally.yaml` | ❌ Failed 2026-08-16 (app-bug blocker, not a flow defect — see RESULTS.md) |
-| Goals — floor/cap thresholds, cap notice, removal | `flows/goal-editor.yaml` | ❌ Failed 2026-08-16 (same) |
-| Check-in persistence + 7-day horizon | `flows/checkin-persistence.yaml` | ❌ Failed 2026-08-16 (same) — this is the first session where it could even attempt to run (dev-client blocker resolved), but it never got past the Home-screen crash |
+| Nav — 5 bottom tabs reachable | `flows/nav-tabs.yaml` | ✅ Automated |
+| Settings — offline toggle + sections render | `flows/settings-smoke.yaml` | ✅ Automated (offline-mode switch value is not assertable in Maestro → manual regardless) |
+| Watchlist — add term, non-blocking flag on review + entry view | `flows/watchlist.yaml` | ✅ Automated — targets the **Insights** tab, not Settings (`WatchlistSection` renders in `src/app/(tabs)/insights.tsx`) |
+| Goals tab — daily tally, missing-data disclosure | `flows/goals-tally.yaml` | ✅ Automated |
+| Goals — floor/cap thresholds, cap notice, removal | `flows/goal-editor.yaml` | ✅ Automated |
+| Check-in persistence + 7-day horizon | `flows/checkin-persistence.yaml` | ✅ Automated |
 
 **Finding — label gap:** The Insights screen has no `"Insights"` subtitle heading (unlike
 Journal → `"Journal"` and Settings → `"Settings"`). `nav-tabs.yaml` uses `"Your journal so
 far"` instead. The test-execute session should note whether adding a subtitle would be
 worth a component edit in the next planning session.
+
+**Finding — dev-client never auto-reconnects to Metro (2026-08-16/17, blocked
+every flow before the fix):** Maestro's `launchApp` — with `clearState: true`
+*or* plain — always drops the Expo dev client back to its built-in
+"Development Build" connect screen (`exp://` field, "Connect" button). The
+dev client does **not** remember or auto-reconnect to the last dev-server URL
+across either kind of relaunch; this is true even for `stopApp` + plain
+`launchApp` mid-flow (`01b-manual-entry.yaml`'s SQLite-persistence check,
+`checkin-persistence.yaml`'s second launch). Left unhandled, every flow's
+first post-launch assertion fails as "element not found" — indistinguishable
+from a real app-bug crash unless you check the screenshot and see the connect
+screen, not the app. Fix: `runFlow: _helpers/reconnect-dev-client.yaml`
+immediately after **every** `launchApp` step, which:
+1. Waits for "Development Build" (confirms the connect screen actually showed).
+2. `openLink`s the explicit deep link `<scheme>://expo-development-client/?url=http://localhost:<metro-port>` — this reconnects regardless of prior state, since the URL is in the intent itself, not read from any remembered preference.
+3. Handles two more wrinkles that show up after the link fires, both harmless no-ops when absent: a one-time "This is the developer menu" tooltip (`tapOn: "Continue", optional: true`) on the very first connection after a data wipe, and the dev-menu sheet (Reload / Go home / Tools) that re-opening the same link while already connecting can pop instead of landing directly on the app (`tapOn: "Close", optional: true` — **not** "Go home", which navigates the dev client itself back to the connect screen, and **not** the hardware Back key, which can exit the app entirely to whatever was behind it).
+See `flows/_helpers/reconnect-dev-client.yaml` for the full step sequence (verified reliable across 3+ consecutive clearState/relaunch cycles) and `docs/RESULTS.md` for the diagnosis. **The Metro port is hardcoded in the helper** — update it once at the top of a session if Metro isn't on the port currently baked in there.
+
+**Finding — Maestro's text selector is a FULL regex match, not a substring
+search:** `assertVisible: "food"` (or `scrollUntilVisible: element: text:
+"food"`) only matches a node whose **entire** text equals (in the regex
+sense) `"food"` — it does not find `"food"` as a substring inside a longer
+node like `"3 entries · 2 food · 1 BM · 3 rated · avg sentiment 3.3"`
+(confirmed live: identical failure whether reached via scroll, a plain
+`assertVisible` with no scroll, or immediately after a fresh render — ruling
+out timing). Every previously-passing bare-word assertion in this project's
+flows happened to be the complete text of its own node (e.g. `"Scan
+barcode"`), which is why this went unnoticed until `e-temporal-insights.yaml`
+tried to assert a fragment of the Insights summary line. **Fix: wrap the
+fragment in `.*` wildcards** — `assertVisible: ".*food.*"` — to match a
+substring inside a longer string.
+
+**Finding — very long `inputText` strings silently lose characters on this
+device (env, not a flow or app bug):** typing 500+ chars via Maestro's
+`inputText` (ADB text injection) into `01b-manual-entry.yaml`'s Notes field
+landed at a different, always-incomplete character count on every attempt —
+408, then 422, then 208 when split into unsettled chunks, then 408 again with
+settled chunks. The repeated exact-408 result across two structurally
+different techniques rules out a JS/React timing race (which would vary) and
+points to a fixed IME/input-connection ceiling on the device itself, well
+under the app's actual 500-char `maxLength`. **Do not try to reproduce the
+500-char overflow clamp through the IME** — it's already unit-tested directly
+(`src/lib/__tests__/validation.test.ts` `validateNotes`); have the flow type a
+short, realistic string instead and assert the live counter reflects it
+(`01b-manual-entry.yaml` now types a 67-char note and asserts `"67/500"`).
 
 **Finding — wide blast radius from the 2026-07-03 manual-entry retarget
 (resolved 2026-08-16):** Home's "Add an entry manually" opens `/meal/component`
@@ -130,8 +166,8 @@ dependencies of other flows, so this closes their staleness transitively too).
 `flows/h-recent-foods.yaml` was never affected — it re-logs via the Home
 "Recent" tap, which still targets `entry/new`/`LogEntryForm` unchanged.
 
-**Finding — two Maestro flow-authoring gotchas, now fixed everywhere they
-occurred (2026-08-16):**
+**Finding — Maestro flow-authoring gotchas, now fixed everywhere they
+occurred:**
 1. Every nutrition-grid field (Calories, Fat (g), Sat. fat (g), …) has its
    `FormField` label text and its `ThemedTextInput accessibilityLabel` set to
    the exact same string. `scrollUntilVisible` on that string is satisfied by
@@ -151,9 +187,18 @@ occurred (2026-08-16):**
    is sitting unsent in the input box — assert on something that only exists
    once the action actually succeeded (e.g. the resulting list item's own
    distinguishing text) once the input field would otherwise have been
-   cleared.
+   cleared. (`h-recent-foods.yaml` hit the same keyboard-covers-content shape
+   again 2026-08-17: after typing into the search field, the whole screen —
+   search box and filtered rows both — sat underneath the keyboard until a
+   `hideKeyboard` cleared it.)
+3. A second row in a short list can sit just below the fold on a Pixel 5
+   viewport even when the section header above it is already on-screen —
+   `assertVisible` does not scroll, so a below-fold row silently "fails to be
+   visible" while looking present in spirit. Always `scrollUntilVisible` the
+   specific row/text you're about to assert, not just the section header
+   above it (`h-recent-foods.yaml`'s second "Recent" row, "Pizza slice").
 
-See `docs/RESULTS.md` (2026-08-16) for the full diagnosis and the flows each
+See `docs/RESULTS.md` (2026-08-16/17) for the full diagnosis and the flows each
 fix landed in.
 
 **Manual items that stay on your desk:**
@@ -199,10 +244,13 @@ flow file. A `<failure>` element means the flow failed. Claude then:
 
 1. Write `flows/<section>-<feature>.yaml` targeting the new screen's
    accessibility labels (verify labels in the component's `accessibilityLabel` props).
-2. Add a `runFlow` call to any seed helper if the feature needs prior data.
-3. Add a row to the Coverage table above.
-4. Add the flow to the relevant ACCEPTANCE.md section.
-5. Run `npm run e2e:flow flows/<your-flow>.yaml` on the Pixel 5 to confirm it
+2. Put `runFlow: _helpers/reconnect-dev-client.yaml` immediately after every
+   `launchApp` step (including any mid-flow relaunch) — see the "App state"
+   note above.
+3. Add a `runFlow` call to any seed helper if the feature needs prior data.
+4. Add a row to the Coverage table above.
+5. Add the flow to the relevant ACCEPTANCE.md section.
+6. Run `npm run e2e:flow flows/<your-flow>.yaml` on the Pixel 5 to confirm it
    passes before committing.
 
 ---
@@ -218,5 +266,7 @@ flow file. A `<failure>` element means the flow failed. Claude then:
 | Insights flow fails at "Wheat Bread" | Analysis threshold not reached — add more seed entries in `_helpers/seed-meals-for-insights.yaml` |
 | Camera permission not granted | Add `permissions: camera: allow` to the flow's `launchApp` block |
 | **Flows all "pass" or all fail in a way that doesn't match the code** — e.g. a fix that shipped last cycle still shows the old bug on-device | **Bundle staleness — verify BEFORE trusting any run** (see `docs/RESULTS.md` 2026-08-16 for the full incident). `adb reverse` + `npx expo start --dev-client` only serves fresh JS if the *installed APK* was itself built with `developmentClient: true` (`eas.json` → `"development"` profile). A `"preview"`-profile install is release-configured and bundles its own JS at build time — it will **never** contact Metro, silently and without any error screen, no matter what you do from the host side (adb reverse, deep links, cold relaunch all look identical from the device's perspective). Confirm with `adb shell dumpsys package com.tummytracker.app \| grep -i debuggable` — a real dev client shows a `DEBUGGABLE` flag; a preview/release build doesn't (and `adb shell run-as com.tummytracker.app` will say "not debuggable"). A second confirmation: Metro's own terminal log should print a bundling line every time the app launches — if it's been silent through several `launchApp` cycles, you're on the embedded bundle. If confirmed stale, **stop and report** — do not run the suite; there's no host-side workaround, and re-flashing risks the on-device journal (CLAUDE.md §0 signing caveat), so it's the owner's call. |
-| **Every flow fails immediately, "TummyTracker" title visible but nothing else, or `tab-*` testIDs never found** | **A real dev-mode-only render crash, not a flow or environment problem — see `docs/RESULTS.md` 2026-08-16 "Root cause #1".** `expo-router`'s `Slot` throws when an `asChild`-wrapped child receives an array-literal `style` prop (`style={[a, b]}`), but *only* when `NODE_ENV !== 'production'` — i.e. only under a real Metro dev-mode bundle, never in an EAS preview/production build. This blanks the whole app (no error boundary), so every flow fails at its first post-launch assertion regardless of what it's testing. Confirm via `adb logcat -d \| grep -i "DevLauncher\|Render Error"` right after a fresh launch, or just look at the device screen for the redbox. Do not treat this as N independent flow failures — check `grep -rn "asChild" src` for array-style children first; if found, this is the cause and the fix belongs in the next Execute session (flatten the style arrays), not in the flow YAML. |
+| **Every flow fails immediately, "TummyTracker" title visible but nothing else, or `tab-*` testIDs never found** | Two different root causes have produced this exact symptom — check which one you're looking at before assuming either. **(a) Dev-mode-only render crash** (fixed at `283d147`, see `docs/RESULTS.md` 2026-08-16 "Root cause #1"): `expo-router`'s `Slot` throws when an `asChild`-wrapped child receives an array-literal `style` prop, only under `NODE_ENV !== 'production'`. Confirm via `adb logcat -d \| grep -i "DevLauncher\|Render Error"` or the device's redbox. **(b) Dev-client connect screen, not a crash at all** (see the "Dev-client never auto-reconnects" finding above): "TummyTracker" is the connect screen's OWN app-name header, not the app's Home heading — take a screenshot before diagnosing further. Fix is `runFlow: _helpers/reconnect-dev-client.yaml` after every `launchApp`, not an app-code change. |
+| **A flow that types a long string into a field (e.g. 500+ chars) lands at an inconsistent, always-partial character count** | Not a flow-timing bug — this device's IME/input-connection has a hard ceiling around 400 chars for `inputText` injection (see the "very long `inputText` strings" finding above). Splitting into settled chunks does not raise the ceiling. Don't try to drive the overflow case through the IME; type a short representative string and assert the counter instead, and lean on a Jest unit test for the exact clamp behavior. |
+| **`assertVisible`/`scrollUntilVisible` on a short word (e.g. `"food"`, `"rated"`) fails even though that exact word is visibly on-screen inside a longer sentence** | Maestro's text selector requires a FULL match against a node's entire text — see the "Maestro's text selector is a FULL regex match" finding above. Wrap the fragment: `".*food.*"`. |
 | **Worktree Metro 404s every module, or `DevLauncher: ...UnableToResolveError` for `expo-router/entry`** | `node_modules` is missing or was installed *after* Metro started crawling. Run `ls node_modules` — if absent, `npm install` first. If present but Metro still 404s, a stale Metro instance (possibly one you can't kill, e.g. blocked by sandboxing) started before the install finished; start a *fresh* Metro on a new port instead of trusting the existing one. |
