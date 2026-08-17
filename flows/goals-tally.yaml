@@ -1,0 +1,69 @@
+appId: com.tummytracker.app
+# Goals tab — daily tally (2026-08-15 release, part 1).
+#   - Goals is the 5th bottom tab and renders today's tally (empty state first)
+#   - Logging a meal with calories updates the tally same-day
+#   - A nutrient missing from the entry is disclosed per-nutrient (missing-data
+#     honesty line, src/lib/dailyTally.ts)
+---
+- launchApp:
+    clearState: true
+
+- tapOn:
+    id: "tab-goals"
+- waitForAnimationToEnd
+- assertVisible: "Goals"
+- assertVisible: "Nothing logged yet today"
+
+# --- Log a meal with calories (but no fat) via the two-screen chain ---
+- tapOn:
+    id: "tab-home"
+- tapOn: "Add an entry manually"
+- assertVisible:
+    text: "Component name"
+- tapOn: "Component name"
+- inputText: "Tally Test Meal"
+- hideKeyboard
+
+# Scroll target is "Sat. fat (g)" (one row below Calories), not "Calories"
+# itself — a nutrition-grid label is short enough to satisfy
+# scrollUntilVisible while its taller input box directly below is still
+# entirely off-screen and untappable. Scrolling one row further gives margin.
+- scrollUntilVisible:
+    element:
+      text: "Sat. fat \\(g\\)"
+    direction: DOWN
+- tapOn: "Calories"
+- inputText: "500"
+- hideKeyboard
+
+- scrollUntilVisible:
+    element:
+      text: "Finish meal"
+    direction: DOWN
+- tapOn: "Finish meal"
+- waitForAnimationToEnd
+- assertVisible: "Tally Test Meal"
+- scrollUntilVisible:
+    element:
+      text: "Save meal"
+    direction: DOWN
+- tapOn: "Save meal"
+- waitForAnimationToEnd
+- waitForAnimationToEnd
+- tapOn:
+    id: "tab-home"
+
+# --- Tally updates same-day ---
+- tapOn:
+    id: "tab-goals"
+- waitForAnimationToEnd
+- assertVisible: "From 1 entry today"
+- assertVisible: "Calories"
+- assertVisible: "500"
+
+# Missing-data honesty: Fat (g) had no value on this entry
+- scrollUntilVisible:
+    element:
+      text: "1 entry missing"
+    direction: DOWN
+- assertVisible: "1 entry missing"

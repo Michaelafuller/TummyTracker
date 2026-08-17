@@ -1,0 +1,120 @@
+appId: com.tummytracker.app
+# Check-in persistence + 7-day horizon (2026-08-16 release) — THE regression
+# flow for the check-in-toggle bug fix: persisted prefs are now the source of
+# truth for "enabled" (CheckInSection.tsx), not the OS-scheduled notification
+# (the old bug: firing the notification silently disabled the toggle).
+#   - With a floor goal set, enable the check-in; relaunch WITHOUT clearState
+#     (the whole point is persistence) — the toggle is still ON.
+#   - With zero floor goals, enable — the toggle holds and the "add a floor
+#     goal" hint shows.
+# The Switch has no testID; its accessibilityLabel "Daily check-in" collides
+# with the section's ThemedText heading of the same text, so every selector
+# below pairs `text: "Daily check-in"` with a `checked:` value — only the
+# Switch (not the plain heading text) has a checked state, so the pairing
+# disambiguates to the Switch element.
+---
+- launchApp:
+    clearState: true
+    permissions:
+      notifications: allow
+
+# --- Seed a meal, then set a floor goal on Calories ---
+- tapOn: "Add an entry manually"
+- assertVisible:
+    text: "Component name"
+- tapOn: "Component name"
+- inputText: "Checkin Seed Meal"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Finish meal"
+    direction: DOWN
+- tapOn: "Finish meal"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "Save meal"
+    direction: DOWN
+- tapOn: "Save meal"
+- waitForAnimationToEnd
+- waitForAnimationToEnd
+- tapOn:
+    id: "tab-home"
+
+- tapOn:
+    id: "tab-goals"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "Calories goal: no goal set"
+    direction: DOWN
+- tapOn: "Calories goal: no goal set"
+- tapOn: "Goal direction: at least"
+- tapOn: "Set calories goal"
+- inputText: "100"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Save calories goal"
+    direction: DOWN
+- tapOn: "Save calories goal"
+- waitForAnimationToEnd
+
+# --- Enable the check-in with the floor goal set ---
+- scrollUntilVisible:
+    element:
+      text: "Daily check-in"
+    direction: DOWN
+- tapOn:
+    text: "Daily check-in"
+    checked: false
+- waitForAnimationToEnd
+- assertVisible:
+    text: "Daily check-in"
+    checked: true
+
+# Relaunch WITHOUT clearState — the whole point is persistence.
+- launchApp
+- tapOn:
+    id: "tab-goals"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "Daily check-in"
+    direction: DOWN
+- assertVisible:
+    text: "Daily check-in"
+    checked: true
+
+# --- Disable, remove the floor goal, then re-enable with zero floor goals ---
+- tapOn:
+    text: "Daily check-in"
+    checked: true
+- waitForAnimationToEnd
+- assertVisible:
+    text: "Daily check-in"
+    checked: false
+
+- scrollUntilVisible:
+    element:
+      text: "Calories goal: ≥ 100"
+    direction: DOWN
+- tapOn: "Calories goal: ≥ 100"
+- tapOn: "Remove calories goal"
+- waitForAnimationToEnd
+
+- scrollUntilVisible:
+    element:
+      text: "Daily check-in"
+    direction: DOWN
+- tapOn:
+    text: "Daily check-in"
+    checked: false
+- waitForAnimationToEnd
+
+# Toggle holds ON even with zero floor goals (design contract: nothing gets
+# scheduled, but the flag stays true), and the hint explains why.
+- assertVisible:
+    text: "Daily check-in"
+    checked: true
+- assertVisible: "Add a floor goal to get check-ins."
