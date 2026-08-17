@@ -1,0 +1,89 @@
+appId: com.tummytracker.app
+# Trigger watchlist / elimination mode (2026-08-15 release).
+# CORRECTION vs. HANDOFF.md's "Settings → add a watch term": WatchlistSection
+# is actually rendered on the Insights tab (src/app/(tabs)/insights.tsx:156),
+# not Settings — confirmed by grep and by insights.tsx's import. This flow
+# targets Insights.
+#   - Add a watch term on the Insights tab; assert it appears with a
+#     clean-streak stat line
+#   - Log a meal via the manual two-screen chain whose ingredients contain the
+#     term; assert the non-blocking flag on meal review
+#   - Save succeeds; open the saved entry and assert the flag on the entry view
+---
+- launchApp:
+    clearState: true
+- runFlow: _helpers/reconnect-dev-client.yaml
+
+- tapOn:
+    id: "tab-insights"
+- waitForAnimationToEnd
+- assertVisible: "Your journal so far"
+- assertVisible: "Watchlist"
+
+- scrollUntilVisible:
+    element:
+      text: "New watchlist term"
+    direction: DOWN
+- tapOn: "New watchlist term"
+- inputText: "soy"
+- hideKeyboard
+- tapOn: "Add to watchlist"
+- waitForAnimationToEnd
+
+# Item card shows the term with a clean-streak stat line (watchStatsSentence:
+# "N times since watching · clean since watching (N days)"). The input field
+# is cleared on a successful add (hideKeyboard above avoids the false-positive
+# where "soy" would otherwise still just be sitting, unsent, in the input
+# box), so "soy" here can only match the new item card.
+- assertVisible: "soy"
+
+# --- Log a meal whose ingredients contain the watched term ---
+- tapOn:
+    id: "tab-home"
+- tapOn: "Add an entry manually"
+- assertVisible:
+    text: "Component name"
+- tapOn: "Component name"
+- inputText: "Soy Curls"
+- hideKeyboard
+
+- scrollUntilVisible:
+    element:
+      text: "Ingredients (optional)"
+    direction: DOWN
+- tapOn: "Ingredients"
+- inputText: "soy, water, salt"
+- hideKeyboard
+- waitForAnimationToEnd
+
+- scrollUntilVisible:
+    element:
+      text: "Finish meal"
+    direction: DOWN
+- tapOn: "Finish meal"
+- waitForAnimationToEnd
+
+# Meal review: non-blocking flag appears, but never gates the Save button
+- assertVisible: "Soy Curls"
+- scrollUntilVisible:
+    element:
+      text: "Contains a watched ingredient"
+    direction: DOWN
+- assertVisible: "Contains a watched ingredient"
+
+- scrollUntilVisible:
+    element:
+      text: "Save meal"
+    direction: DOWN
+- tapOn: "Save meal"
+- waitForAnimationToEnd
+- waitForAnimationToEnd
+- assertVisible: "TummyTracker"
+
+# --- Open the saved entry; the flag also shows on the entry view ---
+- tapOn:
+    id: "tab-journal"
+- waitForAnimationToEnd
+- tapOn: "Soy Curls"
+- waitForAnimationToEnd
+- assertVisible: "Contains a watched ingredient"

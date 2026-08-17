@@ -74,7 +74,17 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   migration 0008 against the real DB · after the theme cycle: dictation
   manual check (iOS + Android voice typing), light/dark visual walkthrough,
   full Maestro re-run (shared-infra rule).
-  All pure-JS since the owner's EAS build — Metro-into-dev-client suffices.
+- **⛔ Device loop blocked (found 2026-08-16, diagnosis in `docs/RESULTS.md`):**
+  the Pixel's installed APK is the 2026-08-15 EAS **preview** build — a
+  release build with its JS baked in; it can never load from Metro, so
+  "Metro-into-dev-client" is impossible until the owner installs a
+  **development-profile** build (`eas build --profile development --platform
+  android`; export an in-app backup first per the signing caveat, though
+  same-key EAS builds should update in place). That build also delivers the
+  pending splash/notification/icon changes. Test-execute 2026-08-16 authored
+  all backfill flows (Phases 1–2 complete, committed) and correctly refused
+  to run the suite against the stale bundle — only the run itself (Phases
+  3–4) is owed once the dev build is on.
 - **Owner on-device checklist (carried):** iOS app icon (needs EAS build), iOS
   time-picker Done-button feel, light-mode look, migration 0006 against a real
   database, and the full scan → add-next → finish-meal → review → save loop (camera).
@@ -149,9 +159,14 @@ hardcoded Sunday, default meal slot by time of day).
 
 ## Tier 4 — Platform / infra
 
-iOS pass (BUILD_PLAN "iOS crossover"; the 2026-07-02 cycle fixes the icon, picker, and
-light-mode blockers) · **finish the Maestro backlog** (16/19 verified; rebuild + run the
-last 3 per RESULTS.md, then a FULL re-run after this cycle's YAML/theme changes) ·
+| Item | Why it matters | Effort | Notes |
+|------|----------------|:--:|------|
+| **Build-variant split (dev vs. real app)** | The dev client and preview build share `com.tummytracker.app`, so they displace each other — and Maestro's `clearState` wipes whichever app holds the identity, i.e. the owner's real journal (bit us 2026-08-16; backup existed). A `com.tummytracker.app.dev` variant makes both coexist and walls automation off from real data permanently. | S–M | **Owner-approved 2026-08-16, top of next plan cycle.** Expo-recommended pattern: convert `app.json` → `app.config.js` reading `APP_VARIANT` from the `eas.json` development profile; switch `android.package` + display name ("TummyTracker (dev)"), optionally badge the icon; suffix the deep-link scheme; update `flows/*` `appId` to the dev variant. Config change ⇒ `bundle:check` + one new EAS dev build. iOS later via `bundleIdentifier`. |
+
+Also: iOS pass (BUILD_PLAN "iOS crossover"; the icon, picker, and light-mode blockers
+are all now addressed) · **finish the Maestro backlog** (see Status + RESULTS.md for
+the current run state) · root-level React error boundary (RESULTS.md 2026-08-16
+recommendation — one screen's render error currently blanks the whole app) ·
 screen-level RNTL tests · `bundle:check` in a pre-push hook · `FlashList` virtualization
 once entry volume grows.
 

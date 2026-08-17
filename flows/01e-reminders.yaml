@@ -9,6 +9,7 @@ appId: com.tummytracker.app
     clearState: true
     permissions:
       notifications: allow
+- runFlow: _helpers/reconnect-dev-client.yaml
 
 - tapOn:
     id: "tab-settings"

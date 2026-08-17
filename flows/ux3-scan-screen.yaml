@@ -8,6 +8,7 @@ appId: com.tummytracker.app
     clearState: true
     permissions:
       camera: allow
+- runFlow: _helpers/reconnect-dev-client.yaml
 
 # Home-screen CTA is present
 - assertVisible:

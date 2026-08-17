@@ -7,6 +7,7 @@ appId: com.tummytracker.app
 ---
 - launchApp:
     clearState: true
+- runFlow: _helpers/reconnect-dev-client.yaml
 # Seed food + BM entries to populate the summary line
 - runFlow: _helpers/seed-two-meals.yaml
 - tapOn:
@@ -30,15 +31,16 @@ appId: com.tummytracker.app
       text: "Your journal so far"
     direction: DOWN
 - assertVisible: "Your journal so far"
-# The summary DATA line sits one row *below* the "Your journal so far" header, so
-# the header-targeted scroll above can stop with the data line just below the fold
-# (assertVisible does not scroll). Scroll until a token from the data line itself is
-# on-screen before asserting its contents. (TEST_STRATEGY §7 — scroll before assert.)
-- scrollUntilVisible:
-    element:
-      text: "rated"
-    direction: DOWN
-# Summary line: "<n> entries · <n> food · <n> BM · <n> rated · avg sentiment <x>"
-- assertVisible: "BM"
-# "food" appears in the same summary line as well
-- assertVisible: "food"
+# The summary DATA line ("<n> entries · <n> food · <n> BM · <n> rated · avg
+# sentiment <x>") is a single Text node (src/app/(tabs)/insights.tsx ~line
+# 145), not four separate ones. Maestro's text selector does a FULL regex
+# match against a node's whole text (Pattern.matches), not a substring
+# search — asserting a bare "food"/"BM"/"rated" against this combined line
+# always fails, timing/scrolling aside (confirmed live: identical failure
+# whether via scrollUntilVisible, a plain assertVisible with no scroll, or
+# immediately after a fresh render — only wildcard-wrapped regexes like
+# ".*food.*" match a substring within a longer node). See docs/E2E.md's
+# flow-authoring gotchas for the general rule.
+- assertVisible: ".*BM.*"
+- assertVisible: ".*food.*"
+- assertVisible: ".*rated.*"

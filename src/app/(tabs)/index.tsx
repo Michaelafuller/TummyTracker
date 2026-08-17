@@ -61,7 +61,9 @@ export default function HomeScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Scan a barcode"
-                style={[styles.cta, { backgroundColor: theme.primary }]}>
+                // expo-router's <Link asChild> rejects array styles on its direct
+                // child in dev mode — keep these flattened.
+                style={StyleSheet.flatten([styles.cta, { backgroundColor: theme.primary }])}>
                 <ThemedText style={[styles.ctaLabel, { color: theme.primaryText }]}>
                   Scan barcode
                 </ThemedText>
@@ -72,10 +74,10 @@ export default function HomeScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Add an entry manually"
-                style={[
+                style={StyleSheet.flatten([
                   styles.secondaryCta,
                   { backgroundColor: theme.backgroundElement, borderColor: theme.border },
-                ]}>
+                ])}>
                 <ThemedText style={styles.ctaLabel}>+ Add manually</ThemedText>
               </Pressable>
             </Link>
@@ -84,10 +86,10 @@ export default function HomeScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Log a bowel movement"
-                style={[
+                style={StyleSheet.flatten([
                   styles.secondaryCta,
                   { backgroundColor: theme.backgroundElement, borderColor: theme.border },
-                ]}>
+                ])}>
                 <ThemedText style={styles.ctaLabel}>💩 Log bowel movement</ThemedText>
               </Pressable>
             </Link>
@@ -96,10 +98,10 @@ export default function HomeScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Log a symptom"
-                style={[
+                style={StyleSheet.flatten([
                   styles.secondaryCta,
                   { backgroundColor: theme.backgroundElement, borderColor: theme.border },
-                ]}>
+                ])}>
                 <ThemedText style={styles.ctaLabel}>🤢 Log symptom</ThemedText>
               </Pressable>
             </Link>

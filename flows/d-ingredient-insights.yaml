@@ -8,6 +8,7 @@ appId: com.tummytracker.app
 ---
 - launchApp:
     clearState: true
+- runFlow: _helpers/reconnect-dev-client.yaml
 - runFlow: _helpers/seed-ingredient-reactions.yaml
 - tapOn:
     id: "tab-insights"

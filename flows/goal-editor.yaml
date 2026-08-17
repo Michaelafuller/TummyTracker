@@ -1,0 +1,168 @@
+appId: com.tummytracker.app
+# Goals — thresholds + daily check-in (2026-08-15 release, part 2, migration
+# 0008).
+#   - Set a floor goal on Protein; progress renders against the tally
+#   - Set a low cap goal on Sugar, log a meal crossing it: cap notice appears
+#     on review, and the save still succeeds (lands in the journal)
+#   - Remove the floor goal; its row reverts to "no goal set"
+---
+- launchApp:
+    clearState: true
+- runFlow: _helpers/reconnect-dev-client.yaml
+
+# Seed a meal first — the goal-progress table on the Goals tab only renders
+# once today's tally is non-empty (src/app/(tabs)/goals.tsx: tally.entryCount).
+- tapOn: "Add an entry manually"
+- assertVisible:
+    text: "Component name"
+- tapOn: "Component name"
+- inputText: "Goal Seed Meal"
+- hideKeyboard
+# Scroll target is "Sugar (g)" (one row below Protein), not "Protein (g)"
+# itself — a nutrition-grid label is short enough to satisfy
+# scrollUntilVisible while its taller input box directly below is still
+# entirely off-screen and untappable. Scrolling one row further gives margin.
+- scrollUntilVisible:
+    element:
+      text: "Sugar \\(g\\)"
+    direction: DOWN
+- tapOn: "Protein \\(g\\)"
+- inputText: "10"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Finish meal"
+    direction: DOWN
+- tapOn: "Finish meal"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "Save meal"
+    direction: DOWN
+- tapOn: "Save meal"
+- waitForAnimationToEnd
+- waitForAnimationToEnd
+- tapOn:
+    id: "tab-home"
+
+# --- Set a floor goal on Protein ---
+- tapOn:
+    id: "tab-goals"
+- waitForAnimationToEnd
+- assertVisible: "Goals"
+- scrollUntilVisible:
+    element:
+      text: "Protein goal: no goal set"
+    direction: DOWN
+- tapOn: "Protein goal: no goal set"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "Set protein goal"
+    direction: DOWN
+- tapOn: "Goal direction: at least"
+- tapOn: "Set protein goal"
+- inputText: "50"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Save protein goal"
+    direction: DOWN
+- tapOn: "Save protein goal"
+- waitForAnimationToEnd
+
+# Progress renders: the tally table (above the Goals section) shows
+# goal-aware progress against the threshold, and the Goals row summary flips
+# from "No goal" to "≥ 50g". Check the tally table first (scroll UP — saving
+# left the scroll position down near the Goals section, below the table).
+- scrollUntilVisible:
+    element:
+      text: "10g / 50g"
+    direction: UP
+- assertVisible: "10g / 50g"
+- scrollUntilVisible:
+    element:
+      text: "≥ 50g"
+    direction: DOWN
+- assertVisible: "≥ 50g"
+
+# --- Set a low cap goal on Sugar, then cross it with a new meal ---
+- scrollUntilVisible:
+    element:
+      text: "Sugar goal: no goal set"
+    direction: DOWN
+- tapOn: "Sugar goal: no goal set"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "Set sugar goal"
+    direction: DOWN
+- tapOn: "Goal direction: at most"
+- tapOn: "Set sugar goal"
+- inputText: "5"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Save sugar goal"
+    direction: DOWN
+- tapOn: "Save sugar goal"
+- waitForAnimationToEnd
+
+- tapOn:
+    id: "tab-home"
+- tapOn: "Add an entry manually"
+- tapOn: "Component name"
+- inputText: "Sugar Bomb"
+- hideKeyboard
+# Sugar/Sodium are the last row — scroll to "Finish meal" (below the whole
+# grid) rather than "Sugar (g)" itself, for the same off-screen-input reason.
+- scrollUntilVisible:
+    element:
+      text: "Finish meal"
+    direction: DOWN
+- tapOn: "Sugar \\(g\\)"
+- inputText: "20"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Finish meal"
+    direction: DOWN
+- tapOn: "Finish meal"
+- waitForAnimationToEnd
+
+# Cap notice appears on review before saving; save still succeeds (never blocks).
+- scrollUntilVisible:
+    element:
+      text: "This save goes over a goal"
+    direction: DOWN
+- assertVisible: "This save goes over a goal"
+- scrollUntilVisible:
+    element:
+      text: "Save meal"
+    direction: DOWN
+- tapOn: "Save meal"
+- waitForAnimationToEnd
+- waitForAnimationToEnd
+- tapOn:
+    id: "tab-journal"
+- waitForAnimationToEnd
+- assertVisible: "Sugar Bomb"
+
+# --- Remove the protein goal; the row reverts to "no goal set" ---
+- tapOn:
+    id: "tab-goals"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "≥ 50g"
+    direction: DOWN
+- tapOn:
+    text: "Protein goal: ≥ 50g"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "Remove protein goal"
+    direction: DOWN
+- tapOn: "Remove protein goal"
+- waitForAnimationToEnd
+- assertVisible: "Protein goal: no goal set"

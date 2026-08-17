@@ -1,16 +1,24 @@
 appId: com.tummytracker.app
 # Tier-0 F — Serving-size field saves without crashing; entry persists across restart.
+# Rewritten 2026-08-16 test-backfill for the two-screen component -> review
+# chain: "Serving size in grams" lives on ComponentForm (/meal/component), the
+# meal name/save action are on the review screen (/meal/review). Was stale at
+# "Entry name" / "Save entry", which no longer exist on the entry-creation path.
 # SKIP: barcode → serving_quantity default (camera required)
 # SKIP: live rescaling (needs nutritionBase from an OFF barcode scan)
 ---
 - launchApp:
     clearState: true
+- runFlow: _helpers/reconnect-dev-client.yaml
 
 - tapOn:
     text: "Add an entry manually"
+- assertVisible:
+    text: "Component name"
 - tapOn:
-    text: "Entry name"
+    text: "Component name"
 - inputText: "Avocado toast"
+- hideKeyboard
 
 - scrollUntilVisible:
     element:
@@ -20,21 +28,22 @@ appId: com.tummytracker.app
     text: "Serving size in grams"
 - inputText: "150"
 
+# Nutrition grid: scroll past Calories/Fat's own row (their labels are short
+# and can satisfy scrollUntilVisible while the taller input boxes below them
+# are still entirely off-screen and untappable) — scroll to the row below
+# ("Sat. fat (g)") instead so the whole Calories/Fat row has margin to spare.
 - scrollUntilVisible:
     element:
-      text: "Calories"
+      text: "Sat. fat \\(g\\)"
     direction: DOWN
 - tapOn:
     text: "Calories"
 - inputText: "280"
 
-- scrollUntilVisible:
-    element:
-      text: "Fat (g)"
-    direction: DOWN
 - tapOn:
-    text: "Fat (g)"
+    text: "Fat \\(g\\)"
 - inputText: "14"
+- hideKeyboard
 
 # Serving size 0 should not crash
 - scrollUntilVisible:
@@ -45,13 +54,24 @@ appId: com.tummytracker.app
     text: "Serving size in grams"
 - eraseText: 20
 - inputText: "0"
+- hideKeyboard
 
 - scrollUntilVisible:
     element:
-      text: "Save entry"
+      text: "Finish meal"
     direction: DOWN
 - tapOn:
-    text: "Save entry"
+    text: "Finish meal"
+- waitForAnimationToEnd
+
+# Meal review screen: name arrives prefilled from the single component
+- assertVisible: "Avocado toast"
+- scrollUntilVisible:
+    element:
+      text: "Save meal"
+    direction: DOWN
+- tapOn:
+    text: "Save meal"
 - waitForAnimationToEnd
 - waitForAnimationToEnd
 - tapOn:
@@ -65,11 +85,14 @@ appId: com.tummytracker.app
 # Persist across restart
 - stopApp
 - launchApp
+- runFlow: _helpers/reconnect-dev-client.yaml
 - tapOn:
     id: "tab-journal"
 - assertVisible: "Avocado toast"
 
-# Re-open and verify serving size field is present
+# Re-open and verify serving size field is present (entry/[id].tsx renders
+# LogEntryForm for a single-component entry, which keeps its own "Serving
+# size in grams" field pre-filled from the saved entry).
 - tapOn: "Avocado toast"
 - waitForAnimationToEnd
 - scrollUntilVisible:

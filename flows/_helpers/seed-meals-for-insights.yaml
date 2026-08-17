@@ -3,115 +3,183 @@ appId: com.tummytracker.app
 # (high sentiment) to trigger analyzeFoodSentiment.
 # Ingredients omitted to avoid scroll — food name alone is enough for food
 # sentiment analysis. Assumes app is running and Home screen is visible.
+# Rewritten 2026-08-16 test-backfill for the two-screen component -> review
+# chain (Home's "Add an entry manually" opens ComponentForm, not the old
+# single-screen LogEntryForm — was stale at "Entry name").
 ---
 - tapOn:
     text: "Add an entry manually"
+- assertVisible:
+    text: "Component name"
 - tapOn:
-    text: "Entry name"
+    text: "Component name"
 - inputText: "Wheat Bread"
 - hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Finish meal"
+    direction: DOWN
+- tapOn:
+    text: "Finish meal"
+- waitForAnimationToEnd
 - tapOn:
     id: "sentiment-1"
 - scrollUntilVisible:
     element:
-      text: "Save entry"
+      text: "Save meal"
     direction: DOWN
 - tapOn:
-    text: "Save entry"
+    text: "Save meal"
 - waitForAnimationToEnd
+- waitForAnimationToEnd
+- assertVisible: "TummyTracker"
 
 - tapOn:
     text: "Add an entry manually"
 - tapOn:
-    text: "Entry name"
+    text: "Component name"
 - inputText: "Wheat Bread"
 - hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Finish meal"
+    direction: DOWN
+- tapOn:
+    text: "Finish meal"
+- waitForAnimationToEnd
 - tapOn:
     id: "sentiment-2"
 - scrollUntilVisible:
     element:
-      text: "Save entry"
+      text: "Save meal"
     direction: DOWN
 - tapOn:
-    text: "Save entry"
+    text: "Save meal"
 - waitForAnimationToEnd
+- waitForAnimationToEnd
+- assertVisible: "TummyTracker"
 
 - tapOn:
     text: "Add an entry manually"
 - tapOn:
-    text: "Entry name"
+    text: "Component name"
 - inputText: "Wheat Bread"
 - hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Finish meal"
+    direction: DOWN
+- tapOn:
+    text: "Finish meal"
+- waitForAnimationToEnd
 - tapOn:
     id: "sentiment-1"
 - scrollUntilVisible:
     element:
-      text: "Save entry"
+      text: "Save meal"
     direction: DOWN
 - tapOn:
-    text: "Save entry"
+    text: "Save meal"
 - waitForAnimationToEnd
+- waitForAnimationToEnd
+- assertVisible: "TummyTracker"
 
 - tapOn:
     text: "Add an entry manually"
 - tapOn:
-    text: "Entry name"
+    text: "Component name"
 - inputText: "Wheat Bread"
 - hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Finish meal"
+    direction: DOWN
+- tapOn:
+    text: "Finish meal"
+- waitForAnimationToEnd
 - tapOn:
     id: "sentiment-2"
 - scrollUntilVisible:
     element:
-      text: "Save entry"
+      text: "Save meal"
     direction: DOWN
 - tapOn:
-    text: "Save entry"
+    text: "Save meal"
 - waitForAnimationToEnd
+- waitForAnimationToEnd
+- assertVisible: "TummyTracker"
 
 - tapOn:
     text: "Add an entry manually"
 - tapOn:
-    text: "Entry name"
+    text: "Component name"
 - inputText: "Wheat Bread"
 - hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Finish meal"
+    direction: DOWN
+- tapOn:
+    text: "Finish meal"
+- waitForAnimationToEnd
 - tapOn:
     id: "sentiment-1"
 - scrollUntilVisible:
     element:
-      text: "Save entry"
+      text: "Save meal"
     direction: DOWN
 - tapOn:
-    text: "Save entry"
+    text: "Save meal"
 - waitForAnimationToEnd
+- waitForAnimationToEnd
+- assertVisible: "TummyTracker"
 
 - tapOn:
     text: "Add an entry manually"
 - tapOn:
-    text: "Entry name"
+    text: "Component name"
 - inputText: "Rice Bowl"
 - hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Finish meal"
+    direction: DOWN
+- tapOn:
+    text: "Finish meal"
+- waitForAnimationToEnd
 - tapOn:
     id: "sentiment-5"
 - scrollUntilVisible:
     element:
-      text: "Save entry"
+      text: "Save meal"
     direction: DOWN
 - tapOn:
-    text: "Save entry"
+    text: "Save meal"
 - waitForAnimationToEnd
+- waitForAnimationToEnd
+- assertVisible: "TummyTracker"
 
 - tapOn:
     text: "Add an entry manually"
 - tapOn:
-    text: "Entry name"
+    text: "Component name"
 - inputText: "Rice Bowl"
 - hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Finish meal"
+    direction: DOWN
+- tapOn:
+    text: "Finish meal"
+- waitForAnimationToEnd
 - tapOn:
     id: "sentiment-5"
 - scrollUntilVisible:
     element:
-      text: "Save entry"
+      text: "Save meal"
     direction: DOWN
 - tapOn:
-    text: "Save entry"
+    text: "Save meal"
 - waitForAnimationToEnd
+- waitForAnimationToEnd
+- assertVisible: "TummyTracker"

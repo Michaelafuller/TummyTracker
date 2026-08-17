@@ -1,40 +1,69 @@
 appId: com.tummytracker.app
-# Helper — adds "Oatmeal" (very satisfied) and "Pizza slice" (very unhappy).
+# Helper — adds "Oatmeal" (very satisfied) and "Pizza slice" (very unhappy) via
+# the two-screen component -> review chain (Home's "Add an entry manually"
+# opens ComponentForm at /meal/component, not the old single-screen
+# LogEntryForm, since the 2026-07-03 OFF search-by-name cycle — rewritten
+# 2026-08-16 test-backfill, was stale at "Entry name").
 # Assumes the app is already running and the Home screen is visible.
 # Invoke via: runFlow: _helpers/seed-two-meals.yaml
 ---
 - tapOn:
     text: "Add an entry manually"
+- assertVisible:
+    text: "Component name"
 - tapOn:
-    text: "Entry name"
+    text: "Component name"
 - inputText: "Oatmeal"
 - hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Finish meal"
+    direction: DOWN
+- tapOn:
+    text: "Finish meal"
+- waitForAnimationToEnd
+
+# Meal review screen: name arrives prefilled from the single component
+- assertVisible: "Oatmeal"
 - tapOn:
     text: "Breakfast"
 - tapOn:
     id: "sentiment-5"
 - scrollUntilVisible:
     element:
-      text: "Save entry"
+      text: "Save meal"
     direction: DOWN
 - tapOn:
-    text: "Save entry"
+    text: "Save meal"
 - waitForAnimationToEnd
+- waitForAnimationToEnd
+- assertVisible: "TummyTracker"
 
 - tapOn:
     text: "Add an entry manually"
 - tapOn:
-    text: "Entry name"
+    text: "Component name"
 - inputText: "Pizza slice"
 - hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Finish meal"
+    direction: DOWN
+- tapOn:
+    text: "Finish meal"
+- waitForAnimationToEnd
+
+- assertVisible: "Pizza slice"
 - tapOn:
     text: "Lunch"
 - tapOn:
     id: "sentiment-1"
 - scrollUntilVisible:
     element:
-      text: "Save entry"
+      text: "Save meal"
     direction: DOWN
 - tapOn:
-    text: "Save entry"
+    text: "Save meal"
 - waitForAnimationToEnd
+- waitForAnimationToEnd
+- assertVisible: "TummyTracker"

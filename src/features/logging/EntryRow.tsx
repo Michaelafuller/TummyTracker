@@ -50,7 +50,12 @@ export function EntryRow({ entry }: { entry: LogEntry }) {
         accessibilityLabel={`${entry.name}, ${subtitle(entry)}, ${
           sentiment ? `rated ${sentimentLabel(sentiment)}` : 'not rated'
         }`}
-        style={[styles.row, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+        // expo-router's <Link asChild> rejects array styles on its direct child
+        // in dev mode — keep this flattened.
+        style={StyleSheet.flatten([
+          styles.row,
+          { backgroundColor: theme.backgroundElement, borderColor: theme.border },
+        ])}>
         <ThemedText type="small" themeColor="textSecondary" style={styles.time}>
           {formatTime12h(entry.loggedAt)}
         </ThemedText>

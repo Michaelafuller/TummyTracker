@@ -3,6 +3,7 @@ appId: com.tummytracker.app
 ---
 - launchApp:
     clearState: true
+- runFlow: _helpers/reconnect-dev-client.yaml
 - runFlow: _helpers/seed-two-meals.yaml
 - tapOn:
     id: "tab-journal"

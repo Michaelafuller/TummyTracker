@@ -5,6 +5,7 @@ appId: com.tummytracker.app
 ---
 - launchApp:
     clearState: true
+- runFlow: _helpers/reconnect-dev-client.yaml
 - tapOn:
     id: "tab-settings"
 - waitForAnimationToEnd
