@@ -112,8 +112,8 @@ export function WatchlistSection({ entries, now }: { entries: readonly LogEntry[
           accessibilityRole="button"
           accessibilityLabel="Add to watchlist"
           onPress={handleAdd}
-          style={[styles.addButton, { backgroundColor: theme.text }]}>
-          <ThemedText style={[styles.addButtonLabel, { color: theme.background }]}>Add</ThemedText>
+          style={[styles.addButton, { backgroundColor: theme.primary }]}>
+          <ThemedText style={[styles.addButtonLabel, { color: theme.primaryText }]}>Add</ThemedText>
         </Pressable>
       </View>
       {error ? (

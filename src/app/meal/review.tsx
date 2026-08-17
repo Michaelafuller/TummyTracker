@@ -4,6 +4,7 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View
 
 import { DateTimeField } from '@/components/date-time-field';
 import { FormField, ThemedTextInput } from '@/components/form-fields';
+import { PrimaryButton } from '@/components/primary-button';
 import { SegmentedControl } from '@/components/segmented-control';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
@@ -229,20 +230,12 @@ export default function MealReviewScreen() {
           </View>
         ) : null}
 
-        <Pressable
-          accessibilityRole="button"
+        <PrimaryButton
+          label={submitting ? 'Saving…' : 'Save meal'}
           accessibilityLabel="Save meal"
-          accessibilityState={{ disabled: submitting || components.length === 0 }}
           disabled={submitting || components.length === 0}
           onPress={handleSave}
-          style={[
-            styles.submit,
-            { backgroundColor: theme.text, opacity: submitting || components.length === 0 ? 0.5 : 1 },
-          ]}>
-          <ThemedText style={[styles.submitLabel, { color: theme.background }]}>
-            {submitting ? 'Saving…' : 'Save meal'}
-          </ThemedText>
-        </Pressable>
+        />
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -277,14 +270,5 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
     borderRadius: Spacing.three,
     borderWidth: StyleSheet.hairlineWidth,
-  },
-  submit: {
-    borderRadius: Spacing.three,
-    paddingVertical: Spacing.three,
-    alignItems: 'center',
-  },
-  submitLabel: {
-    fontSize: 16,
-    fontWeight: 600,
   },
 });

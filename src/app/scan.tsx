@@ -5,7 +5,7 @@ import { ActivityIndicator, Pressable, StyleSheet, View, Platform } from 'react-
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Colors, Spacing } from '@/constants/theme';
 import { useOffLookup } from '@/features/barcode/useOffLookup';
 import { useComponentPrefillStore } from '@/features/logging/componentPrefillStore';
 import { useTheme } from '@/hooks/use-theme';
@@ -58,8 +58,8 @@ export default function ScanScreen() {
           accessibilityRole="button"
           accessibilityLabel="Grant camera permission"
           onPress={requestPermission}
-          style={[styles.button, { backgroundColor: theme.text }]}>
-          <ThemedText style={{ color: theme.background }}>Grant access</ThemedText>
+          style={[styles.button, { backgroundColor: theme.primary }]}>
+          <ThemedText style={{ color: theme.primaryText }}>Grant access</ThemedText>
         </Pressable>
       </Centered>
     );
@@ -150,7 +150,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   manualButton: {
-    backgroundColor: 'rgba(255,255,255,0.92)',
+    // Always over the always-dark camera preview (deliberate, matches the
+    // scan screen's header — see src/app/_layout.tsx), so this is fixed to
+    // the palette's dark-mode primary fill rather than theme-reactive.
+    backgroundColor: Colors.dark.primary,
     paddingHorizontal: Spacing.five,
     paddingVertical: Spacing.three,
     borderRadius: 999,
@@ -161,7 +164,7 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   manualButtonLabel: {
-    color: '#000',
+    color: Colors.dark.primaryText,
     fontWeight: Platform.select({ android: 700 }) ?? 600,
     fontSize: 15,
   },

@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { DateTimeField } from '@/components/date-time-field';
 import { FormField, ThemedTextInput } from '@/components/form-fields';
-import { ThemedText } from '@/components/themed-text';
+import { PrimaryButton } from '@/components/primary-button';
 import { Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
 import { formatDateInput, formatTimeInput } from '@/lib/datetime';
 import { MAX_NOTES_LENGTH } from '@/lib/validation';
 import { SentimentSelector } from '@/features/sentiment/SentimentSelector';
@@ -32,7 +31,6 @@ export interface BmFormProps {
 }
 
 export function BmForm({ initial, onSubmit, submitLabel = 'Save', submitting = false }: BmFormProps) {
-  const theme = useTheme();
   const [state, setState] = useState<BmFormState>(() => defaultState(initial));
   const [errors, setErrors] = useState<BmFormErrors>({});
 
@@ -85,17 +83,12 @@ export function BmForm({ initial, onSubmit, submitLabel = 'Save', submitting = f
         />
       </FormField>
 
-      <Pressable
-        accessibilityRole="button"
+      <PrimaryButton
+        label={submitting ? 'Saving…' : submitLabel}
         accessibilityLabel={submitLabel}
-        accessibilityState={{ disabled: submitting }}
         disabled={submitting}
         onPress={handleSubmit}
-        style={[styles.submit, { backgroundColor: theme.text, opacity: submitting ? 0.5 : 1 }]}>
-        <ThemedText style={[styles.submitLabel, { color: theme.background }]}>
-          {submitting ? 'Saving…' : submitLabel}
-        </ThemedText>
-      </Pressable>
+      />
     </View>
   );
 }
@@ -103,14 +96,5 @@ export function BmForm({ initial, onSubmit, submitLabel = 'Save', submitting = f
 const styles = StyleSheet.create({
   form: {
     gap: Spacing.four,
-  },
-  submit: {
-    borderRadius: Spacing.three,
-    paddingVertical: Spacing.three,
-    alignItems: 'center',
-  },
-  submitLabel: {
-    fontSize: 16,
-    fontWeight: 600,
   },
 });

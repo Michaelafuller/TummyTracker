@@ -115,14 +115,14 @@ export function GoalsSection() {
                           style={[
                             styles.directionChip,
                             {
-                              backgroundColor: selected ? theme.text : theme.backgroundElement,
-                              borderColor: selected ? theme.text : theme.border,
+                              backgroundColor: selected ? theme.accent : theme.backgroundElement,
+                              borderColor: selected ? theme.accent : theme.border,
                             },
                           ]}>
                           <ThemedText
                             type={selected ? 'smallBold' : 'small'}
                             themeColor={selected ? undefined : 'textSecondary'}
-                            style={selected ? { color: theme.background } : undefined}>
+                            style={selected ? { color: theme.accentText } : undefined}>
                             {option === 'floor' ? '≥ At least' : '≤ At most'}
                           </ThemedText>
                         </Pressable>
@@ -149,8 +149,8 @@ export function GoalsSection() {
                       accessibilityRole="button"
                       accessibilityLabel={`Save ${noun} goal`}
                       onPress={() => handleSave(field)}
-                      style={[styles.saveButton, { backgroundColor: theme.text }]}>
-                      <ThemedText style={[styles.saveLabel, { color: theme.background }]}>Save</ThemedText>
+                      style={[styles.saveButton, { backgroundColor: theme.primary }]}>
+                      <ThemedText style={[styles.saveLabel, { color: theme.primaryText }]}>Save</ThemedText>
                     </Pressable>
                     {existing ? (
                       <Pressable
