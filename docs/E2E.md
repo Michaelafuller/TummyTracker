@@ -79,38 +79,67 @@ they pass. See `docs/RESULTS.md` (written by the test-execute session).
 
 | ACCEPTANCE.md item | Flow file | Status |
 |---|---|---|
-| A — saturated fat persists (manual path) | `flows/ab-satfat-ingredients.yaml` | ⏳ Authored |
-| B — ingredient capture persists on reopen | `flows/ab-satfat-ingredients.yaml` | ⏳ Authored |
+| A — saturated fat persists (manual path) | `flows/ab-satfat-ingredients.yaml` | ⏳ Authored (rewritten 2026-08-16 for the two-screen chain; passed against a stale bundle — see RESULTS.md, not counted as verified) |
+| B — ingredient capture persists on reopen | `flows/ab-satfat-ingredients.yaml` | ⏳ Authored (same) |
+| Ingredient-capture hardening — additive-only tag policy | `flows/ab-satfat-ingredients.yaml` (extend) | ⏳ Authored 2026-08-16 — proxied via the watchlist banner (no direct tag-list UI exists anywhere in the app) |
 | C — symptom log, render, filter, edit reload | `flows/c-symptom-logging.yaml` | ⏳ Authored |
 | D — "Ingredients you react to" insight | `flows/d-ingredient-insights.yaml` | ⏳ Authored (manual ingredients ARE tagged — confirmed in formModel.ts) |
 | E — summary counts (food · BM · rated) | `flows/e-temporal-insights.yaml` | ⏳ Authored (⚠️ partial; "Timing patterns" is timing-dependent → manual) |
 | E — "Timing patterns" section | — | ❌ Manual (24h windowed join can't be constructed deterministically in clearState) |
 | 1d — day/week/month + collapse/expand calendar | `flows/journal-calendar.yaml` | ⏳ Authored |
-| Nav — 4 bottom tabs reachable | `flows/nav-tabs.yaml` | ⏳ Authored |
+| Nav — 5 bottom tabs reachable | `flows/nav-tabs.yaml` | ⏳ Authored (fixed 2026-08-16 — was stale at 4 tabs, missing the Goals tab added in the 2026-08-15 release) |
 | Settings — offline toggle + sections render | `flows/settings-smoke.yaml` | ⏳ Authored (smoke; offline-mode switch value is not assertable in Maestro → manual) |
+| Watchlist — add term, non-blocking flag on review + entry view | `flows/watchlist.yaml` | ⏳ Authored 2026-08-16 (new) — targets the **Insights** tab, not Settings (HANDOFF.md's phase-2.1 description was wrong; `WatchlistSection` renders in `src/app/(tabs)/insights.tsx`) |
+| Goals tab — daily tally, missing-data disclosure | `flows/goals-tally.yaml` | ⏳ Authored 2026-08-16 (new) |
+| Goals — floor/cap thresholds, cap notice, removal | `flows/goal-editor.yaml` | ⏳ Authored 2026-08-16 (new) — full pass against the stale 2026-08-15 bundle (that build already has this feature), not counted as verified for `main` HEAD per TEST_STRATEGY §5 |
+| Check-in persistence + 7-day horizon | `flows/checkin-persistence.yaml` | ⏳ Authored 2026-08-16 (new) — **could not be run**: the installed build predates this exact fix (see RESULTS.md Root cause #1); the toggle would fail against it by design |
 
 **Finding — label gap:** The Insights screen has no `"Insights"` subtitle heading (unlike
 Journal → `"Journal"` and Settings → `"Settings"`). `nav-tabs.yaml` uses `"Your journal so
 far"` instead. The test-execute session should note whether adding a subtitle would be
 worth a component edit in the next planning session.
 
-**Finding — wide blast radius from the 2026-07-03 manual-entry retarget:** Home's
-"Add an entry manually" now opens `/meal/component` instead of `/entry/new`
-(HANDOFF "OFF search-by-name lookup" cycle). Every flow that taps that button
-now lands on `ComponentForm` (fields: "Component name", "Ingredients", "Serving
-size in grams", the nutrition grid, "Add & scan next"/"Finish meal") instead of
-the old single-screen `LogEntryForm` ("Entry name", meal slot, sentiment, notes,
-"Save entry" all on one screen). Only `01b-manual-entry.yaml` and
-`01c-barcode-fallback.yaml` were rewritten this cycle. **Still stale, needing
-the same two-screen rework before the next full run:**
-`flows/ab-satfat-ingredients.yaml`, `flows/f-serving-size.yaml`,
+**Finding — wide blast radius from the 2026-07-03 manual-entry retarget
+(resolved 2026-08-16):** Home's "Add an entry manually" opens `/meal/component`
+instead of `/entry/new` (HANDOFF "OFF search-by-name lookup" cycle). Every flow
+that taps that button lands on `ComponentForm` (fields: "Component name",
+"Ingredients", "Serving size in grams", the nutrition grid, "Add & scan
+next"/"Finish meal") instead of the old single-screen `LogEntryForm` ("Entry
+name", meal slot, sentiment, notes, "Save entry" all on one screen). As of the
+2026-08-16 test-backfill session, **every flow is rewritten for the two-screen
+chain** — `flows/ab-satfat-ingredients.yaml`, `flows/f-serving-size.yaml`,
 `flows/g-datetime-picker.yaml`, and the seed helpers
 `flows/_helpers/seed-two-meals.yaml`, `flows/_helpers/seed-meals-for-insights.yaml`,
-`flows/_helpers/seed-ingredient-reactions.yaml` — the last three are `runFlow`
-dependencies of other flows (insights/ingredient-correlation flows), so their
-staleness is transitive. `flows/h-recent-foods.yaml` is unaffected — it re-logs
-via the Home "Recent" tap, which still targets `entry/new`/`LogEntryForm`
-unchanged.
+`flows/_helpers/seed-ingredient-reactions.yaml` (the last three are `runFlow`
+dependencies of other flows, so this closes their staleness transitively too).
+`flows/h-recent-foods.yaml` was never affected — it re-logs via the Home
+"Recent" tap, which still targets `entry/new`/`LogEntryForm` unchanged.
+
+**Finding — two Maestro flow-authoring gotchas, now fixed everywhere they
+occurred (2026-08-16):**
+1. Every nutrition-grid field (Calories, Fat (g), Sat. fat (g), …) has its
+   `FormField` label text and its `ThemedTextInput accessibilityLabel` set to
+   the exact same string. `scrollUntilVisible` on that string is satisfied by
+   the short label alone — the input box below it can still be fully
+   off-screen and untappable, so the following `tapOn`/`inputText` silently
+   lands nowhere (confirmed via `uiautomator dump`: the EditText node was
+   simply absent from the hierarchy at that scroll position). **Always scroll
+   to a landmark at least one row below** the nutrition field you're about to
+   fill (the next row's label, or the screen's action button), not the field's
+   own label.
+2. Typing into a text field and then immediately `tapOn`-ing a same-screen
+   button (e.g. "Add to watchlist") without a `hideKeyboard` in between can
+   silently no-op the tap — the button ends up covered/mis-hit while the
+   keyboard is still up. **Always `hideKeyboard` before tapping a button that
+   follows text entry.** Watch for the matching false-positive: an
+   `assertVisible` on the term you just typed can still pass because the text
+   is sitting unsent in the input box — assert on something that only exists
+   once the action actually succeeded (e.g. the resulting list item's own
+   distinguishing text) once the input field would otherwise have been
+   cleared.
+
+See `docs/RESULTS.md` (2026-08-16) for the full diagnosis and the flows each
+fix landed in.
 
 **Manual items that stay on your desk:**
 1. Real barcode scan on a physical product
@@ -173,3 +202,4 @@ flow file. A `<failure>` element means the flow failed. Claude then:
 | `OK` button not found in date picker | Android version may label it `Set` — change `tapOn: "OK"` to `tapOn: "Set"` in `g-datetime-picker.yaml` |
 | Insights flow fails at "Wheat Bread" | Analysis threshold not reached — add more seed entries in `_helpers/seed-meals-for-insights.yaml` |
 | Camera permission not granted | Add `permissions: camera: allow` to the flow's `launchApp` block |
+| **Flows all "pass" or all fail in a way that doesn't match the code** — e.g. a fix that shipped last cycle still shows the old bug on-device | **Bundle staleness — verify BEFORE trusting any run** (see `docs/RESULTS.md` 2026-08-16 for the full incident). `adb reverse` + `npx expo start --dev-client` only serves fresh JS if the *installed APK* was itself built with `developmentClient: true` (`eas.json` → `"development"` profile). A `"preview"`-profile install is release-configured and bundles its own JS at build time — it will **never** contact Metro, silently and without any error screen, no matter what you do from the host side (adb reverse, deep links, cold relaunch all look identical from the device's perspective). Confirm with `adb shell dumpsys package com.tummytracker.app \| grep -i debuggable` — a real dev client shows a `DEBUGGABLE` flag; a preview/release build doesn't (and `adb shell run-as com.tummytracker.app` will say "not debuggable"). A second confirmation: Metro's own terminal log should print a bundling line every time the app launches — if it's been silent through several `launchApp` cycles, you're on the embedded bundle. If confirmed stale, **stop and report** — do not run the suite; there's no host-side workaround, and re-flashing risks the on-device journal (CLAUDE.md §0 signing caveat), so it's the owner's call. |

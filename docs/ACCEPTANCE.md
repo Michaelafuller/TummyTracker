@@ -235,8 +235,10 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
       reappear). · manual (network)
 
 ### Trigger watchlist / elimination mode
-- [ ] Add a watch term in Settings; it appears in the watchlist with a clean-streak
-      line. · auto `flows/watchlist.yaml` (new)
+- [ ] Add a watch term on the Insights tab (corrected 2026-08-16 — the
+      Watchlist section renders in `src/app/(tabs)/insights.tsx`, not
+      Settings); it appears in the watchlist with a clean-streak line. · auto
+      `flows/watchlist.yaml` (new)
 - [ ] Logging a meal whose ingredients match the term shows the non-blocking flag
       on meal review, and the saved entry's view shows the flag. · auto
       `flows/watchlist.yaml` (new)
@@ -264,6 +266,13 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
 ---
 
 ## Post-MVP · 2026-08-16 release (check-in fix · dictation · theme · splash)
+
+> **All `· auto` items below (and the flows/goal-editor.yaml / goals-tally.yaml /
+> watchlist.yaml items in the 2026-08-15 section above) are authored but
+> blocked, not verified** — the 2026-08-16 test-execute session found the
+> installed device build is an EAS `preview` APK that cannot load fresh JS from
+> Metro (it predates this exact fix set). See `docs/RESULTS.md` for the full
+> diagnosis and the owner action needed to unblock the next run.
 
 ### Check-in persistence + 7-day horizon
 - [ ] Enable the check-in with a floor goal set; kill and relaunch the app — the
