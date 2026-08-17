@@ -10,6 +10,7 @@ appId: com.tummytracker.app
 ---
 - launchApp:
     clearState: true
+- runFlow: _helpers/reconnect-dev-client.yaml
 
 # Seed two meals
 - runFlow: _helpers/seed-two-meals.yaml
@@ -21,15 +22,27 @@ appId: com.tummytracker.app
     id: "tab-home"
 - waitForAnimationToEnd
 
-# "Recent" section heading and rows should now be visible
+# "Recent" section heading and rows should now be visible. The second row
+# ("Pizza slice") sits below the fold on a Pixel 5 viewport — assertVisible
+# does not scroll, so scroll to it first (TEST_STRATEGY §7 — scroll before
+# assert; confirmed via failure screenshot: only the "Oatmeal" row and the
+# search field were on-screen, "Pizza slice" was cut off at the bottom).
 - assertVisible: "Recent"
 - assertVisible: "Oatmeal"
+- scrollUntilVisible:
+    element:
+      text: "Pizza slice"
+    direction: DOWN
 - assertVisible: "Pizza slice"
 
-# Search narrows the list to the matching row
+# Search narrows the list to the matching row. The keyboard covers the
+# whole screen (search field + results) after typing on a Pixel 5 — hide it
+# before asserting (confirmed via failure screenshot: only Home's CTAs and
+# the keyboard were visible, the filtered row was underneath).
 - tapOn:
     text: "Search past foods…"
 - inputText: "Oatmeal"
+- hideKeyboard
 - assertVisible:
     id: "recent-oatmeal"
 

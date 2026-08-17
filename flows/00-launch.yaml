@@ -3,6 +3,7 @@ appId: com.tummytracker.app
 ---
 - launchApp:
     clearState: true
+- runFlow: _helpers/reconnect-dev-client.yaml
 - assertVisible: "TummyTracker"
 - assertVisible: "Scan barcode"
 - assertVisible: "+ Add manually"

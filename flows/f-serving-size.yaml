@@ -9,6 +9,7 @@ appId: com.tummytracker.app
 ---
 - launchApp:
     clearState: true
+- runFlow: _helpers/reconnect-dev-client.yaml
 
 - tapOn:
     text: "Add an entry manually"
@@ -84,6 +85,7 @@ appId: com.tummytracker.app
 # Persist across restart
 - stopApp
 - launchApp
+- runFlow: _helpers/reconnect-dev-client.yaml
 - tapOn:
     id: "tab-journal"
 - assertVisible: "Avocado toast"

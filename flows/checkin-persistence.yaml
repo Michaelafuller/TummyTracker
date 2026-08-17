@@ -17,6 +17,7 @@ appId: com.tummytracker.app
     clearState: true
     permissions:
       notifications: allow
+- runFlow: _helpers/reconnect-dev-client.yaml
 
 # --- Seed a meal, then set a floor goal on Calories ---
 - tapOn: "Add an entry manually"
@@ -75,6 +76,7 @@ appId: com.tummytracker.app
 
 # Relaunch WITHOUT clearState — the whole point is persistence.
 - launchApp
+- runFlow: _helpers/reconnect-dev-client.yaml
 - tapOn:
     id: "tab-goals"
 - waitForAnimationToEnd

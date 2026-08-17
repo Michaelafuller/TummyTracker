@@ -1,0 +1,43 @@
+appId: com.tummytracker.app
+# Helper — reconnects the Expo dev client to Metro after ANY launchApp step
+# (clearState: true or plain relaunch — both drop the connection identically).
+#
+# Discovered 2026-08-16 (post-283d147 re-run): Maestro's launchApp never
+# leaves the dev client auto-connected to Metro. Every cold start (pm clear)
+# and every plain relaunch lands on the built-in "Development Build" connect
+# screen; the dev client does not persist/remember the last dev-server URL
+# across either. Deep-linking with the explicit ?url= param reconnects
+# reliably regardless of prior state, but two more wrinkles show up after the
+# link fires (both handled below, both harmless no-ops when absent):
+#   1. First-ever connection after a data wipe can show a one-time "This is
+#      the developer menu" tooltip with a "Continue" button.
+#   2. Re-opening the same deep link while the client is already mid-connect
+#      can pop the dev menu sheet (Reload / Go home / Tools) instead of
+#      landing directly on the app. Its close (X) button's accessibility
+#      label is "Close" — tap that, NOT "Go home" (which navigates the dev
+#      client itself back to this connect screen) and NOT the hardware Back
+#      key (which can exit the app entirely to whatever was behind it).
+# Verified reliable across 3 consecutive clearState+relaunch cycles.
+#
+# Invoke via: runFlow: _helpers/reconnect-dev-client.yaml
+# immediately after every `launchApp` step (clearState or not).
+#
+# NOTE — the port below must match whatever port Metro is serving this
+# worktree on for the current session (see docs/E2E.md "Test-execute
+# protocol"). Update it here once at the top of a session rather than at
+# each call site.
+---
+- assertVisible: "Development Build"
+- openLink: "tummytracker://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8084"
+- extendedWaitUntil:
+    visible: "TummyTracker"
+    timeout: 20000
+- tapOn:
+    text: "Continue"
+    optional: true
+- tapOn:
+    text: "Close"
+    optional: true
+- extendedWaitUntil:
+    visible: "Scan barcode"
+    timeout: 20000

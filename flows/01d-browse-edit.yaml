@@ -6,6 +6,7 @@ appId: com.tummytracker.app
 ---
 - launchApp:
     clearState: true
+- runFlow: _helpers/reconnect-dev-client.yaml
 
 # Seed two entries
 - runFlow: _helpers/seed-two-meals.yaml

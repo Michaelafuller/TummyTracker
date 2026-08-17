@@ -19,6 +19,7 @@ appId: com.tummytracker.app
 ---
 - launchApp:
     clearState: true
+- runFlow: _helpers/reconnect-dev-client.yaml
 
 # --- Create the entry (component-confirm screen) ---
 - tapOn: "Add an entry manually"

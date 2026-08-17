@@ -7,6 +7,7 @@ appId: com.tummytracker.app
 ---
 - launchApp:
     clearState: true
+- runFlow: _helpers/reconnect-dev-client.yaml
 
 - runFlow: _helpers/seed-meals-for-insights.yaml
 

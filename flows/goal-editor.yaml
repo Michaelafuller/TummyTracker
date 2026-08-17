@@ -8,6 +8,7 @@ appId: com.tummytracker.app
 ---
 - launchApp:
     clearState: true
+- runFlow: _helpers/reconnect-dev-client.yaml
 
 # Seed a meal first — the goal-progress table on the Goals tab only renders
 # once today's tally is non-empty (src/app/(tabs)/goals.tsx: tally.entryCount).
