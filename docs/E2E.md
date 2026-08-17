@@ -52,6 +52,18 @@ maestro test flows/ --format junit --output flows/results.xml
 
 ## Coverage
 
+> **2026-08-16 test-execute run (resumed session):** the dev-client blocker
+> from the prior session is fixed (real `development`-profile build installed,
+> Metro serves fine), but the first real dev-mode run immediately hit a fatal
+> app-bug that blanks the entire app on launch (expo-router `Slot` throws on
+> array-style props passed to `asChild` children — 5 call sites in
+> `src/app/(tabs)/index.tsx` and `src/features/logging/EntryRow.tsx`; see
+> `docs/RESULTS.md`). **All 23/23 flows failed for this one root cause** — the
+> statuses below are NOT re-verified this run; ✅/⏳ marks reflect the
+> 2026-07-03 baseline and earlier authoring sessions, not this run. Nothing
+> below should be trusted as currently passing until the app-bug is fixed and
+> a clean full run completes.
+
 | ACCEPTANCE.md item | Flow file | Status |
 |---|---|---|
 | Phase 0 — app launches | `flows/00-launch.yaml` | ✅ Automated |
@@ -71,28 +83,31 @@ maestro test flows/ --format junit --output flows/results.xml
 | H — recent foods quick-add | `flows/h-recent-foods.yaml` | ✅ Automated |
 | I — export/import buttons, no crash | `flows/i-backup.yaml` | ⚠️ Partial (file content + import round-trip: manual) |
 
-### Backfill flows — authored; pending test-execute run on Pixel 5
+### Backfill flows — authored, run 2026-08-16, all failed on the app-bug (not the flows)
 
-These flows were authored in the Maestro backfill session. Status flips to ✅
-once the test-execute session runs `npm run e2e` and `flows/results.xml` confirms
-they pass. See `docs/RESULTS.md` (written by the test-execute session).
+These flows were authored in the Maestro backfill session and **run** in the
+2026-08-16 resumed test-execute session — all failed, but for a single shared
+root cause (the Home-screen render crash, see `docs/RESULTS.md`), not because
+any individual flow's YAML is wrong. Status flips to ✅ once a future
+test-execute session re-runs `npm run e2e:ci` against a build with that app-bug
+fixed and `flows/results.xml` confirms a pass.
 
 | ACCEPTANCE.md item | Flow file | Status |
 |---|---|---|
-| A — saturated fat persists (manual path) | `flows/ab-satfat-ingredients.yaml` | ⏳ Authored (rewritten 2026-08-16 for the two-screen chain; passed against a stale bundle — see RESULTS.md, not counted as verified) |
-| B — ingredient capture persists on reopen | `flows/ab-satfat-ingredients.yaml` | ⏳ Authored (same) |
-| Ingredient-capture hardening — additive-only tag policy | `flows/ab-satfat-ingredients.yaml` (extend) | ⏳ Authored 2026-08-16 — proxied via the watchlist banner (no direct tag-list UI exists anywhere in the app) |
-| C — symptom log, render, filter, edit reload | `flows/c-symptom-logging.yaml` | ⏳ Authored |
-| D — "Ingredients you react to" insight | `flows/d-ingredient-insights.yaml` | ⏳ Authored (manual ingredients ARE tagged — confirmed in formModel.ts) |
-| E — summary counts (food · BM · rated) | `flows/e-temporal-insights.yaml` | ⏳ Authored (⚠️ partial; "Timing patterns" is timing-dependent → manual) |
+| A — saturated fat persists (manual path) | `flows/ab-satfat-ingredients.yaml` | ❌ Failed 2026-08-16 (app-bug blocker, not a flow defect — see RESULTS.md) |
+| B — ingredient capture persists on reopen | `flows/ab-satfat-ingredients.yaml` | ❌ Failed 2026-08-16 (same) |
+| Ingredient-capture hardening — additive-only tag policy | `flows/ab-satfat-ingredients.yaml` (extend) | ❌ Failed 2026-08-16 (same) — proxied via the watchlist banner (no direct tag-list UI exists anywhere in the app) |
+| C — symptom log, render, filter, edit reload | `flows/c-symptom-logging.yaml` | ❌ Failed 2026-08-16 (same) |
+| D — "Ingredients you react to" insight | `flows/d-ingredient-insights.yaml` | ❌ Failed 2026-08-16 (same; manual ingredients ARE tagged — confirmed in formModel.ts) |
+| E — summary counts (food · BM · rated) | `flows/e-temporal-insights.yaml` | ❌ Failed 2026-08-16 (same; ⚠️ "Timing patterns" is timing-dependent → manual regardless) |
 | E — "Timing patterns" section | — | ❌ Manual (24h windowed join can't be constructed deterministically in clearState) |
-| 1d — day/week/month + collapse/expand calendar | `flows/journal-calendar.yaml` | ⏳ Authored |
-| Nav — 5 bottom tabs reachable | `flows/nav-tabs.yaml` | ⏳ Authored (fixed 2026-08-16 — was stale at 4 tabs, missing the Goals tab added in the 2026-08-15 release) |
-| Settings — offline toggle + sections render | `flows/settings-smoke.yaml` | ⏳ Authored (smoke; offline-mode switch value is not assertable in Maestro → manual) |
-| Watchlist — add term, non-blocking flag on review + entry view | `flows/watchlist.yaml` | ⏳ Authored 2026-08-16 (new) — targets the **Insights** tab, not Settings (HANDOFF.md's phase-2.1 description was wrong; `WatchlistSection` renders in `src/app/(tabs)/insights.tsx`) |
-| Goals tab — daily tally, missing-data disclosure | `flows/goals-tally.yaml` | ⏳ Authored 2026-08-16 (new) |
-| Goals — floor/cap thresholds, cap notice, removal | `flows/goal-editor.yaml` | ⏳ Authored 2026-08-16 (new) — full pass against the stale 2026-08-15 bundle (that build already has this feature), not counted as verified for `main` HEAD per TEST_STRATEGY §5 |
-| Check-in persistence + 7-day horizon | `flows/checkin-persistence.yaml` | ⏳ Authored 2026-08-16 (new) — **could not be run**: the installed build predates this exact fix (see RESULTS.md Root cause #1); the toggle would fail against it by design |
+| 1d — day/week/month + collapse/expand calendar | `flows/journal-calendar.yaml` | ❌ Failed 2026-08-16 (same) |
+| Nav — 5 bottom tabs reachable | `flows/nav-tabs.yaml` | ❌ Failed 2026-08-16 (same; fixed 2026-08-16 — was stale at 4 tabs, missing the Goals tab added in the 2026-08-15 release) |
+| Settings — offline toggle + sections render | `flows/settings-smoke.yaml` | ❌ Failed 2026-08-16 (same; offline-mode switch value is not assertable in Maestro → manual regardless) |
+| Watchlist — add term, non-blocking flag on review + entry view | `flows/watchlist.yaml` | ❌ Failed 2026-08-16 (same) — targets the **Insights** tab, not Settings (HANDOFF.md's phase-2.1 description was wrong; `WatchlistSection` renders in `src/app/(tabs)/insights.tsx`) |
+| Goals tab — daily tally, missing-data disclosure | `flows/goals-tally.yaml` | ❌ Failed 2026-08-16 (app-bug blocker, not a flow defect — see RESULTS.md) |
+| Goals — floor/cap thresholds, cap notice, removal | `flows/goal-editor.yaml` | ❌ Failed 2026-08-16 (same) |
+| Check-in persistence + 7-day horizon | `flows/checkin-persistence.yaml` | ❌ Failed 2026-08-16 (same) — this is the first session where it could even attempt to run (dev-client blocker resolved), but it never got past the Home-screen crash |
 
 **Finding — label gap:** The Insights screen has no `"Insights"` subtitle heading (unlike
 Journal → `"Journal"` and Settings → `"Settings"`). `nav-tabs.yaml` uses `"Your journal so
@@ -203,3 +218,5 @@ flow file. A `<failure>` element means the flow failed. Claude then:
 | Insights flow fails at "Wheat Bread" | Analysis threshold not reached — add more seed entries in `_helpers/seed-meals-for-insights.yaml` |
 | Camera permission not granted | Add `permissions: camera: allow` to the flow's `launchApp` block |
 | **Flows all "pass" or all fail in a way that doesn't match the code** — e.g. a fix that shipped last cycle still shows the old bug on-device | **Bundle staleness — verify BEFORE trusting any run** (see `docs/RESULTS.md` 2026-08-16 for the full incident). `adb reverse` + `npx expo start --dev-client` only serves fresh JS if the *installed APK* was itself built with `developmentClient: true` (`eas.json` → `"development"` profile). A `"preview"`-profile install is release-configured and bundles its own JS at build time — it will **never** contact Metro, silently and without any error screen, no matter what you do from the host side (adb reverse, deep links, cold relaunch all look identical from the device's perspective). Confirm with `adb shell dumpsys package com.tummytracker.app \| grep -i debuggable` — a real dev client shows a `DEBUGGABLE` flag; a preview/release build doesn't (and `adb shell run-as com.tummytracker.app` will say "not debuggable"). A second confirmation: Metro's own terminal log should print a bundling line every time the app launches — if it's been silent through several `launchApp` cycles, you're on the embedded bundle. If confirmed stale, **stop and report** — do not run the suite; there's no host-side workaround, and re-flashing risks the on-device journal (CLAUDE.md §0 signing caveat), so it's the owner's call. |
+| **Every flow fails immediately, "TummyTracker" title visible but nothing else, or `tab-*` testIDs never found** | **A real dev-mode-only render crash, not a flow or environment problem — see `docs/RESULTS.md` 2026-08-16 "Root cause #1".** `expo-router`'s `Slot` throws when an `asChild`-wrapped child receives an array-literal `style` prop (`style={[a, b]}`), but *only* when `NODE_ENV !== 'production'` — i.e. only under a real Metro dev-mode bundle, never in an EAS preview/production build. This blanks the whole app (no error boundary), so every flow fails at its first post-launch assertion regardless of what it's testing. Confirm via `adb logcat -d \| grep -i "DevLauncher\|Render Error"` right after a fresh launch, or just look at the device screen for the redbox. Do not treat this as N independent flow failures — check `grep -rn "asChild" src` for array-style children first; if found, this is the cause and the fix belongs in the next Execute session (flatten the style arrays), not in the flow YAML. |
+| **Worktree Metro 404s every module, or `DevLauncher: ...UnableToResolveError` for `expo-router/entry`** | `node_modules` is missing or was installed *after* Metro started crawling. Run `ls node_modules` — if absent, `npm install` first. If present but Metro still 404s, a stale Metro instance (possibly one you can't kill, e.g. blocked by sandboxing) started before the install finished; start a *fresh* Metro on a new port instead of trusting the existing one. |

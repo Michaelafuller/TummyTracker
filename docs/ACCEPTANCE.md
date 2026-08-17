@@ -56,6 +56,16 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
 
 ---
 
+> **2026-08-16 test-execute run (resumed session): 23/23 flows failed, 0
+> passed, for a single root cause — a real app-bug that blanks the entire app
+> on dev-mode launch.** This affects every `· auto` item in this document, not
+> just the new 2026-08-15/2026-08-16 sections below — no flow could get past
+> the Home screen. No `[ ]` was flipped to `[x]`, and none was flipped back to
+> `[ ]` either (items already checked from the 2026-07-03 baseline are left as
+> historical record, but see `docs/RESULTS.md` "Findings for the next planning
+> session" for why that baseline's provenance is now in question). Full
+> diagnosis: `docs/RESULTS.md`.
+
 ## Phase 0 — Scaffold
 - [ ] App launches on the Pixel 5 (dev build) without a redbox. · auto `flows/00-launch.yaml`
 - [ ] A placeholder home screen renders. · auto `flows/00-launch.yaml`
@@ -269,10 +279,17 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
 
 > **All `· auto` items below (and the flows/goal-editor.yaml / goals-tally.yaml /
 > watchlist.yaml items in the 2026-08-15 section above) are authored but
-> blocked, not verified** — the 2026-08-16 test-execute session found the
-> installed device build is an EAS `preview` APK that cannot load fresh JS from
-> Metro (it predates this exact fix set). See `docs/RESULTS.md` for the full
-> diagnosis and the owner action needed to unblock the next run.
+> blocked, not verified.** The preview-APK blocker from the prior session is
+> **resolved** (a real `development`-profile dev client is now installed and
+> Metro serves it fine), but that first-ever real dev-mode run immediately hit
+> a **real app-bug**: `expo-router`'s `Slot` throws a fatal dev-mode-only
+> render error on Home screen load (array-style prop passed to an `asChild`
+> child — 5 call sites in `src/app/(tabs)/index.tsx` and
+> `src/features/logging/EntryRow.tsx`), which blanks the entire app since
+> there's no error boundary. All 23/23 Maestro flows failed for this single
+> root cause on 2026-08-16. See `docs/RESULTS.md` for the full diagnosis and
+> the trivial fix (flatten the array styles) needed before the next
+> test-execute run can verify anything below.
 
 ### Check-in persistence + 7-day horizon
 - [ ] Enable the check-in with a floor goal set; kill and relaunch the app — the
