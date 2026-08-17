@@ -59,9 +59,9 @@ export default function BrowseScreen() {
     for (const key of entryDateKeys(typeFiltered)) {
       marks[key] = { marked: true };
     }
-    marks[selectedDate] = { ...marks[selectedDate], selected: true, selectedColor: theme.text };
+    marks[selectedDate] = { ...marks[selectedDate], selected: true, selectedColor: theme.accent };
     return marks;
-  }, [typeFiltered, selectedDate, theme.text]);
+  }, [typeFiltered, selectedDate, theme.accent]);
 
   const calendarTheme = {
     calendarBackground: theme.background,
@@ -69,10 +69,10 @@ export default function BrowseScreen() {
     monthTextColor: theme.text,
     textSectionTitleColor: theme.textSecondary,
     todayTextColor: theme.text,
-    selectedDayBackgroundColor: theme.text,
-    selectedDayTextColor: theme.background,
-    dotColor: theme.text,
-    arrowColor: theme.text,
+    selectedDayBackgroundColor: theme.accent,
+    selectedDayTextColor: theme.accentText,
+    dotColor: theme.accent,
+    arrowColor: theme.accent,
   };
 
   // Key changes on theme or expanded/collapsed toggle so both calendar components
