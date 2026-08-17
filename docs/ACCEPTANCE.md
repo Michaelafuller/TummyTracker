@@ -212,3 +212,96 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
 - [ ] Home's "+ Add manually" now opens the component-confirm screen and chains
       into "Finish meal" the same as scanning. · auto `flows/01b-manual-entry.yaml`
       (rewritten 2026-07-03, pending device run)
+
+---
+
+## Post-MVP · 2026-08-15 release (five cycles)  *(structured 2026-08-16)*
+
+### Ingredient-capture hardening + tag backfill
+- [ ] A pre-hardening entry with parenthetical sub-ingredients gained tags after
+      the run-once backfill (open an old entry's ingredients vs. its insight
+      tags). · manual (real on-device DB)
+- [ ] Editing ingredients to remove a word never deletes an existing tag
+      (additive-only policy). · auto `flows/ab-satfat-ingredients.yaml` (extend:
+      edit ingredients, reopen, tags unchanged — Jest covers the logic; the flow
+      covers persistence wiring)
+
+### Search-a-licious migration
+- [x] Migration 0007 + backfill ran against the real install without incident.
+      · manual — **verified by owner 2026-08-15 (EAS preview build)**
+- [ ] Name search returns English, generic-first results (e.g. "banana").
+      · manual (network)
+- [ ] Clearing the Name field resets the search session (no stale results
+      reappear). · manual (network)
+
+### Trigger watchlist / elimination mode
+- [ ] Add a watch term in Settings; it appears in the watchlist with a clean-streak
+      line. · auto `flows/watchlist.yaml` (new)
+- [ ] Logging a meal whose ingredients match the term shows the non-blocking flag
+      on meal review, and the saved entry's view shows the flag. · auto
+      `flows/watchlist.yaml` (new)
+- [ ] The flag never blocks saving. · auto `flows/watchlist.yaml` (new)
+- [ ] Quick-watch from an Insights finding adds the term. · manual (needs a
+      seeded finding; promote to auto only if the insights seed helper produces
+      one deterministically)
+
+### Goals tab — daily tally (part 1)
+- [ ] Goals is the 5th bottom tab and renders today's tally. · auto
+      `flows/goals-tally.yaml` (new)
+- [ ] Logging a meal with nutrition updates the tally same-day. · auto
+      `flows/goals-tally.yaml` (new)
+- [ ] Entries missing a nutrient are disclosed per-nutrient (missing-data
+      honesty line). · auto `flows/goals-tally.yaml` (new)
+
+### Goals — thresholds + daily check-in (part 2, migration 0008)
+- [ ] Set a floor goal → progress renders against the tally; remove it → the goal
+      row is gone. · auto `flows/goal-editor.yaml` (new)
+- [ ] Save a meal that crosses a cap → in-app cap notice appears on review and
+      the save still succeeds. · auto `flows/goal-editor.yaml` (new)
+- [ ] Migration 0008 applies cleanly over the real on-device database. · manual
+      (device — implied by the dev-client running post-merge without a redbox)
+
+---
+
+## Post-MVP · 2026-08-16 release (check-in fix · dictation · theme · splash)
+
+### Check-in persistence + 7-day horizon
+- [ ] Enable the check-in with a floor goal set; kill and relaunch the app — the
+      toggle is still ON. · auto `flows/checkin-persistence.yaml` (new — relaunch
+      WITHOUT `clearState`)
+- [ ] Enable the check-in with zero floor goals — the toggle holds and the
+      "add a floor goal" hint shows. · auto `flows/checkin-persistence.yaml` (new)
+- [ ] Live: check-in fires at the configured time; after firing, the toggle still
+      reads ON and a next-day notification exists (horizon re-arm — check via a
+      2-min-out check-in, then Settings → App notifications, or simply the next
+      day's fire). · manual (notification timing)
+- [ ] Disabling cancels all pending check-ins (no stray horizon notifications
+      fire later). · manual (notification timing)
+
+### Dictation-safe inputs
+- [ ] Dictate into Name and Notes — the text appears exactly once (no doubled
+      phrase on unfocus). iOS dictation. · manual (mic/keyboard)
+- [ ] Same check with Android voice typing on the Pixel. · manual (mic/keyboard)
+- [ ] Programmatic fills still work: OFF search-result fill and serving-size
+      rescale still populate fields. · manual (network) — regression watch for
+      the remount-on-programmatic-change fix
+
+### Light-theme palette pass
+- [ ] Light mode: stack headers (Add entry / Review meal / Edit entry) use the
+      palette — no pure-white header, near-black title, or iOS-blue back
+      button. · manual (visual)
+- [ ] All primary CTAs render teal with dark label (no black/white buttons) in
+      both modes. · manual (visual)
+- [ ] Selected states (journal filter chips, goal direction chips, calendar
+      selected day) render violet accent in both modes. · manual (visual)
+- [ ] Light mode shows the plum secondary text (not teal-gray) — tab bar
+      inactive tint, hints, chart mid-bands. · manual (visual)
+- [ ] Full Maestro suite still passes after the theme refactor (shared-infra
+      rule). · auto — full `npm run e2e` run
+
+### Splash & notification colors  *(visible only after the next EAS build)*
+- [ ] Splash is dark teal with the white logo silhouette; launcher-icon → splash
+      transition shows no color jump. · manual (EAS build)
+- [ ] Notification accent/tint is teal, not blue. · manual (EAS build)
+- [ ] Android launcher icon renders inside the safe zone (icon-layer fix riding
+      this build). · manual (EAS build)
