@@ -5,7 +5,9 @@ import { SafeAreaProvider, type Metrics } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/theme';
 import { listGoals, removeGoal, upsertGoal } from '@/db/repository';
 import type { Goal, LogEntry } from '@/db/schema';
+import { disableCheckIn, ensureNotificationPermission, getCheckIn, refreshCheckIn } from '@/features/goals/checkInService';
 import { useGoalsStore } from '@/features/goals/goalsStore';
+import { usePrefsStore } from '@/features/prefs/prefsStore';
 import GoalsScreen from '../goals';
 
 let mockEntries: LogEntry[] = [];
@@ -74,7 +76,16 @@ beforeEach(() => {
   seq = 0;
   mockEntries = [];
   useGoalsStore.setState({ goals: [], loaded: false });
+  usePrefsStore.setState({
+    offlineMode: false,
+    checkInEnabled: false,
+    checkInHour: 20,
+    checkInMinute: 0,
+    checkInAdoptedV1: false,
+    loaded: false,
+  });
   jest.clearAllMocks();
+  (getCheckIn as jest.Mock).mockResolvedValue({ enabled: false, hour: 20, minute: 0 });
 });
 
 describe('GoalsScreen', () => {
@@ -189,5 +200,49 @@ describe('GoalsScreen goal editor', () => {
 
     expect(removeGoal).toHaveBeenCalledWith('proteinG');
     expect(await findByLabelText('Protein goal: no goal set')).toBeTruthy();
+  });
+});
+
+describe('CheckInSection (HANDOFF.md Cycle A — persisted-prefs source of truth)', () => {
+  it('turning the check-in on with no floor goals stays ON and shows the hint', async () => {
+    (ensureNotificationPermission as jest.Mock).mockResolvedValue(true);
+    useGoalsStore.setState({ goals: [], loaded: true });
+
+    const { findByLabelText, findByText } = await renderScreen(<GoalsScreen />);
+    const toggle = await findByLabelText('Daily check-in');
+    await fireEvent(toggle, 'valueChange', true);
+
+    expect(await findByText('Add a floor goal to get check-ins.')).toBeTruthy();
+    expect((await findByLabelText('Daily check-in')).props.value).toBe(true);
+    expect(usePrefsStore.getState().checkInEnabled).toBe(true);
+    expect(refreshCheckIn).toHaveBeenCalledWith(20, 0);
+  });
+
+  it('turning the check-in off persists checkInEnabled: false', async () => {
+    (getCheckIn as jest.Mock).mockResolvedValue({ enabled: true, hour: 20, minute: 0 });
+    useGoalsStore.setState({
+      goals: [goal({ nutrient: 'proteinG', direction: 'floor', threshold: 50 })],
+      loaded: true,
+    });
+
+    const { findByLabelText, queryByText } = await renderScreen(<GoalsScreen />);
+    const toggle = await findByLabelText('Daily check-in');
+    expect(toggle.props.value).toBe(true);
+
+    await fireEvent(toggle, 'valueChange', false);
+
+    expect((await findByLabelText('Daily check-in')).props.value).toBe(false);
+    expect(usePrefsStore.getState().checkInEnabled).toBe(false);
+    expect(disableCheckIn).toHaveBeenCalled();
+    expect(queryByText('Add a floor goal to get check-ins.')).toBeNull();
+  });
+
+  it('adopts a pending pre-existing OS-scheduled check-in on first mount', async () => {
+    (getCheckIn as jest.Mock).mockResolvedValue({ enabled: true, hour: 7, minute: 30 });
+
+    const { findByLabelText } = await renderScreen(<GoalsScreen />);
+
+    expect((await findByLabelText('Daily check-in')).props.value).toBe(true);
+    expect(usePrefsStore.getState()).toMatchObject({ checkInEnabled: true, checkInHour: 7, checkInMinute: 30 });
   });
 });
