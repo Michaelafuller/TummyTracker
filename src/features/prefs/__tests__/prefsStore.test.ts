@@ -7,7 +7,14 @@ jest.mock('@/lib/prefs', () => ({
 }));
 
 beforeEach(() => {
-  usePrefsStore.setState({ offlineMode: false, loaded: false });
+  usePrefsStore.setState({
+    offlineMode: false,
+    checkInEnabled: false,
+    checkInHour: 20,
+    checkInMinute: 0,
+    checkInAdoptedV1: false,
+    loaded: false,
+  });
   jest.clearAllMocks();
 });
 
@@ -50,5 +57,34 @@ describe('prefsStore.setOfflineMode', () => {
     expect(savePrefs).toHaveBeenLastCalledWith(
       expect.objectContaining({ offlineMode: false }),
     );
+  });
+});
+
+describe('prefsStore.setCheckIn', () => {
+  it('updates checkInEnabled/checkInHour/checkInMinute and marks checkInAdoptedV1', () => {
+    (savePrefs as jest.Mock).mockResolvedValue(undefined);
+    usePrefsStore.getState().setCheckIn(true, 7, 30);
+    expect(usePrefsStore.getState()).toMatchObject({
+      checkInEnabled: true,
+      checkInHour: 7,
+      checkInMinute: 30,
+      checkInAdoptedV1: true,
+    });
+  });
+
+  it('persists the new check-in state by calling savePrefs', () => {
+    (savePrefs as jest.Mock).mockResolvedValue(undefined);
+    usePrefsStore.getState().setCheckIn(true, 7, 30);
+    expect(savePrefs).toHaveBeenCalledWith(
+      expect.objectContaining({ checkInEnabled: true, checkInHour: 7, checkInMinute: 30, checkInAdoptedV1: true }),
+    );
+  });
+
+  it('disabling after enabling persists checkInEnabled: false while keeping the last time', () => {
+    (savePrefs as jest.Mock).mockResolvedValue(undefined);
+    usePrefsStore.getState().setCheckIn(true, 7, 30);
+    usePrefsStore.getState().setCheckIn(false, 7, 30);
+    expect(usePrefsStore.getState().checkInEnabled).toBe(false);
+    expect(savePrefs).toHaveBeenLastCalledWith(expect.objectContaining({ checkInEnabled: false }));
   });
 });

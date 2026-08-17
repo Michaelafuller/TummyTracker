@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { FormField, ThemedTextInput } from '@/components/form-fields';
+import { PrimaryButton } from '@/components/primary-button';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useOffSearch } from '@/features/barcode/useOffSearch';
@@ -252,17 +253,11 @@ export function ComponentForm({
             accessibilityRole="button"
             accessibilityLabel={secondaryLabel}
             onPress={() => handleSubmit(onSecondarySubmit)}
-            style={[styles.button, styles.secondaryButton, { borderColor: theme.text }]}>
+            style={[styles.button, styles.secondaryButton, { borderColor: theme.border }]}>
             <ThemedText style={styles.secondaryLabel}>{secondaryLabel}</ThemedText>
           </Pressable>
         ) : null}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={submitLabel}
-          onPress={() => handleSubmit(onSubmit)}
-          style={[styles.button, { backgroundColor: theme.text }]}>
-          <ThemedText style={[styles.submitLabel, { color: theme.background }]}>{submitLabel}</ThemedText>
-        </Pressable>
+        <PrimaryButton label={submitLabel} onPress={() => handleSubmit(onSubmit)} />
       </View>
     </View>
   );
@@ -312,10 +307,6 @@ const styles = StyleSheet.create({
   secondaryButton: {
     backgroundColor: 'transparent',
     borderWidth: StyleSheet.hairlineWidth,
-  },
-  submitLabel: {
-    fontSize: 16,
-    fontWeight: 600,
   },
   secondaryLabel: {
     fontSize: 16,

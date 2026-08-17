@@ -5,30 +5,38 @@ import { FormField } from '@/components/form-fields';
 import { ThemedText } from '@/components/themed-text';
 import { TimeField } from '@/components/time-field';
 import { Spacing } from '@/constants/theme';
-import { DEFAULT_CHECK_IN, type CheckInState } from './checkInModel';
+import { usePrefsStore } from '@/features/prefs/prefsStore';
 import { disableCheckIn, ensureNotificationPermission, getCheckIn, refreshCheckIn } from './checkInService';
+import { useGoalsStore } from './goalsStore';
 
 /**
- * Daily check-in enable+time control (HANDOFF.md Phase 4), Goals tab. Mirrors
- * the reminders block in src/app/(tabs)/settings.tsx: the scheduled
- * notification itself is the source of truth (nothing persisted here beyond
- * it), and enabling follows the same request-permission-then-schedule flow
- * as `enableReminder` (leave the switch off if permission is declined).
+ * Daily check-in enable+time control (HANDOFF.md Phase 4), Goals tab.
+ * Persisted prefs are the source of truth for "enabled" (HANDOFF.md Cycle A
+ * fix — the OS-scheduled notification used to be, but firing it silently
+ * disabled the toggle): this component reads via `usePrefsStore` and writes
+ * exclusively through its `setCheckIn` action. The one-time OS-schedule
+ * adoption (pre-existing installs) runs inside `checkInService.getCheckIn`
+ * on mount; its result is synced into the store below.
  */
 export function CheckInSection() {
-  const [checkIn, setCheckIn] = useState<CheckInState>(DEFAULT_CHECK_IN);
-  const [loading, setLoading] = useState(true);
+  const checkInEnabled = usePrefsStore((state) => state.checkInEnabled);
+  const checkInHour = usePrefsStore((state) => state.checkInHour);
+  const checkInMinute = usePrefsStore((state) => state.checkInMinute);
+  const setCheckIn = usePrefsStore((state) => state.setCheckIn);
+  const hasFloorGoal = useGoalsStore((state) => state.goals.some((g) => g.direction === 'floor'));
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     let active = true;
     getCheckIn().then((state) => {
       if (!active) return;
-      setCheckIn(state);
-      setLoading(false);
+      setCheckIn(state.enabled, state.hour, state.minute);
+      setReady(true);
     });
     return () => {
       active = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount; setCheckIn is a stable zustand action.
   }, []);
 
   async function toggle(value: boolean) {
@@ -41,22 +49,25 @@ export function CheckInSection() {
         );
         return;
       }
-      await refreshCheckIn(checkIn.hour, checkIn.minute);
-      setCheckIn(await getCheckIn());
+      // Toggle semantics with zero floor goals (design contract): the flag
+      // persists true and the switch stays ON even though nothing gets
+      // scheduled (refreshCheckIn no-ops until a floor goal exists).
+      setCheckIn(true, checkInHour, checkInMinute);
+      await refreshCheckIn(checkInHour, checkInMinute);
     } else {
+      setCheckIn(false, checkInHour, checkInMinute);
       await disableCheckIn();
-      setCheckIn((prev) => ({ ...prev, enabled: false }));
     }
   }
 
   async function commitTime(hour: number, minute: number) {
-    setCheckIn((prev) => ({ ...prev, hour, minute }));
-    if (checkIn.enabled) {
+    setCheckIn(checkInEnabled, hour, minute);
+    if (checkInEnabled) {
       await refreshCheckIn(hour, minute);
     }
   }
 
-  if (loading) return null;
+  if (!ready) return null;
 
   return (
     <View style={styles.section}>
@@ -68,13 +79,19 @@ export function CheckInSection() {
 
       <View style={styles.row}>
         <ThemedText type="smallBold">Check-in</ThemedText>
-        <Switch value={checkIn.enabled} onValueChange={toggle} accessibilityLabel="Daily check-in" />
+        <Switch value={checkInEnabled} onValueChange={toggle} accessibilityLabel="Daily check-in" />
       </View>
+
+      {checkInEnabled && !hasFloorGoal ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          Add a floor goal to get check-ins.
+        </ThemedText>
+      ) : null}
 
       <FormField label="Time">
         <TimeField
-          hour={checkIn.hour}
-          minute={checkIn.minute}
+          hour={checkInHour}
+          minute={checkInMinute}
           onChange={commitTime}
           accessibilityLabel="Daily check-in time"
         />

@@ -1,8 +1,10 @@
 // Pure daily check-in model (HANDOFF.md "nutrient threshold goals" Phase 2).
 // Mirrors src/features/notifications/model.ts's style: no expo-notifications
-// import here, so this stays unit-testable, and the OS-scheduled notification
-// itself is the source of truth for enabled/hour/minute — this module only
-// reconstructs UI state from it and builds the copy that goes in the body.
+// import here, so this stays unit-testable. Persisted prefs (src/lib/prefs.ts)
+// are the source of truth for enabled/hour/minute (fix for the one-shot-then-
+// dies bug, HANDOFF.md Cycle A) — `checkInFromScheduled` below is demoted to
+// one-time adoption only (checkInService.ts's `getCheckIn`), and this module
+// otherwise just builds the copy that goes in the notification body.
 
 import type { Goal } from '@/db/schema';
 import { NUTRITION_NOUNS, nutritionUnit } from '@/lib/nutrition';
@@ -27,9 +29,11 @@ export interface ScheduledLike {
 }
 
 /**
- * Rebuild check-in UI state from the list of OS-scheduled notifications — exactly
- * like reminders' `remindersFromScheduled`. No matching notification means the
- * check-in is disabled (default hour/minute are just a starting point for the UI).
+ * Rebuild check-in state from the list of OS-scheduled notifications — used
+ * ONLY for the one-time adoption of a pre-existing install's pending
+ * check-in (checkInService.ts's `getCheckIn`), not for ongoing state (that's
+ * persisted prefs now). No matching notification means adopt-as-disabled
+ * (default hour/minute are just a starting point for the UI).
  */
 export function checkInFromScheduled(scheduled: readonly ScheduledLike[]): CheckInState {
   for (const item of scheduled) {

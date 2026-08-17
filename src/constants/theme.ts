@@ -18,10 +18,12 @@ export const Colors = {
     background: '#F2F7F7',          // soft teal-tinted off-white canvas
     backgroundElement: '#FFFFFF',   // white cards — separated from canvas by border, not just fill color
     backgroundSelected: '#C5E3E3',  // stronger teal tint for selected state
-    textSecondary: '#53696B',       // 5.8:1 on backgroundElement — AA ✓
+    textSecondary: '#5C4E6E',       // dark plum — 7.58:1 on backgroundElement / 7.01:1 on background — AAA ✓
     border: '#D3E4E4',              // hairline between backgroundElement and background
     primary: '#5BC0BE',             // CTA button background
     primaryText: '#0D2426',         // 7.0:1 on primary — AAA (large) / AA (small) ✓
+    accent: '#4F4370',              // deep violet — selected states, purple in light mode
+    accentText: '#FFFFFF',          // 8.86:1 on accent — AAA ✓
     danger: '#B3261E',              // 6.5:1 on backgroundElement — AA ✓
     link: '#0F6E6C',                // 6.1:1 on backgroundElement — AA ✓
   },
@@ -34,6 +36,8 @@ export const Colors = {
     border: '#2A4A51',              // dark teal border
     primary: '#5BC0BE',             // same teal — 7.6:1 on dark bg ✓
     primaryText: '#0D2426',         // 7.0:1 on primary — same in both modes ✓
+    accent: '#B7ADCF',              // the existing lavender — same hue as textSecondary
+    accentText: '#1A1016',          // ≈8.8:1 on accent — AAA ✓
     danger: '#FF8A80',              // 7.6:1 on background — AAA ✓
     link: '#7FD4D2',                // 10.2:1 on background — AAA ✓
   },

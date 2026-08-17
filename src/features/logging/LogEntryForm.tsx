@@ -1,14 +1,14 @@
 import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { DateTimeField } from '@/components/date-time-field';
 import { FormField, ThemedTextInput } from '@/components/form-fields';
 import { formatDateInput, formatTimeInput } from '@/lib/datetime';
+import { PrimaryButton } from '@/components/primary-button';
 import { SegmentedControl } from '@/components/segmented-control';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { FOOD_TYPES, MEAL_SLOTS, type MealSlot } from '@/db/schema';
-import { useTheme } from '@/hooks/use-theme';
 import { NUTRITION_LABELS, scaleNutrition } from '@/lib/nutrition';
 import { MAX_NOTES_LENGTH, NUTRITION_FIELDS, type NutritionField } from '@/lib/validation';
 import { SentimentSelector } from '@/features/sentiment/SentimentSelector';
@@ -63,7 +63,6 @@ export function LogEntryForm({
   submitLabel = 'Save',
   submitting = false,
 }: LogEntryFormProps) {
-  const theme = useTheme();
   const [state, setState] = useState<LogEntryFormState>(() => defaultState(initial));
   const [errors, setErrors] = useState<FormErrors>({ nutrition: {} });
 
@@ -206,17 +205,12 @@ export function LogEntryForm({
         ))}
       </View>
 
-      <Pressable
-        accessibilityRole="button"
+      <PrimaryButton
+        label={submitting ? 'Saving…' : submitLabel}
         accessibilityLabel={submitLabel}
-        accessibilityState={{ disabled: submitting }}
         disabled={submitting}
         onPress={handleSubmit}
-        style={[styles.submit, { backgroundColor: theme.text, opacity: submitting ? 0.5 : 1 }]}>
-        <ThemedText style={[styles.submitLabel, { color: theme.background }]}>
-          {submitting ? 'Saving…' : submitLabel}
-        </ThemedText>
-      </Pressable>
+      />
     </View>
   );
 }
@@ -236,14 +230,5 @@ const styles = StyleSheet.create({
   nutritionCell: {
     flexGrow: 1,
     flexBasis: '45%',
-  },
-  submit: {
-    borderRadius: Spacing.three,
-    paddingVertical: Spacing.three,
-    alignItems: 'center',
-  },
-  submitLabel: {
-    fontSize: 16,
-    fontWeight: 600,
   },
 });

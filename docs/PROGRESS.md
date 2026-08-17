@@ -45,17 +45,36 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   works great on the Pixel — search smoke passed; migration 0007 + backfill ran
   against the real install without incident (implied by a working post-migration
   build; explicit tag spot-check still worthwhile).
+- **Next up (planned 2026-08-16, specced in `docs/HANDOFF.md` — four cycles):**
+  1. **Check-in persistence fix** — owner-reported: the daily check-in fires
+     once then dies with the toggle reading OFF. Confirmed real statefulness
+     bug: "enabled" lives only as the pending OS notification, which firing
+     consumes, so the re-arm gate always reads disabled afterward. Fix:
+     persist enabled/hour/minute in prefs + schedule a 7-day one-shot
+     horizon. Also resolves the old cap-only-goals toggle quirk.
+  2. **Dictation double-text fix** — owner-reported: speech-to-text inserts
+     the dictated phrase twice. Confirmed controlled-TextInput vs. iOS
+     marked-text issue; single-point fix in `ThemedTextInput`.
+  3. **Light-theme palette pass** — palette-driven navigation themes (the
+     real "black text" source was stock react-navigation themes), shared
+     `PrimaryButton` on `primary` tokens (replacing ~10 inverted black/white
+     fills), new violet `accent` tokens + plum light `textSecondary`
+     (brings the purples to light mode; all pairs computed ≥7:1).
+  4. **Splash/notification blues → palette** — splash to `#0D1C20` (matches
+     adaptive icon bg; white logo silhouette sits on it), notifications
+     plugin to `#5BC0BE`, dead `AnimatedIcon` template leftovers deleted.
+     `app.json` changes are baked at build time — **visible on the next EAS
+     preview build**, which also delivers the pending icon-layer fix.
 - **Still owed (test sessions):** targeted Maestro re-run of
   `ab-satfat-ingredients` + `01b-manual-entry` · new Maestro flows: watchlist
   loop, Goals tally, goal editor (set floor → progress shows → remove), cap
   notice on review · spot-checks: pre-hardening entry gained parenthetical
-  tags; cleared-name search fix · **live check-in test (device only):** set a
-  check-in 2 min out → verify body copy → log a meal meeting the floor →
-  verify silent re-arm for tomorrow · migration 0008 against the real DB.
+  tags; cleared-name search fix · **live check-in test (device only —
+  re-spec after the persistence fix ships; re-arm becomes horizon-based)** ·
+  migration 0008 against the real DB · after the theme cycle: dictation
+  manual check (iOS + Android voice typing), light/dark visual walkthrough,
+  full Maestro re-run (shared-infra rule).
   All pure-JS since the owner's EAS build — Metro-into-dev-client suffices.
-- **Known v1 quirk (revisit only if it confuses):** the check-in toggle only
-  holds when at least one floor goal exists — caps never notify by design, so
-  with cap-only goals nothing gets scheduled and the switch reads off.
 - **Owner on-device checklist (carried):** iOS app icon (needs EAS build), iOS
   time-picker Done-button feel, light-mode look, migration 0006 against a real
   database, and the full scan → add-next → finish-meal → review → save loop (camera).
@@ -107,7 +126,7 @@ Sentiment trend chart, confidence labeling, and ingredient-pair analysis **✅ s
 | Item | Why | Effort | Notes |
 |------|-----|:--:|------|
 | **Goals tab: daily nutrition tally** | 5th nav tab aggregating today's nutrients | S–M | **✅ shipped 2026-08-15** — missing-data caveats included; follow-on: 7-day mini-trend (see intake-charts row) |
-| **Nutrient threshold goals + daily check-in** | Floors (≥) and caps (≤) per nutrient, one daily check-in | M | **✅ shipped 2026-08-15** (migration 0008) — one-shot self-re-arming notification, floors notify / caps alert at save; follow-ons: cap alert on the entry-**edit** path, cap-only check-in quirk (see Status) |
+| **Nutrient threshold goals + daily check-in** | Floors (≥) and caps (≤) per nutrient, one daily check-in | M | **✅ shipped 2026-08-15** (migration 0008) — floors notify / caps alert at save; **persistence bug found 2026-08-16, fix planned (see Status)**; follow-on: cap alert on the entry-**edit** path |
 | **Per-food / ingredient drill-down** | Tap a finding → every instance + outcomes | S–M | no dep; natural follow-on to insights v2 |
 | **BM-regularity + intake charts** | Complete the trends story beyond sentiment | S–M | reuse the zero-dep chart components |
 | **Meal-component editing after save** | v1 meal builder saves components immutably; edit/remove with re-aggregation is the obvious next ask | S–M | builds on migration 0006 |

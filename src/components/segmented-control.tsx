@@ -40,16 +40,16 @@ export function SegmentedControl<T extends string>({
             style={[
               styles.chip,
               {
-                // Selected chips invert (filled with the text colour) so the active
+                // Selected chips fill with the accent colour so the active
                 // option is unmistakable in both light and dark themes.
-                backgroundColor: selected ? theme.text : theme.backgroundElement,
-                borderColor: selected ? theme.text : theme.border,
+                backgroundColor: selected ? theme.accent : theme.backgroundElement,
+                borderColor: selected ? theme.accent : theme.border,
               },
             ]}>
             <ThemedText
               type={selected ? 'smallBold' : 'small'}
               themeColor={selected ? undefined : 'textSecondary'}
-              style={selected ? { color: theme.background } : undefined}>
+              style={selected ? { color: theme.accentText } : undefined}>
               {option.label}
             </ThemedText>
           </Pressable>
