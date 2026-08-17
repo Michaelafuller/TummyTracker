@@ -159,9 +159,14 @@ hardcoded Sunday, default meal slot by time of day).
 
 ## Tier 4 — Platform / infra
 
-iOS pass (BUILD_PLAN "iOS crossover"; the 2026-07-02 cycle fixes the icon, picker, and
-light-mode blockers) · **finish the Maestro backlog** (16/19 verified; rebuild + run the
-last 3 per RESULTS.md, then a FULL re-run after this cycle's YAML/theme changes) ·
+| Item | Why it matters | Effort | Notes |
+|------|----------------|:--:|------|
+| **Build-variant split (dev vs. real app)** | The dev client and preview build share `com.tummytracker.app`, so they displace each other — and Maestro's `clearState` wipes whichever app holds the identity, i.e. the owner's real journal (bit us 2026-08-16; backup existed). A `com.tummytracker.app.dev` variant makes both coexist and walls automation off from real data permanently. | S–M | **Owner-approved 2026-08-16, top of next plan cycle.** Expo-recommended pattern: convert `app.json` → `app.config.js` reading `APP_VARIANT` from the `eas.json` development profile; switch `android.package` + display name ("TummyTracker (dev)"), optionally badge the icon; suffix the deep-link scheme; update `flows/*` `appId` to the dev variant. Config change ⇒ `bundle:check` + one new EAS dev build. iOS later via `bundleIdentifier`. |
+
+Also: iOS pass (BUILD_PLAN "iOS crossover"; the icon, picker, and light-mode blockers
+are all now addressed) · **finish the Maestro backlog** (see Status + RESULTS.md for
+the current run state) · root-level React error boundary (RESULTS.md 2026-08-16
+recommendation — one screen's render error currently blanks the whole app) ·
 screen-level RNTL tests · `bundle:check` in a pre-push hook · `FlashList` virtualization
 once entry volume grows.
 
