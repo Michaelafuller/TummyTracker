@@ -4,7 +4,7 @@
 // backup, and analyzer already knows how to consume.
 
 import type { MealComponent, NewMealComponent } from '@/db/schema';
-import { normalizeTag, parseTagsJson } from '@/lib/ingredients';
+import { mergeTags, normalizeTag, parseTagsJson, serializeTags } from '@/lib/ingredients';
 import type { NutritionValues } from '@/lib/nutrition';
 import { NUTRITION_FIELDS } from '@/lib/validation';
 
@@ -92,6 +92,27 @@ export function mealIngredientsText(
   }
   const joined = components.map((c) => c.name).join(', ');
   return joined.length > 0 ? joined : null;
+}
+
+/**
+ * Patch for the parent entry after one of its saved components changed
+ * (post-save editing, HANDOFF.md meal-component drill-down). Nutrition is
+ * recomputed FRESH from the current component set (never additive — an edit
+ * that lowers a component's fat must lower the entry's total, not just add
+ * the delta), while tags are merged additively with whatever the entry
+ * already had: a component rename/edit must never strip a previously
+ * captured tag from the entry (2026-08-15 ingredient-hardening tag policy).
+ * Entry-level fields the user owns directly (name, ingredientsText, servingG,
+ * barcode, sentiment, loggedAt, componentCount) are untouched — callers must
+ * not derive them from this patch.
+ */
+export function reaggregateEntryPatch(
+  components: readonly MealComponent[],
+  existingEntryTagsJson: string | null,
+): { nutrition: NutritionValues; tagsJson: string | null } {
+  const nutrition = aggregateComponents(components);
+  const tags = mergeTags(parseTagsJson(existingEntryTagsJson), unionComponentTags(components));
+  return { nutrition, tagsJson: tags.length > 0 ? serializeTags(tags) : null };
 }
 
 /** Re-export so callers building the review screen don't need a second import for saved rows. */

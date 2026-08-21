@@ -3,6 +3,7 @@
 // a full BuiltLogEntry — no loggedAt/sentiment/type here, those are meal-level
 // fields collected once on the review screen.
 
+import type { MealComponent } from '@/db/schema';
 import { extractTags, mergeTags, parseTagsJson, serializeTags } from '@/lib/ingredients';
 import type { MealComponentDraft } from '@/lib/mealAggregate';
 import { parseOptionalNumber } from '@/lib/number';
@@ -55,6 +56,35 @@ export function defaultComponentFormState(
     tagsJson: '',
     nutritionBase: null,
     ...initial,
+  };
+}
+
+/**
+ * Hydrate the form state from a saved mealComponent row (edit-after-save,
+ * HANDOFF.md meal-component drill-down). Mirrors formModel.ts's
+ * `logEntryToFormState` conventions: numbers become strings (`''` when null),
+ * `nutritionBase` stays null since the per-100g OFF base isn't persisted — so
+ * typing a new servingG here does NOT rescale the grid (`handleServingChange`
+ * already guarantees this whenever `nutritionBase` is null). `tagsJson` is
+ * passed through unchanged so `buildComponentDraft`'s additive merge on save
+ * keeps whatever OFF/derived tags this component already carries.
+ */
+export function mealComponentToFormState(row: MealComponent): Partial<ComponentFormState> {
+  const nutrition = NUTRITION_FIELDS.reduce((acc, field) => {
+    const value = row[field];
+    acc[field] = value == null ? '' : String(value);
+    return acc;
+  }, {} as NutritionInputs);
+
+  return {
+    name: row.name,
+    barcode: row.barcode,
+    servings: String(row.servings),
+    servingG: row.servingG != null ? String(row.servingG) : '',
+    nutrition,
+    ingredientsText: row.ingredientsText ?? '',
+    tagsJson: row.tagsJson ?? '',
+    nutritionBase: null, // per-100g base not stored; rescaling unavailable on edit (mirrors formModel.ts)
   };
 }
 
