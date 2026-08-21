@@ -7,6 +7,7 @@ import { createId } from '@/lib/id';
 import {
   aggregateComponents,
   mealIngredientsText,
+  reaggregateEntryPatch,
   unionComponentTags,
   type MealComponentDraft,
 } from '@/lib/mealAggregate';
@@ -99,6 +100,54 @@ export async function getMealComponents(entryId: string): Promise<MealComponent[
     .from(mealComponent)
     .where(eq(mealComponent.entryId, entryId))
     .orderBy(asc(mealComponent.sortOrder));
+}
+
+export async function getMealComponent(id: string): Promise<MealComponent | undefined> {
+  const rows = await db.select().from(mealComponent).where(eq(mealComponent.id, id)).limit(1);
+  return rows[0];
+}
+
+/**
+ * Edit-after-save for a single meal component (HANDOFF.md meal-component
+ * drill-down). One transaction: update the component row from the draft
+ * (caller stamps the row's own `sortOrder` into the draft, so this never
+ * reorders it; `id`/`entryId`/`createdAt` are untouched since the draft omits
+ * them), re-read all of the entry's components post-update, then patch the
+ * parent entry with a fresh nutrition aggregate + additive tag merge
+ * (`reaggregateEntryPatch`) so totals/tags stay consistent with what's
+ * actually saved. No-ops if the component or its parent entry can't be found.
+ */
+export async function updateMealComponentAndReaggregate(
+  componentId: string,
+  draft: MealComponentDraft,
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    const existingRows = await tx
+      .select()
+      .from(mealComponent)
+      .where(eq(mealComponent.id, componentId))
+      .limit(1);
+    const existing = existingRows[0];
+    if (!existing) return;
+
+    await tx.update(mealComponent).set(draft).where(eq(mealComponent.id, componentId));
+
+    const siblings = await tx
+      .select()
+      .from(mealComponent)
+      .where(eq(mealComponent.entryId, existing.entryId))
+      .orderBy(asc(mealComponent.sortOrder));
+
+    const entryRows = await tx.select().from(logEntry).where(eq(logEntry.id, existing.entryId)).limit(1);
+    const entry = entryRows[0];
+    if (!entry) return;
+
+    const patch = reaggregateEntryPatch(siblings, entry.tagsJson);
+    await tx
+      .update(logEntry)
+      .set({ ...patch.nutrition, tagsJson: patch.tagsJson, updatedAt: Date.now() })
+      .where(eq(logEntry.id, existing.entryId));
+  });
 }
 
 /** All mealComponent rows — used by the backup export (src/lib/backup.ts). */

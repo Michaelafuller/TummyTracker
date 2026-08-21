@@ -1,13 +1,19 @@
-import { render } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
+import { useEffect as mockUseEffect } from 'react';
 
 import type { LogEntry, MealComponent, WatchlistItem } from '@/db/schema';
 import { getLogEntry, getMealComponents } from '@/db/repository';
 import { useWatchlistStore } from '@/features/watchlist/watchlistStore';
 import EditEntryScreen from '../[id]';
 
+const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ id: 'e1' }),
-  useRouter: () => ({ back: jest.fn() }),
+  useRouter: () => ({ back: jest.fn(), push: mockPush }),
+  // No NavigationContainer in these tests, so the real useFocusEffect (which
+  // needs navigation context) would throw. Approximate it as "run once on
+  // mount" — sufficient to exercise the initial fetch this cycle added.
+  useFocusEffect: (effect: () => void | (() => void)) => mockUseEffect(effect, []),
 }));
 
 jest.mock('@/db/repository', () => ({
@@ -90,6 +96,14 @@ describe('EditEntryScreen grouped-meal display', () => {
     expect(await findByText('In this meal')).toBeTruthy();
     expect(await findByText('Peas · 2× serving · 200 kcal')).toBeTruthy();
     expect(getMealComponents).toHaveBeenCalledWith('e1');
+  });
+
+  it('navigates to the component edit screen when a component row is pressed', async () => {
+    (getLogEntry as jest.Mock).mockResolvedValue({ ...BASE_ENTRY, componentCount: 2 });
+    (getMealComponents as jest.Mock).mockResolvedValue([COMPONENT]);
+    const { findByLabelText } = await render(<EditEntryScreen />);
+    await fireEvent.press(await findByLabelText('Edit Peas'));
+    expect(mockPush).toHaveBeenCalledWith('/entry/component/c1');
   });
 });
 

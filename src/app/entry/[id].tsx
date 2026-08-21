@@ -1,5 +1,5 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -31,18 +31,24 @@ export default function EditEntryScreen() {
   const watchlistItems = useWatchlistStore((state) => state.items);
   const watchedMatches = entry ? findWatchedTags(entry.tagsJson, watchlistItems) : [];
 
-  useEffect(() => {
-    let active = true;
-    getLogEntry(id).then((found) => {
-      if (active) setEntry(found ?? null);
-    });
-    return () => {
-      active = false;
-    };
-  }, [id]);
+  // Re-fetch on every focus (not just mount) so returning from the component
+  // edit screen shows fresh data — a new `entry` object reference also
+  // re-triggers the components effect below and remounts the form via its
+  // `key={entry.updatedAt}` (HANDOFF meal-component drill-down).
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      getLogEntry(id).then((found) => {
+        if (active) setEntry(found ?? null);
+      });
+      return () => {
+        active = false;
+      };
+    }, [id]),
+  );
 
-  // A grouped meal (componentCount > 1) has child rows worth showing read-only —
-  // v1 does not support editing components after save (HANDOFF 2.5).
+  // A grouped meal (componentCount > 1) has child rows worth showing —
+  // tapping one opens its edit screen (HANDOFF meal-component drill-down).
   useEffect(() => {
     if (!entry || entry.componentCount == null || entry.componentCount <= 1) return;
     let active = true;
@@ -115,6 +121,7 @@ export default function EditEntryScreen() {
       ) : null}
       {entry.type === 'bowel_movement' ? (
         <BmForm
+          key={String(entry.updatedAt)}
           initial={bmEntryToFormState(entry)}
           onSubmit={handleSubmit}
           submitLabel="Save changes"
@@ -122,6 +129,7 @@ export default function EditEntryScreen() {
         />
       ) : entry.type === 'symptom' ? (
         <SymptomForm
+          key={String(entry.updatedAt)}
           initial={symptomEntryToFormState(entry)}
           onSubmit={handleSubmit}
           submitLabel="Save changes"
@@ -129,6 +137,7 @@ export default function EditEntryScreen() {
         />
       ) : (
         <LogEntryForm
+          key={String(entry.updatedAt)}
           initial={logEntryToFormState(entry)}
           onSubmit={handleSubmit}
           submitLabel="Save changes"
@@ -140,13 +149,20 @@ export default function EditEntryScreen() {
           <ThemedText type="smallBold">In this meal</ThemedText>
           <View style={styles.componentList}>
             {components.map((component) => (
-              <View
+              <Pressable
                 key={component.id}
+                accessibilityRole="button"
+                accessibilityLabel={`Edit ${component.name}`}
+                testID={`component-row-${component.id}`}
+                onPress={() => router.push(`/entry/component/${component.id}`)}
                 style={[styles.componentRow, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
-                <ThemedText type="small" numberOfLines={1}>
+                <ThemedText type="small" numberOfLines={1} style={styles.componentRowText}>
                   {`${component.name} · ${component.servings}× serving${component.calories != null ? ` · ${Math.round(component.calories * component.servings)} kcal` : ''}`}
                 </ThemedText>
-              </View>
+                <ThemedText type="small" themeColor="textSecondary">
+                  ›
+                </ThemedText>
+              </Pressable>
             ))}
           </View>
         </View>
@@ -191,9 +207,16 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   componentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.two,
     padding: Spacing.three,
     borderRadius: Spacing.three,
     borderWidth: StyleSheet.hairlineWidth,
+  },
+  componentRowText: {
+    flex: 1,
   },
   watchBanner: {
     gap: Spacing.half,

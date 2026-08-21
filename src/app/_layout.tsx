@@ -48,6 +48,10 @@ export default function RootLayout() {
           <Stack.Screen name="symptom/new" options={{ title: 'Log symptom', presentation: 'modal' }} />
           <Stack.Screen name="entry/[id]" options={{ title: 'Edit entry' }} />
           <Stack.Screen
+            name="entry/component/[componentId]"
+            options={{ title: 'Edit component' }}
+          />
+          <Stack.Screen
             name="meal/component"
             options={{ title: 'Confirm item', presentation: 'modal' }}
           />
