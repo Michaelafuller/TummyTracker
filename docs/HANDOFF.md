@@ -1,105 +1,189 @@
-# HANDOFF.md — Test-backfill: flows for two releases + full regression run
+# HANDOFF.md — Execute session: meal-component drill-down (edit after save)
 
-> **Read first:** root `CLAUDE.md` (auto-loaded) + **`docs/E2E.md`** (the flow
-> protocol: run commands, coverage table, troubleshooting). This is a
-> **test-execute** handoff (step 4 of the loop in `docs/TEST_STRATEGY.md`).
->
-> **Device:** the Pixel 5 over USB. Verify first: `adb devices` must list one
-> `device` (not `unauthorized`). Everything under test is pure JS since the
-> owner's last EAS preview build, so the installed dev client works —
-> `adb reverse tcp:8081 tcp:8081`, then `npx expo start --dev-client` (run it
-> in the background) and open the dev client on the phone. **Never run `eas`
-> or install/uninstall the app** (signing mismatch wipes the on-device
-> journal — CLAUDE.md §0).
->
-> **Scope:** two releases have shipped since the last Maestro run
-> (2026-07-03, 18/19): the 2026-08-15 five-cycle release and the 2026-08-16
-> release (check-in persistence fix, dictation-safe inputs, theme pass,
-> splash). ACCEPTANCE.md was restructured for both on 2026-08-16 — the new
-> sections name every flow this handoff specs.
+> **Read first:** this file only. `CLAUDE.md` is auto-loaded (§4 rungs = definition
+> of done, §8 conventions). This cycle touches `src/app/entry/`, `src/app/_layout.tsx`,
+> `src/features/logging/`, `src/lib/mealAggregate.ts`, `src/db/repository.ts`.
+> No new dependency, no schema change, no migration. Pure JS/TS cycle — no build,
+> no device work; Maestro flows are a later test session's job.
+
+**Planned 2026-08-21 (Fable plan session).** One cycle, one feature, plus two
+small test hardenings from the same session's serving-size discovery.
 
 ---
 
-## Phase 1 — Verify existing flows against the changed UI (before authoring)
+## 0. Context — what the plan session verified (do not re-derive)
 
-The theme pass extracted `PrimaryButton` (`src/components/primary-button.tsx`)
-and recolored CTAs/chips, and `ThemedTextInput`
-(`src/components/form-fields.tsx`) now remounts on programmatic value changes.
-Flows assert text/testIDs, not colors, so breakage is unlikely — but verify,
-don't assume:
+The discovery question this cycle answered: *does the servings multiplier
+correctly scale nutrition (1 serving = 1 fat → 2 servings = 2 fat)?* **Yes —
+verified, no fix needed.** The contract, so you don't break it while editing:
 
-- Grep every `tapOn:`/`assertVisible:` target string in `flows/*.yaml` and
-  `flows/_helpers/*.yaml` against the current components' visible text and
-  `accessibilityLabel`s. Fix any drift in the YAML.
-- `docs/E2E.md`'s coverage table is stale (still shows ⏳ for flows the
-  2026-07-03 run passed, and a "still stale" list that was fixed before that
-  run) — refresh it as part of closeout.
+- `mealComponent` nutrition fields are **per ONE serving**; `servings` is the
+  multiplier (`src/db/schema.ts` ~63–99, comment is explicit).
+- `aggregateComponents` (`src/lib/mealAggregate.ts:27`) sums `value × servings`
+  per field; null only when every component lacks the field. Unit-tested incl.
+  servings=2, 0.5, rounding (`src/lib/__tests__/mealAggregate.test.ts`).
+- Save path: `buildMealEntry` (`src/features/logging/mealReviewFormModel.ts:91`)
+  and `createMealWithComponents` (`src/db/repository.ts:57`) both write the
+  aggregate onto the parent `logEntry` row. Everything downstream (daily tally,
+  goal caps, insights, watchlist) reads that entry-level aggregate — the
+  multiply is baked in once, at aggregation.
+- Display rows multiply the same way: review screen (`src/app/meal/review.tsx:132`)
+  and entry view (`src/app/entry/[id].tsx:147`) show `calories × servings`.
+- OFF prefill fills the nutrition grid with per-serving values (per-100g base ×
+  servingG/100). Changing **servingG** rescales the grid from `nutritionBase`;
+  changing **servings** deliberately does not touch the grid (per-serving
+  semantics; the multiply happens at aggregate). This is correct — don't
+  "fix" it.
 
-## Phase 2 — Author the new flows
+Known wrinkle, **out of scope, do not change**: a single-component meal saved
+with servings≠1 stores `servingG` for one serving but nutrition for N servings
+on the entry row, and hides its component row (`componentCount > 1` gate). Noted
+for a future cycle.
 
-Read the target components for exact labels/testIDs before writing YAML
-(E2E.md "Adding a flow" §). All flows start `launchApp` with
-`clearState: true` unless noted. Add each to the E2E.md coverage table and
-tick its ACCEPTANCE.md line only after a green device run.
+## 1. The feature — tap a component row to view/edit it, with re-aggregation
 
-1. **`flows/watchlist.yaml`** — Settings → add a watch term
-   (`src/features/watchlist/WatchlistSection.tsx`); log a meal via the manual
-   two-screen chain (`ComponentForm` → review) whose ingredients contain the
-   term; assert the non-blocking flag text on review
-   (`src/app/meal/review.tsx`), save succeeds, open the saved entry and
-   assert the flag on the entry view (`src/app/entry/[id].tsx`); assert the
-   clean-streak line in Settings.
-2. **`flows/goals-tally.yaml`** — Goals tab (`src/app/(tabs)/goals.tsx`):
-   assert the tab renders the tally; log a meal with calories; assert the
-   tally updated and the missing-data disclosure line for a nutrient the
-   entry lacked (`src/lib/dailyTally.ts` naming).
-3. **`flows/goal-editor.yaml`** — Goals tab: set a floor goal
-   (`src/features/goals/GoalsSection.tsx` — direction chips, threshold
-   input, Save); assert progress renders; set a low cap goal, log a meal
-   crossing it, assert the cap notice on review AND that the save landed in
-   the journal; remove the goal, assert the row is gone.
-4. **`flows/checkin-persistence.yaml`** — THE regression flow for the
-   2026-08-16 bug fix. With a floor goal set, enable the check-in toggle
-   (`src/features/goals/CheckInSection.tsx`; it requests notification
-   permission — see E2E.md troubleshooting for `permissions` in
-   `launchApp`). Then **relaunch WITHOUT `clearState`** (second `launchApp`
-   block, `clearState` omitted/false — the whole point is persistence) and
-   assert the toggle is still ON. Also: with zero floor goals, enable —
-   assert the toggle holds and the "add a floor goal" hint shows.
-5. **`flows/ab-satfat-ingredients.yaml` (extend)** — add the additive-tag
-   step from ACCEPTANCE ("edit ingredients to remove a word, reopen, tags
-   unchanged") only if tag visibility makes it assertable on-device;
-   otherwise leave it Jest-covered and note that in the coverage table.
+**Owner ask:** drill into a saved meal's components to see each component's
+nutrition — a quick tap on the row opening the component's update screen. This
+implements the Tier-2 backlog row "Meal-component editing after save".
 
-## Phase 3 — Run
+Today `src/app/entry/[id].tsx` renders grouped-meal components as read-only rows
+(name · N× serving · kcal). v1 saved components immutably. This cycle makes each
+row tappable → a new screen showing the full `ComponentForm` prefilled with that
+component (the whole nutrition grid is the "see the nutritional information"
+part) → Save updates the `mealComponent` row **and re-aggregates the parent
+entry** so totals/tags stay consistent.
 
-1. Targeted first (fast feedback, per-flow `npm run e2e:flow …`): the five
-   new/extended flows above, plus the owed re-runs —
-   `e-temporal-insights` (below-fold fix applied 2026-07-03, re-run
-   pending; if green the suite is 19/19, flip its ACCEPTANCE line; if still
-   red, the fallback is specced in RESULTS.md — an app-side testID, which
-   belongs to the next plan session, not this one),
-   `ab-satfat-ingredients`, `01b-manual-entry`.
-2. Then the **full suite** (mandated — the theme pass touched shared infra):
-   `maestro test flows/ --format junit --output flows/results.xml`
-   (this is `npm run e2e:ci`; the plain `e2e` script does NOT write
-   results.xml — RESULTS.md 2026-07-03 learned this the hard way).
+### 1.1 Pure logic first (`src/lib/mealAggregate.ts`)
 
-## Phase 4 — Closeout (per E2E.md protocol)
+Add a pure helper so the re-aggregation contract is Jest-testable without a DB:
 
-- Read `flows/results.xml`; flip `[ ]` → `[x]` in ACCEPTANCE.md for passing
-  flows (both new sections and any older pending lines they cover, e.g.
-  Phase 1b/1c "pending device run" notes); failure notes for reds.
-- Overwrite `docs/RESULTS.md` with this run's report (template:
-  TEST_STRATEGY §4): per-flow table, root-cause classes for any red
-  (app-bug / flow-bug / env), what stays manual, findings for the next plan
-  session.
-- Refresh the E2E.md coverage table (Phase 1 above).
-- Commit flow changes + doc updates separately, scoped
-  (`test(e2e): …` / `docs(results): …`), rungs green (YAML changes don't
-  touch them, but run anyway before claiming done).
+```ts
+/** Patch for the parent entry after its components changed: fresh nutrition
+ *  aggregate + additive tag merge (a removed word never deletes a tag). */
+export function reaggregateEntryPatch(
+  components: readonly ComponentLike&Tags[],   // saved MealComponent rows
+  existingEntryTagsJson: string | null,
+): { nutrition: NutritionValues; tagsJson: string | null }
+```
 
-**Manual items that stay on the owner's desk** (do NOT attempt): dictation
-(iOS + Android voice typing), light/dark visual walkthrough, live check-in
-timing test, splash/notification/icon checks after the next EAS build,
-network-dependent OFF search checks, migration spot-checks on the real DB.
+- `nutrition` = `aggregateComponents(components)` — recomputed **fresh** (an
+  edit that lowers fat must lower the total; nutrition is not additive-only).
+- `tagsJson` = `mergeTags(parseTagsJson(existingEntryTagsJson),
+  unionComponentTags(components))`, serialized; null when empty. Additive-only
+  is the project's tag policy (2026-08-15 ingredient-hardening) — renaming a
+  component must never strip a previously captured tag from the entry.
+- Entry `name`, `ingredientsText`, `servingG`, `barcode`, `sentiment`,
+  `loggedAt`, `componentCount`: **untouched** (user-editable / meal-level;
+  clobbering a user's own edits is worse than a stale derived string).
+
+Use exact existing types rather than the sketch above (`MealComponent` is
+already re-exported from `mealAggregate.ts`).
+
+### 1.2 Form-state round-trip (`src/features/logging/componentFormModel.ts`)
+
+Add `mealComponentToFormState(row: MealComponent): Partial<ComponentFormState>`
+mirroring `logEntryToFormState` conventions (`formModel.ts:~94`): numbers →
+strings (`''` when null), `nutritionBase: null` with the same comment as the
+entry edit path (per-100g base isn't persisted, so servingG rescaling is
+unavailable when editing — typing a new servingG must NOT rescale the grid
+here, which `handleServingChange` already guarantees when `nutritionBase` is
+null), `tagsJson` passed through so `buildComponentDraft`'s additive merge
+keeps OFF tags.
+
+### 1.3 Repository (`src/db/repository.ts`)
+
+- `getMealComponent(id: string): Promise<MealComponent | undefined>`.
+- `updateMealComponentAndReaggregate(componentId, draft: MealComponentDraft):
+  Promise<void>` — one transaction:
+  1. Update the component row from the draft, **keeping its existing
+     `sortOrder`** (pass the row's own sortOrder into `buildComponentDraft` at
+     the call site) and `createdAt`/`id`/`entryId`.
+  2. Re-read all components for the entry (post-update), compute
+     `reaggregateEntryPatch(components, entry.tagsJson)`.
+  3. Update the entry row with the patch's nutrition fields + tagsJson +
+     `updatedAt: Date.now()`.
+
+### 1.4 New route `src/app/entry/component/[componentId].tsx`
+
+- Register in `src/app/_layout.tsx`: `<Stack.Screen
+  name="entry/component/[componentId]" options={{ title: 'Edit component' }} />`
+  (plain push like `entry/[id]`, not modal — it's an edit drill-down).
+- Screen shape mirrors `entry/[id].tsx`: load via `getMealComponent`
+  (undefined=loading spinner, null=not-found state), then render
+  `ComponentForm` inside the same `KeyboardAvoidingView`/`ScrollView` chrome
+  with `initial={mealComponentToFormState(row)}`,
+  `sortOrder={row.sortOrder}`, `submitLabel="Save changes"`, `onSubmit` →
+  `updateMealComponentAndReaggregate(row.id, draft)` → `router.back()`. No
+  secondary action, no delete (component removal is deliberately out of scope
+  this cycle).
+- `ComponentForm` gets a disabled/submitting guard only if trivial — its
+  current API lacks a `submitting` prop; do NOT redesign it. An in-screen
+  `submitting` state that ignores re-entry (like `handleSubmit` in
+  `entry/[id].tsx`) is enough.
+
+### 1.5 Entry view wiring (`src/app/entry/[id].tsx`)
+
+- Wrap each component row in a `Pressable` (`accessibilityRole="button"`,
+  `accessibilityLabel={`Edit ${component.name}`}`, `testID` per row) →
+  `router.push(\`/entry/component/${component.id}\`)`. Add a small "›"
+  affordance (ThemedText, textSecondary) so it reads as tappable.
+- **Refresh on return** — the screen currently loads entry + components once.
+  After editing a component, back-navigation must show fresh data (both the
+  component row and the re-aggregated nutrition inside `LogEntryForm`):
+  - Re-fetch entry (and thus components, via the existing effect chain) on
+    focus: `useFocusEffect` from `expo-router` (already a dependency; import
+    `useCallback` wrapper per its API).
+  - `LogEntryForm`/`BmForm`/`SymptomForm` seed state from `initial` once —
+    remount on data change with `key={String(entry.updatedAt)}` so the
+    re-aggregated totals actually appear.
+  - Keep the `componentCount > 1` gate exactly as is.
+
+### 1.6 Tests (same change, per CLAUDE.md §4)
+
+Follow existing patterns — RNTL v14 is async (`await render`, destructure
+queries from the awaited result; never the global `screen`).
+
+- `mealAggregate.test.ts`: `reaggregateEntryPatch` — fresh-recompute lowers
+  totals after an edit; additive tag merge keeps a tag the edited component no
+  longer carries; multiply still applied (`servings: 2` → doubled
+  contribution).
+- `componentFormModel.test.ts`: `mealComponentToFormState` round-trip — row →
+  state → `buildComponentDraft` reproduces the row's values (name, servings,
+  servingG, nutrition, tags preserved additively).
+- New screen test `src/app/entry/component/__tests__/[componentId].test.tsx`
+  modeled on `src/app/meal/__tests__/component.test.tsx` +
+  `src/app/entry/__tests__/[id].test.tsx` (mock `expo-router` +
+  `@/db/repository` the same way): renders prefilled name/servings, editing
+  servings + save calls `updateMealComponentAndReaggregate` with the new
+  draft and navigates back.
+- `[id].test.tsx`: component rows navigate on press (assert `router.push`
+  with the component id).
+
+### 1.7 Discovery hardenings (small, same cycle)
+
+1. `mealReviewFormModel.test.ts`: if not already covered, one test that
+   `buildMealEntry` writes multiplied aggregates onto the entry
+   (component `fatG: 1, servings: 2` → `entry.fatG` includes 2).
+2. `review.test.tsx` / existing display tests: only if trivially cheap, assert
+   the row string shows `calories × servings` (e.g. 100 kcal × 2 → "200 kcal").
+   Skip if the existing tests already pin this.
+
+## 2. Definition of done
+
+- `npm run typecheck` && `npm run lint` && `npm test` — all green, run them.
+- No `// @ts-ignore`, no lint disables, no new dependency, no schema change.
+- Commits: small, imperative, scoped — suggested split:
+  1. `feat(logging): add reaggregateEntryPatch + mealComponentToFormState`
+  2. `feat(logging): editable meal components after save with re-aggregation`
+  3. `test(logging): serving-multiply hardening from discovery`
+  (or 2 commits if the hardenings fold naturally into 1/2's test files).
+- End with a brief execute summary (what shipped, file list, rung status,
+  anything punted) — the review pass reads it.
+
+## 3. For the later test-plan session (do not do now)
+
+On-device coverage owed once this ships: extend or sibling a flow next to
+`flows/01d-browse-edit.yaml` — build a 2-component meal, open the entry, tap a
+component row, change servings 1→2, save, assert the entry's aggregate line
+reflects the doubled kcal and persists across relaunch. ACCEPTANCE.md rows to
+add accordingly.
