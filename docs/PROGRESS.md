@@ -33,13 +33,22 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   (`docs/RESULTS.md`). The dev-client reconnect gap is handled by flow infra
   (`flows/_helpers/reconnect-dev-client.yaml` — hardcodes Metro port 8084;
   update per session).
-- **✅ Shipped this cycle (planned + executed + reviewed 2026-08-21):**
-  meal-component drill-down — tap a saved meal's component row → component
-  edit screen (full nutrition visible) → save re-aggregates the parent
-  entry (fresh nutrition, additive tags). Rungs green (59 suites / 519
-  tests), Fable-reviewed, no remediations. Maestro flow owed (HANDOFF §3).
-  Discovery result: serving-multiply (nutrition × servings) **verified
-  correct** across builder → save → display → tally; no defect found.
+- **✅ Shipped this cycle (two cycles, planned + executed + reviewed 2026-08-21):**
+  1. **Meal-component drill-down** — tap a saved meal's component row →
+     component edit screen (full nutrition visible) → save re-aggregates the
+     parent entry (fresh nutrition, additive tags). No remediations needed.
+     Discovery result: serving-multiply (nutrition × servings) **verified
+     correct** across builder → save → display → tally; no defect found.
+  2. **Build-variant split + Home layout** — dev builds now
+     `com.tummytracker.app.dev` / "TummyTracker (dev)" / `tummytracker-dev`
+     scheme (see Tier 4 row); Home tab hero + CTAs frozen, Recent fills the
+     viewport and scrolls its rows only (cap 6 → 50). One Fable-review
+     remediation: variant resolver inlined into app.config.ts (nested `.ts`
+     import needed Node ≥ 23.6 — would have broken EAS cloud workers on
+     older Node; regression-checked with `--no-experimental-strip-types`).
+  Rungs green at HEAD (60 suites / 528 tests) + `bundle:check`. Maestro:
+  drill-down flow owed + full re-run owed (appId/scheme moved under every
+  flow), after the owner's device sequencing (HANDOFF §3).
 - **Still owed (test sessions):** manual-only items per `docs/E2E.md` (camera
   loop, notification timing, dictation double-text check on both platforms,
   light/dark visual walkthrough, import round-trip content, migration
@@ -119,7 +128,7 @@ hardcoded Sunday, default meal slot by time of day).
 
 | Item | Why it matters | Effort | Notes |
 |------|----------------|:--:|------|
-| **Build-variant split (dev vs. real app)** | The dev client and preview build share `com.tummytracker.app`, so they displace each other — and Maestro's `clearState` wipes whichever app holds the identity, i.e. the owner's real journal (bit us 2026-08-16; backup existed). A `com.tummytracker.app.dev` variant makes both coexist and walls automation off from real data permanently. | S–M | **🔨 in flight 2026-08-21** — specced in `docs/HANDOFF.md` Part A (app.config.ts + unit-tested resolver, eas.json dev env, dev scheme, flow appIds; icon badge skipped). Config change ⇒ `bundle:check` + one new EAS dev build; owner sequencing in HANDOFF §3. iOS covered via `bundleIdentifier` in the same resolver. Same cycle carries Part B (owner-requested 2026-08-21): Home tab — hero + CTA buttons frozen, Recent section fills the remaining viewport and scrolls independently (display cap 6 → 50). |
+| **Build-variant split (dev vs. real app)** | The dev client and preview build share `com.tummytracker.app`, so they displace each other — and Maestro's `clearState` wipes whichever app holds the identity, i.e. the owner's real journal (bit us 2026-08-16; backup existed). A `com.tummytracker.app.dev` variant makes both coexist and walls automation off from real data permanently. | S–M | **✅ shipped 2026-08-21** — app.config.ts (resolver inlined: `@expo/config` transpiles only the entry file, so no runtime imports; tested at `__tests__/app.config.test.ts`), eas.json dev env, `tummytracker-dev` scheme, all 27 flow appIds. Icon badge skipped. **Owner sequencing owed (HANDOFF §3): dev build → install alongside → preview build reclaims the real package.** |
 
 Also: iOS pass (BUILD_PLAN "iOS crossover"; the icon, picker, and light-mode blockers
 are all now addressed) · **finish the Maestro backlog** (see Status + RESULTS.md for
