@@ -126,13 +126,13 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
-    paddingBottom: BottomTabInset + Spacing.four,
+    paddingBottom: BottomTabInset + Spacing.two,
   },
   content: {
     flex: 1,
     paddingHorizontal: Spacing.four,
     paddingTop: Spacing.four,
-    gap: Spacing.five,
+    gap: Spacing.four,
   },
   hero: {
     gap: Spacing.three,
