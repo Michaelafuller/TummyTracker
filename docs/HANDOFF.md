@@ -1,247 +1,177 @@
-# HANDOFF.md — Execute session: build-variant split + Home-screen layout
+# HANDOFF.md — Execute session: Goals tab — tally drill-down, "Today" rename, long date
 
-> **Read first:** this file only. `CLAUDE.md` is auto-loaded (§0 build decisions,
-> §4 rungs, §8 conventions). This cycle touches `app.json` → **`app.config.ts`**,
-> `eas.json`, `src/lib/appVariant.ts` (new), `flows/*.yaml` (mechanical),
-> `docs/E2E.md` + `CLAUDE.md §0` (docs), and — Part B — `src/app/(tabs)/index.tsx`
-> + `src/features/logging/RecentFoodPicker.tsx` (+ its test). **Part A is a
-> config cycle — `npm run bundle:check` is a mandatory rung this time**, in
-> addition to the usual three. No new dependency, no schema change, no device
-> needed (flow edits are authored-only; running them is a later test session's
-> job, after the owner installs the new dev-variant build).
+> **Read first:** this file only. `CLAUDE.md` is auto-loaded (§4 rungs, §8
+> conventions). This cycle touches `src/app/(tabs)/goals.tsx` (+ its test),
+> `src/lib/dailyTally.ts` (+ test), `src/lib/datetime.ts` (+ test), and a
+> one-line import swap in `src/lib/journal.ts`. Pure JS/TS — no dependency, no
+> schema change, no config change, no build, no device. Maestro work is a later
+> test session's job (§3).
 
-**Planned 2026-08-21 (Fable plan session). Part A owner-approved 2026-08-16
-(PROGRESS Tier 4); Part B owner-requested 2026-08-21.** One cycle, two
-independent parts — commit them separately; if one part hits trouble, the
-other still lands.
+**Planned 2026-08-21 (Fable plan session), owner-requested.** One cycle, three
+small pieces on one screen — commit them separately.
 
 ---
 
-## 0. Context — why (verified 2026-08-21, don't re-derive)
+## 0. Context (verified by the plan session — don't re-derive)
 
-All three EAS profiles currently build the same Android package
-`com.tummytracker.app` (`app.json:18`), so the dev client and any
-preview/production install **displace each other** on the Pixel — and Maestro's
-`clearState` wipes whichever app holds that identity, i.e. potentially the
-owner's real journal (bit us 2026-08-16). The split gives the development
-profile its own identity so both apps coexist and automation is permanently
-walled off from real data.
-
-Verified surface (plan session, this worktree):
-- `app.json` is static; no `app.config.js/ts` exists yet. Full contents must
-  carry over **byte-equivalent for the default variant** — including
-  `extra.eas.projectId` (`f7438f6a-…`), `slug: "tummytracker"` (BOTH variants
-  keep the same slug/projectId — one EAS project, two packages; standard Expo
-  multi-variant practice), plugins, adaptive-icon, notification, splash,
-  `experiments` blocks.
-- **No app code reads the scheme or app name from config** — no
-  `Linking.createURL`, no `expoConfig` identity usage (grepped `src/`). The
-  Home header "TummyTracker" is an in-app literal
-  (`src/app/(tabs)/index.tsx:52`) and does NOT change with the variant.
-- 27 flow files carry `appId: com.tummytracker.app` (23 flows + 4 helpers in
-  `flows/_helpers/`). The only live deep-link scheme reference is
-  `flows/_helpers/reconnect-dev-client.yaml:31`. (`docs/RESULTS.md:70` also
-  shows it but is a historical run report — leave it.)
-- `eas.json` has a **strict schema** (CLAUDE.md §0): no comments, no unknown
-  keys. `env` is a valid build-profile key.
-- Jest uses the `jest-expo` preset with default test matching — a test under
-  `src/lib/__tests__/` is picked up automatically.
+- `src/app/(tabs)/goals.tsx` renders, top to bottom: a header (`<ThemedText
+  type="subtitle">Goals</ThemedText>` + `todayHeading(now)` = `"Today ·
+  2026-08-21"` via `formatDateInput`), then the **daily tally table** (one
+  `View` row per `NUTRITION_FIELDS` entry; each row is `accessible` with a
+  composite `accessibilityLabel`, shows label + missing-data caveat on the
+  left and total / goal progress on the right), then `<GoalsSection />` (its
+  own `"Goals"` subtitle + per-nutrient goal rows that **expand inline** when
+  tapped — the accordion idiom this cycle reuses), then `<CheckInSection />`.
+- `src/lib/dailyTally.ts` → `tallyDailyNutrition(entries, start, end)`
+  sums food-type parent rows (`FOOD_TYPES`) in `[start, end)`; per-nutrient
+  `total` is null only when no entry had a value; `decimalsFor(field)`
+  rounds calories/sodium to 0 dp, grams to 1 dp. There is **no per-entry
+  contribution data** today — that's the new pure function.
+- `src/lib/datetime.ts` has `formatDateInput` (YYYY-MM-DD), `formatTime12h`
+  (`"3:07 PM"`), `dayBounds`. No long-date formatter exists. `src/lib/journal.ts`
+  has a private `MONTHS_LONG` array (full month names) used only by
+  `formatPeriodLabel`'s month mode.
+- `nutritionUnit(field)` returns `'g'`, `'mg'`, or `''` (calories); the table
+  renders calories totals with no unit (e.g. `"500"`). `NUTRITION_NOUNS`
+  gives lowercase nouns ("fat", "saturated fat").
+- Tests: `src/app/(tabs)/__tests__/goals.test.tsx` mocks
+  `@/features/logging/useEntries`, `@/db/repository`, and
+  `@/features/goals/checkInService`; it does **not** mock `expo-router`
+  (the screen doesn't use it yet) and asserts no heading/date text. It
+  asserts tally totals by bare text (`getByText('450')`), so the table's
+  number nodes must keep rendering as standalone text.
+- Maestro flows assert `"Goals"` (still satisfied by `GoalsSection`'s own
+  subtitle after the rename), `"From 1 entry today"`, `"500"`, `"1 entry
+  missing"`, `"10g / 50g"` — all text nodes that must survive unchanged.
+  None taps a tally row.
 
 ## 1. The change
 
-### 1.1 Pure resolver first — `src/lib/appVariant.ts` (new)
+### 1.1 Pure logic — `src/lib/dailyTally.ts`
 
-Pure, no React, no Expo imports (it will be evaluated by Node when the config
-loads, and by Jest):
+Add, alongside `tallyDailyNutrition` (same food-type + `[start, end)`
+filtering — factor the filter into a shared private helper rather than
+duplicating it):
 
 ```ts
-export type AppVariant = 'development' | 'production';
-
-export interface AppIdentity {
-  variant: AppVariant;
-  name: string;              // display name
-  androidPackage: string;
-  iosBundleIdentifier: string;
-  scheme: string;            // deep-link scheme
+export interface NutrientContribution {
+  id: string;        // logEntry id (for navigation)
+  name: string;
+  loggedAt: number;
+  value: number;     // rounded with decimalsFor(field)
 }
-
-export function resolveAppIdentity(variantEnv: string | undefined): AppIdentity
+export interface NutrientMissing { id: string; name: string; loggedAt: number }
+export interface NutrientContributions {
+  contributors: NutrientContribution[];   // value desc, ties by loggedAt asc
+  missing: NutrientMissing[];             // loggedAt asc
+}
+export function nutrientContributions(
+  entries: readonly LogEntry[], field: NutritionField, start: number, end: number,
+): NutrientContributions
 ```
 
-- `variantEnv === 'development'` → `{ variant: 'development', name:
-  'TummyTracker (dev)', androidPackage: 'com.tummytracker.app.dev',
-  iosBundleIdentifier: 'com.tummytracker.app.dev', scheme: 'tummytracker-dev' }`.
-- Anything else (undefined, `''`, `'production'`, unknown values) → the
-  production identity: `TummyTracker` / `com.tummytracker.app` /
-  `com.tummytracker.app` / `tummytracker`. Unknown values deliberately fall
-  back to production, never to dev — a typo must not ship a dev-looking
-  release identity, and must never let a "real" build land on the dev package.
+A logged `0` is a contributor (value 0), not missing — same rule as the tally.
 
-Unit tests (`src/lib/__tests__/appVariant.test.ts`): the two identities, plus
-the fallback cases (undefined, empty string, arbitrary junk → production).
+Tests (`src/lib/__tests__/dailyTally.test.ts`): contributors sorted by value
+desc with the loggedAt tiebreak; missing split out and in time order;
+non-food and out-of-range entries excluded; a `0` value counts as a
+contributor; **invariant** — the sum of contributors' values equals
+`tallyDailyNutrition(...).nutrients[field].total` for the same inputs
+(within rounding), and `contributors.length + missing.length ===
+entryCount`.
 
-### 1.2 `app.json` → `app.config.ts`
+### 1.2 Pure logic — `src/lib/datetime.ts`
 
-- Create `app.config.ts` at the repo root exporting a function of
-  `({ config })` returning the full `ExpoConfig`. Import the resolver with a
-  **relative path** (`./src/lib/appVariant`) — the `@/*` alias is a
-  Metro/tsconfig alias and does not exist when Expo CLI evaluates the config
-  in Node. Type it with `ExpoConfig` from `expo/config` (already a transitive
-  dependency of `expo` — do NOT add a package).
-- Body: today's `app.json` contents verbatim, with exactly four fields driven
-  by `resolveAppIdentity(process.env.APP_VARIANT)`: `name`, `scheme`,
-  `ios.bundleIdentifier`, `android.package`. Everything else identical —
-  icons, splash, notification color, permissions, plugins, `experiments`,
-  `extra` (projectId), `web`, `version`, `orientation`, `slug`.
-- **Delete `app.json` in the same commit** (if both exist, Expo may prefer or
-  merge confusingly; one source of truth).
-- Icon badging for the dev variant: **out of scope** (owner-approved as
-  optional; asset work is not worth it this cycle — the "(dev)" name is the
-  distinguisher).
+- Export `MONTHS_LONG` from `datetime.ts` (move the array out of
+  `journal.ts`; `journal.ts` imports it from `@/lib/datetime` and drops its
+  local copy — no behavior change, existing journal tests must stay green).
+- Add `formatLongDate(epochMs: number): string` → local-time
+  `"August 21, 2026"` (full month name, unpadded day, 4-digit year). Use
+  `Date` getters like every other formatter here — **not**
+  `toLocaleDateString` — so output is deterministic in Jest and on Hermes.
 
-### 1.3 `eas.json`
+Tests (`src/lib/__tests__/datetime.test.ts`, extend the existing file):
+a fixed local date built with `new Date(2026, 7, 21, 12).getTime()` →
+`"August 21, 2026"`; a single-digit day (`new Date(2026, 0, 5, 12)`) →
+`"January 5, 2026"`.
 
-Add to the `development` profile only:
+### 1.3 Screen — `src/app/(tabs)/goals.tsx`
 
-```json
-"env": { "APP_VARIANT": "development" }
-```
+**Rename + date.** The page header's `"Goals"` subtitle becomes `"Today"`;
+the line under it becomes just `formatLongDate(now)` (drop the `"Today · "`
+prefix — redundant under a "Today" heading). Delete `todayHeading`. The
+**tab** label stays `"Goals"` (`src/components/app-tabs.tsx` untouched) and
+`GoalsSection`'s `"Goals"` subtitle is untouched — it is now the one and
+only "Goals" heading on the page, which is the point of the rename.
 
-`preview`/`production` get nothing (they resolve to the production identity by
-fallback — deliberately not an explicit env, so the fallback path is the one
-actually exercised). No other changes; remember the strict schema.
+**Expandable tally rows** (the feature):
+- `const [expandedField, setExpandedField] = useState<NutritionField | null>(null)`
+  — one row open at a time, tapping the open row collapses it (mirror
+  `GoalsSection.toggleExpand`).
+- Each tally row becomes a `Pressable` (keep `accessible` + the existing
+  composite `accessibilityLabel` verbatim; add `accessibilityRole="button"`,
+  `accessibilityState={{ expanded: expandedField === field }}`,
+  `accessibilityHint="Shows the entries that make up this total"`,
+  `testID={`tally-row-${field}`}`). Add a small trailing chevron glyph
+  (`ThemedText` textSecondary, `"›"` collapsed / `"⌄"` expanded) after the
+  progress text so the row reads as tappable; keep the progress text node
+  exactly as today (flows assert its bare text).
+- When `expandedField === field`, render a panel directly beneath that row,
+  inside the table (themed `backgroundSelected`-ish inset, hairline top
+  border), computed via `nutrientContributions(entries, field, start, end)`
+  (memoize on `[entries, expandedField, start, end]` is fine; it's a tiny
+  list):
+  - One sub-row per contributor: left = entry name (`numberOfLines={1}`) with
+    a secondary line `formatTime12h(loggedAt)` (append ` · ${mealSlot}` when
+    set); right = `smallBold` amount `unit ? `${value}${unit}` : String(value)`
+    (matches the table's own unit convention — calories stay unitless).
+  - Then one sub-row per missing entry: name + time on the left, right text
+    `"no data"` in textSecondary — this is the "1 entry missing" caveat made
+    actionable.
+  - Every sub-row is a `Pressable` → `router.push(`/entry/${id}`)` (the
+    existing edit screen is the natural next drill-down; `useRouter` from
+    `expo-router`), `accessibilityRole="button"`,
+    `accessibilityLabel={`Open ${name}`}`, `testID={`tally-item-${id}`}`.
+  - Empty-contributors + empty-missing cannot happen for a rendered table
+    (entryCount > 0), so no empty state is needed in the panel.
+- Don't reorder or restyle anything else on the screen.
 
-### 1.4 Maestro flows (mechanical, authored-only)
+### 1.4 Tests — `src/app/(tabs)/__tests__/goals.test.tsx`
 
-- All 27 files under `flows/` (including `_helpers/`): `appId:
-  com.tummytracker.app` → `appId: com.tummytracker.app.dev`.
-- `flows/_helpers/reconnect-dev-client.yaml:31`: `tummytracker://…` →
-  `tummytracker-dev://expo-development-client/?url=…` (keep the port note and
-  the encoded localhost URL exactly as is).
-- **Do NOT touch any `assertVisible: "TummyTracker"` line.** Those are
-  post-save sync points pinning the in-app Home header literal
-  (`index.tsx:52`), which is variant-independent. Maestro text selectors are
-  full-regex-match (RESULTS.md 2026-08-16/17 root cause #3), so the new native
-  label "TummyTracker (dev)" can no longer accidentally satisfy them — the
-  split actually removes the connect-screen/header ambiguity RESULTS root
-  cause #2 complained about. Leave them alone.
+Add `jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }))`
+with a hoisted `mockPush` (same pattern as `entry/__tests__/[id].test.tsx`).
+New cases:
+- Header renders `"Today"` and a long date matching `/^[A-Z][a-z]+ \d{1,2}, \d{4}$/`
+  (don't pin the real date); and `"Today · "` no longer appears.
+- Tapping `tally-row-fatG` with entries `{name:'Burger', fatG: 30, loggedAt: t1}`,
+  `{name:'Salad', fatG: 5, loggedAt: t0}`, `{name:'Tea', fatG: null}` shows
+  `Burger` before `Salad` (use `getAllByTestId(/tally-item-/)` order or
+  rendered-text order), shows `"30g"` and `"5g"`, and shows `Tea` with
+  `"no data"`.
+- Tapping the open row again hides the panel; tapping a different row
+  swaps which one is open.
+- Pressing `tally-item-<id>` calls `mockPush('/entry/<id>')`.
+- Existing tests must pass unchanged (they assert bare totals like `'450'`).
 
-### 1.5 Docs
+## 2. Definition of done
 
-- `docs/E2E.md`: update the three `com.tummytracker.app` references (the
-  "App not found" troubleshooting row, the `dumpsys` and `run-as` commands in
-  the bundle-staleness row) to `com.tummytracker.app.dev`, and add one short
-  paragraph: flows now target the dev variant; the real app
-  (`com.tummytracker.app`) is never touched by automation; Metro sessions do
-  NOT need `APP_VARIANT` set (native identity is baked into the installed
-  build — served JS is identity-agnostic).
-- Root `CLAUDE.md` §0: add one build-decision bullet — the variant split
-  (what/why, one paragraph max, incl. "dev builds get `APP_VARIANT=development`
-  via the eas.json development profile's env; config lives in `app.config.ts`;
-  the resolver is unit-tested in `src/lib/appVariant.ts`").
-
-## 1B. Part B — Home tab: frozen hero/actions, scrolling Recent
-
-**Owner ask (verbatim intent):** the Recent section should use more of the
-viewport, and the title + main buttons should stay frozen — only the Recent
-list scrolls.
-
-Current state (verified): `src/app/(tabs)/index.tsx` wraps the whole screen in
-one `ScrollView` (`scrollContent` has `flexGrow: 1, justifyContent: 'center'`),
-and `RecentFoodPicker` renders search field + up to `limit = 6` rows inline
-(Home fetches 50 via `listRecentFoodEntries(50)`; `filterRecents` caps display
-at `limit`). `RecentFoodPicker` is used ONLY by the Home screen (verified), so
-its API can change freely.
-
-### 1B.1 Layout restructure (`src/app/(tabs)/index.tsx`)
-
-- Remove the outer `ScrollView`. New structure inside the `SafeAreaView`: a
-  plain column — hero (fixed), actions (fixed), then the Recent section with
-  `flex: 1` so it fills all remaining viewport (this is the "show more"
-  part — the section now owns the rest of the screen instead of 6 rows).
-- Drop `justifyContent: 'center'`/`flexGrow` (they only made sense for a
-  short centered scroll page); keep existing horizontal padding, top padding,
-  gaps, and `BottomTabInset` bottom padding so nothing else visually moves.
-- Keep the `recents.length > 0` gate: with no recents the lower area is
-  simply empty, same as today.
-
-### 1B.2 Scrolling rows (`src/features/logging/RecentFoodPicker.tsx`)
-
-- Heading ("Recent") and the search field stay fixed; only the **rows** live
-  in a scrollable container. Put the `ScrollView` inside `RecentFoodPicker`,
-  wrapping just the rows list: container gets `flex: 1`, the rows
-  `ScrollView` gets `flex: 1` with the existing `gap` moved to its
-  `contentContainerStyle`, plus `keyboardShouldPersistTaps="handled"` (so a
-  row tap works while the search keyboard is up — same option every other
-  scroll screen here uses) and `showsVerticalScrollIndicator` left on
-  (default) since the list is now genuinely scrollable.
-- A plain `ScrollView` over `.map()` rows is fine at this scale (display cap
-  ≤ 50 lightweight rows; `FlashList`/virtualization is explicitly a Tier-4
-  backlog item, don't reach for it, and `FlatList` would be a gratuitous
-  restructure).
-- Raise the display cap so the taller viewport actually shows more: Home
-  passes `limit={50}` (matching the existing fetch). Keep the prop default
-  at 6 — the component stays usable inline elsewhere.
-- No behavior change to search filtering (`filterRecents`) or `onSelect`.
-
-### 1B.3 Tests
-
-- `RecentFoodPicker.test.tsx`: update for the new structure (rows render
-  inside the scroll container; more than 6 rows render when `limit` allows —
-  e.g. 8 entries + `limit={50}` → all 8 rows present; search filtering still
-  works). RNTL renders ScrollView children synchronously, so existing
-  queries should mostly survive.
-- If a Home-screen test exists (check `src/app/(tabs)/__tests__/`), update it
-  for the removed outer ScrollView; if none exists, don't add one this cycle
-  (the interaction wiring is unchanged — prefill + push on row tap).
-
-## 2. Definition of done (config cycle — four rungs, not three)
-
-- `npm run typecheck` && `npm run lint` && `npm test` green.
-- **`npm run bundle:check` green** — mandatory: the three rungs never evaluate
-  `app.config.ts` through the real export path; this does.
-- Config spot-check, both variants (do it, paste results into your summary):
-  - `npx expo config --type public` → name `TummyTracker`, package/scheme
-    production values.
-  - Same with `APP_VARIANT=development` in the environment (PowerShell:
-    `$env:APP_VARIANT='development'; npx expo config --type public;
-    Remove-Item Env:APP_VARIANT`) → `TummyTracker (dev)` /
-    `com.tummytracker.app.dev` / `tummytracker-dev`.
+- `npm run typecheck` && `npm run lint` && `npm test` — green, run them.
 - No `// @ts-ignore`, no lint disables, no new dependency.
-- Suggested commit split (imperative, scoped, one logical change each):
-  1. `feat(config): add unit-tested app-variant identity resolver`
-  2. `feat(config): split dev/prod app identity via app.config.ts + eas env`
-     (includes the app.json deletion + eas.json env)
-  3. `chore(e2e): point flows at the dev-variant appId and scheme` (+ docs
-     edits — or split docs into a 4th `docs:` commit if cleaner)
-  4. `feat(home): freeze hero and actions, let Recent fill and scroll`
-     (Part B, fully independent of 1–3)
-- Part B is covered by the three normal rungs (pure JS/TS); the fourth rung
-  (`bundle:check`) is owed to Part A but run it after both parts are in.
-- End with an execute summary: what shipped per commit, file list, all four
-  rung results, both `expo config` spot-check outputs, deviations, punts.
+- Suggested commits:
+  1. `feat(goals): add nutrientContributions + formatLongDate pure helpers`
+  2. `feat(goals): rename tally header to Today with a long date`
+  3. `feat(goals): expand a tally row to list the entries behind its total`
+- End with an execute summary: per-commit contents, file list, rung results
+  (suite/test counts), deviations, punts.
 
-## 3. Not this session (sequencing for the owner, after merge)
+## 3. Not this session (for the test-plan session)
 
-1. `eas build --profile development --platform android` → install: appears as
-   a separate "TummyTracker (dev)" app; the existing install is untouched.
-2. Reclaim `com.tummytracker.app` as the real journal app:
-   `eas build --profile preview --platform android` → installs **in place**
-   over the currently installed (dev-client) build — same EAS signing key, so
-   data survives; export an in-app backup first anyway (CLAUDE.md §0 signing
-   caveat).
-3. iOS: the variant applies automatically via `ios.bundleIdentifier` whenever
-   a development-profile iOS build is next made; no extra work owed now.
-4. Test-execute (later session): full Maestro re-run against the dev variant
-   (shared-infra rule — appId/scheme changed under every flow), with the
-   reconnect helper's Metro port updated per session as usual.
-5. Flow rework owed for Part B (test-plan session's call, flagged here):
-   `flows/h-recent-foods.yaml` scrolls the old full-page ScrollView to reach
-   the second Recent row ("Pizza slice") — with the page no longer scrollable
-   and rows in a nested ScrollView, that step's semantics change
-   (`scrollUntilVisible` scrolls the innermost scrollable under its target,
-   which should still work, but the assertion set deserves a re-check — and
-   the frozen CTAs mean `scrollUntilVisible` on "Add an entry manually" et
-   al. in other flows now no-op-pass, which is fine). Also re-check the
-   keyboard-covers-list behavior noted in RESULTS root cause #5 still holds
-   with `keyboardShouldPersistTaps="handled"`.
+- Maestro: extend `flows/goals-tally.yaml` — after the tally renders, tap
+  `tally-row-calories`, assert `"Tally Test Meal"` and `"500"` appear in the
+  panel (note `"500"` now also exists in the row total — prefer the
+  `tally-item-*` id or the `"Open Tally Test Meal"` label), then tap
+  `tally-row-fatG` and assert `"no data"`. Assert `"Today"` and a
+  `".*, 2026"`-style date once. `flows/nav-tabs.yaml:27`'s comment ("Goals
+  subtitle renders unconditionally (goals.tsx header)") is now satisfied by
+  `GoalsSection`'s subtitle instead — update the comment, not the assertion.
+- ACCEPTANCE.md rows for the three pieces.
