@@ -150,6 +150,78 @@ export async function updateMealComponentAndReaggregate(
   });
 }
 
+/**
+ * Removes one saved meal component and re-aggregates its parent entry
+ * (HANDOFF.md meal-component delete). One transaction: read the component
+ * (`'missing'` if it can't be found — already deleted, nothing to do); read
+ * its siblings and refuse to delete the entry's last remaining component
+ * (`'last'`, no writes — a meal must keep at least one item; the user deletes
+ * the whole entry instead). Otherwise delete the row, re-read the remaining
+ * siblings, and patch the parent entry the same way
+ * `updateMealComponentAndReaggregate` does: nutrition recomputed FRESH from
+ * what's left (never additive), `componentCount` set to the new count,
+ * `updatedAt` bumped. Tags are merged additively per the project's
+ * additive-only tag policy (2026-08-15 ingredient-hardening) — a deleted
+ * component's tags remain on the entry; there is no tag-subtraction path.
+ * Entry `name`/`ingredientsText` are user-owned and untouched here. Note:
+ * when the remaining count drops to 1, the entry screen's `componentCount >
+ * 1` gate hides the "In this meal" list — the entry then behaves as a
+ * single-item entry editable at entry level (deliberate; the single-component
+ * wrinkle is a known follow-up, not fixed by this change).
+ */
+export async function deleteMealComponentAndReaggregate(
+  componentId: string,
+): Promise<'deleted' | 'last' | 'missing'> {
+  let result: 'deleted' | 'last' | 'missing' = 'missing';
+
+  await db.transaction(async (tx) => {
+    const existingRows = await tx
+      .select()
+      .from(mealComponent)
+      .where(eq(mealComponent.id, componentId))
+      .limit(1);
+    const existing = existingRows[0];
+    if (!existing) return;
+
+    const siblings = await tx
+      .select()
+      .from(mealComponent)
+      .where(eq(mealComponent.entryId, existing.entryId))
+      .orderBy(asc(mealComponent.sortOrder));
+
+    if (siblings.length <= 1) {
+      result = 'last';
+      return;
+    }
+
+    await tx.delete(mealComponent).where(eq(mealComponent.id, componentId));
+
+    const remaining = siblings.filter((row) => row.id !== componentId);
+
+    const entryRows = await tx.select().from(logEntry).where(eq(logEntry.id, existing.entryId)).limit(1);
+    const entry = entryRows[0];
+    if (!entry) {
+      result = 'deleted';
+      return;
+    }
+
+    const patch = reaggregateEntryPatch(remaining, entry.tagsJson);
+    await tx
+      .update(logEntry)
+      .set({
+        ...patch.nutrition,
+        tagsJson: patch.tagsJson,
+        componentCount: remaining.length,
+        updatedAt: Date.now(),
+      })
+      .where(eq(logEntry.id, existing.entryId));
+
+    result = 'deleted';
+  });
+
+  return result;
+}
+
 /** All mealComponent rows — used by the backup export (src/lib/backup.ts). */
 export async function listAllMealComponents(): Promise<MealComponent[]> {
   return db.select().from(mealComponent).orderBy(asc(mealComponent.sortOrder));
