@@ -1,4 +1,4 @@
-appId: com.tummytracker.app
+appId: com.tummytracker.app.dev
 # 1d / UI-UX — Journal calendar: day/week/month segmented toggle + collapse/expand.
 ---
 - launchApp:

@@ -1,4 +1,4 @@
-appId: com.tummytracker.app
+appId: com.tummytracker.app.dev
 # Helper — reconnects the Expo dev client to Metro after ANY launchApp step
 # (clearState: true or plain relaunch — both drop the connection identically).
 #
@@ -28,7 +28,7 @@ appId: com.tummytracker.app
 # each call site.
 ---
 - assertVisible: "Development Build"
-- openLink: "tummytracker://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8084"
+- openLink: "tummytracker-dev://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8084"
 - extendedWaitUntil:
     visible: "TummyTracker"
     timeout: 20000

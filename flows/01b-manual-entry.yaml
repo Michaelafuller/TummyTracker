@@ -1,4 +1,4 @@
-appId: com.tummytracker.app
+appId: com.tummytracker.app.dev
 # Phase 1b — Manual entry, now routed through the meal-builder chain (HANDOFF
 # "OFF search-by-name lookup" cycle, 2026-07-03): Home's "Add an entry
 # manually" opens the component-confirm screen (ComponentForm), then "Finish

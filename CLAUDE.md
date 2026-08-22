@@ -64,6 +64,19 @@
   in `babel.config.js` to be inlined as strings; without it the production bundle
   failed parsing SQL as JS). `bundle:check` runs `expo export` — the same step EAS
   does — and is the real gate before any cloud build.
+- **Dev/prod app-identity split (2026-08-21).** All three EAS profiles used to
+  build the same Android package, so the dev client and any preview/production
+  install displaced each other on-device and Maestro's `clearState` could wipe
+  the owner's real journal. Dev builds now get their own identity —
+  `TummyTracker (dev)` / `com.tummytracker.app.dev` / `tummytracker-dev` — via
+  `APP_VARIANT=development` set on the `eas.json` `development` profile's `env`;
+  config now lives in `app.config.ts` (deleted `app.json`), and the resolver is
+  unit-tested in `src/lib/appVariant.ts`. Trap: `@expo/config` only runs
+  `app.config.ts` itself through TypeScript — a nested same-repo `.ts` import
+  needs an **explicit `.ts` extension** (`./src/lib/appVariant.ts`, not
+  `./src/lib/appVariant`) or Node's plain CJS resolver 404s on it; that in turn
+  needs `allowImportingTsExtensions: true` in `tsconfig.json` (safe with the
+  inherited `noEmit`).
 
 ## 1. What this project is
 

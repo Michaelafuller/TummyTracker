@@ -1,4 +1,4 @@
-appId: com.tummytracker.app
+appId: com.tummytracker.app.dev
 # Phase 0 — App launches and the home screen renders.
 ---
 - launchApp:

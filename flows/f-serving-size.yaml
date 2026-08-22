@@ -1,4 +1,4 @@
-appId: com.tummytracker.app
+appId: com.tummytracker.app.dev
 # Tier-0 F — Serving-size field saves without crashing; entry persists across restart.
 # Rewritten 2026-08-16 test-backfill for the two-screen component -> review
 # chain: "Serving size in grams" lives on ComponentForm (/meal/component), the

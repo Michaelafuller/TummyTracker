@@ -1,4 +1,4 @@
-appId: com.tummytracker.app
+appId: com.tummytracker.app.dev
 # Phase 2 — Bowel-movement tracking:
 #   - Log a BM with Bristol type and sentiment
 #   - Renders distinctly (💩 prefix, "Bowel movement" subtitle) in Journal

@@ -1,4 +1,4 @@
-appId: com.tummytracker.app
+appId: com.tummytracker.app.dev
 # Helper — seeds 5 "Wheat Bread" meals (low sentiment) + 2 "Rice Bowl" meals
 # (high sentiment) to trigger analyzeFoodSentiment.
 # Ingredients omitted to avoid scroll — food name alone is enough for food

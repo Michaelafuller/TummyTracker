@@ -1,4 +1,4 @@
-appId: com.tummytracker.app
+appId: com.tummytracker.app.dev
 # Settings — offline-mode toggle present + tappable (no crash); Data/Reminders/App
 # sections render. Switch on/off state is not asserted (not reliably queryable in
 # Maestro) — this is a no-crash smoke test only.

@@ -1,4 +1,4 @@
-appId: com.tummytracker.app
+appId: com.tummytracker.app.dev
 # Tier-0 I — Backup export + import.
 # Verifies both buttons are present and tappable without crashing.
 # SKIP: OS share sheet content (system overlay — not in the app's accessibility tree)

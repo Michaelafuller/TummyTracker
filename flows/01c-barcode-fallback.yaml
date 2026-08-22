@@ -1,4 +1,4 @@
-appId: com.tummytracker.app
+appId: com.tummytracker.app.dev
 # Phase 1c (partial) — Barcode screen manual-entry fallback.
 # The real-product scan requires physical camera hardware and cannot be automated.
 # This flow verifies the fallback path: scan screen opens → "Enter manually" is

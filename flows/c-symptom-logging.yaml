@@ -1,4 +1,4 @@
-appId: com.tummytracker.app
+appId: com.tummytracker.app.dev
 # Flagship C — Symptom logging:
 #   - Log a symptom (type chip + severity), save
 #   - Renders distinctly (🤢 prefix, "Symptom · Bloating · Severity 3") in Journal
