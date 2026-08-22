@@ -29,6 +29,12 @@ export interface ComponentFormProps {
   /** Optional second action (e.g. "Finish meal") validated identically to the primary one. */
   secondaryLabel?: string;
   onSecondarySubmit?: (draft: MealComponentDraft) => void | Promise<void>;
+  /** When provided, the actions block renders a [Delete] [submitLabel] row
+   * instead of the builder's optional-secondary + primary layout (saved-component
+   * edit screen only — the builder never passes this). */
+  onDelete?: () => void | Promise<void>;
+  /** Visible label + accessibilityLabel for the delete button. Defaults to "Delete". */
+  deleteLabel?: string;
 }
 
 /**
@@ -45,6 +51,8 @@ export function ComponentForm({
   submitLabel,
   secondaryLabel,
   onSecondarySubmit,
+  onDelete,
+  deleteLabel = 'Delete',
 }: ComponentFormProps) {
   const theme = useTheme();
   const [state, setState] = useState<ComponentFormState>(() => defaultComponentFormState(initial));
@@ -248,16 +256,36 @@ export function ComponentForm({
       </View>
 
       <View style={styles.actions}>
-        {secondaryLabel && onSecondarySubmit ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={secondaryLabel}
-            onPress={() => handleSubmit(onSecondarySubmit)}
-            style={[styles.button, styles.secondaryButton, { borderColor: theme.border }]}>
-            <ThemedText style={styles.secondaryLabel}>{secondaryLabel}</ThemedText>
-          </Pressable>
-        ) : null}
-        <PrimaryButton label={submitLabel} onPress={() => handleSubmit(onSubmit)} />
+        {onDelete ? (
+          <View style={styles.deleteRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={deleteLabel}
+              testID="component-delete"
+              onPress={() => onDelete()}
+              style={[styles.button, styles.deleteButton, styles.flexOne, { borderColor: theme.danger }]}>
+              <ThemedText style={[styles.secondaryLabel, { color: theme.danger }]}>{deleteLabel}</ThemedText>
+            </Pressable>
+            <PrimaryButton
+              label={submitLabel}
+              onPress={() => handleSubmit(onSubmit)}
+              style={styles.flexOne}
+            />
+          </View>
+        ) : (
+          <>
+            {secondaryLabel && onSecondarySubmit ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={secondaryLabel}
+                onPress={() => handleSubmit(onSecondarySubmit)}
+                style={[styles.button, styles.secondaryButton, { borderColor: theme.border }]}>
+                <ThemedText style={styles.secondaryLabel}>{secondaryLabel}</ThemedText>
+              </Pressable>
+            ) : null}
+            <PrimaryButton label={submitLabel} onPress={() => handleSubmit(onSubmit)} />
+          </>
+        )}
       </View>
     </View>
   );
@@ -299,12 +327,24 @@ const styles = StyleSheet.create({
   actions: {
     gap: Spacing.two,
   },
+  deleteRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: Spacing.three,
+  },
+  flexOne: {
+    flex: 1,
+  },
   button: {
     borderRadius: Spacing.three,
     paddingVertical: Spacing.three,
     alignItems: 'center',
   },
   secondaryButton: {
+    backgroundColor: 'transparent',
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  deleteButton: {
     backgroundColor: 'transparent',
     borderWidth: StyleSheet.hairlineWidth,
   },
