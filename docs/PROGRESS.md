@@ -64,14 +64,21 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   rows list grew 77px → 385px (≈3 full rows on a Pixel 5). Goals/Insights/
   Settings just lose scroll slack. **Next lever if more is wanted:** put
   "Log bowel movement" + "Log symptom" side by side (≈ +1 row) — owner's call.
-- **🔨 In flight (planned 2026-08-21, `docs/HANDOFF.md`):** (A) Home fits
-  5 Recent rows on a Pixel 5 — BM + symptom buttons side by side, one-line
-  tagline, 12dp button padding, 16dp section gap (+≈376px measured budget);
+- **✅ Shipped + device-verified 2026-08-21 (evening cycle, survived two host
+  BSODs):** (A) Home fits 5 Recent rows on a Pixel 5 — rows list measured
+  763px (≥ 623 needed); BM + symptom buttons side by side ("💩 BM" / "🤢
+  Symptom"), one-line tagline, 12dp button padding, 16dp section gap.
   (B) delete a saved meal component — swipe-to-delete on the entry screen
   (RNGH `ReanimatedSwipeable`, root `GestureHandlerRootView`) + Delete next
-  to Save on the component editor, re-aggregating the parent; refuses to
-  delete the last component. **Haptics (`expo-haptics`) owner-approved but
-  deferred to the next native-build cycle** — not in the installed dev build.
+  to Save on the component editor, re-aggregating the parent; refuses the
+  last component. One review remediation (stale list after a delete left
+  one component → render-time `visibleComponents`). Both paths exercised on
+  the Pixel via scratch Maestro flows (swipe reveal, confirm, totals 300→100,
+  section hidden). (C) BM entries labelled "BM" (owner edits ported from the
+  main checkout). **Haptics (`expo-haptics`) owner-approved but deferred to
+  the next native-build cycle** — not in the installed dev build.
+  **Infra finding:** Metro's watcher missed a committed edit — restart Metro
+  after source changes before trusting device runs (`docs/E2E.md`).
 - **Still owed (test sessions):** manual-only items per `docs/E2E.md` (camera
   loop, notification timing, dictation double-text check on both platforms,
   light/dark visual walkthrough, import round-trip content, migration

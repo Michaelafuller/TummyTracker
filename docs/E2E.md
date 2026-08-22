@@ -280,3 +280,16 @@ flow file. A `<failure>` element means the flow failed. Claude then:
 | **A flow that types a long string into a field (e.g. 500+ chars) lands at an inconsistent, always-partial character count** | Not a flow-timing bug — this device's IME/input-connection has a hard ceiling around 400 chars for `inputText` injection (see the "very long `inputText` strings" finding above). Splitting into settled chunks does not raise the ceiling. Don't try to drive the overflow case through the IME; type a short representative string and assert the counter instead, and lean on a Jest unit test for the exact clamp behavior. |
 | **`assertVisible`/`scrollUntilVisible` on a short word (e.g. `"food"`, `"rated"`) fails even though that exact word is visibly on-screen inside a longer sentence** | Maestro's text selector requires a FULL match against a node's entire text — see the "Maestro's text selector is a FULL regex match" finding above. Wrap the fragment: `".*food.*"`. |
 | **Worktree Metro 404s every module, or `DevLauncher: ...UnableToResolveError` for `expo-router/entry`** | `node_modules` is missing or was installed *after* Metro started crawling. Run `ls node_modules` — if absent, `npm install` first. If present but Metro still 404s, a stale Metro instance (possibly one you can't kill, e.g. blocked by sandboxing) started before the install finished; start a *fresh* Metro on a new port instead of trusting the existing one. |
+
+**Finding — Metro's file watcher can miss edits on this Windows host (2026-08-21):**
+during the meal-component-delete review, a fix committed to `src/app/entry/[id].tsx`
+while Metro was already running never reached the device — the dev client kept
+running the pre-fix code across several `launchApp`/deep-link relaunches, even
+though a fresh single-module request to Metro returned the fixed source (Metro's
+long-lived bundle graph only updates on watcher events, and the node watcher
+dropped the write). Symptom: device behaviour matches the *previous* commit
+while the source on disk is current. **Rule: after any source change lands
+while Metro is running (especially writes by a subagent or `git` checkout /
+commit), restart Metro (`npx expo start --dev-client --port <port> --clear`)
+before trusting a device run.** Metro's `/reload` endpoint is not available on
+this version (HTTP 500) — a process restart is the reliable path.
