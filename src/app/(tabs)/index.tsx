@@ -1,6 +1,6 @@
 import { useFocusEffect, Link, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet } from 'react-native';
+import { Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -44,9 +44,7 @@ export default function HomeScreen() {
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}>
+        <ThemedView style={styles.content}>
           <ThemedView style={styles.hero}>
             <ThemedText type="title" style={styles.title} numberOfLines={1} adjustsFontSizeToFit>
               TummyTracker
@@ -113,10 +111,10 @@ export default function HomeScreen() {
               <ThemedText type="smallBold" style={styles.recentHeading}>
                 Recent
               </ThemedText>
-              <RecentFoodPicker entries={recents} onSelect={handleRecentTap} />
+              <RecentFoodPicker entries={recents} onSelect={handleRecentTap} limit={50} />
             </ThemedView>
           )}
-        </ScrollView>
+        </ThemedView>
       </SafeAreaView>
     </ThemedView>
   );
@@ -130,12 +128,11 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingBottom: BottomTabInset + Spacing.four,
   },
-  scrollContent: {
+  content: {
+    flex: 1,
     paddingHorizontal: Spacing.four,
     paddingTop: Spacing.four,
     gap: Spacing.five,
-    flexGrow: 1,
-    justifyContent: 'center',
   },
   hero: {
     gap: Spacing.three,
@@ -165,6 +162,7 @@ const styles = StyleSheet.create({
     fontWeight: 600,
   },
   recentSection: {
+    flex: 1,
     gap: Spacing.two,
   },
   recentHeading: {

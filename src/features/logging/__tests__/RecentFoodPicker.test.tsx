@@ -35,7 +35,9 @@ function entry(id: string, name: string): LogEntry {
   return { ...BASE_ENTRY, id, name };
 }
 
-// RNTL v14 renders asynchronously: `render` and `fireEvent.*` both return promises.
+// RNTL v14 renders asynchronously: `render` and `fireEvent.*` both return
+// promises. RNTL renders ScrollView children synchronously, so rows inside
+// the rows ScrollView (HANDOFF 1B.2) are queryable the same as before.
 describe('RecentFoodPicker', () => {
   const entries = [entry('1', 'Chicken salad'), entry('2', 'Greek yogurt'), entry('3', 'Chicken soup')];
 
@@ -66,5 +68,24 @@ describe('RecentFoodPicker', () => {
   it('exposes a re-log accessibility label per row', async () => {
     const { getByLabelText } = await render(<RecentFoodPicker entries={entries} onSelect={jest.fn()} />);
     expect(getByLabelText('Re-log Chicken salad')).toBeTruthy();
+  });
+
+  it('renders more than the default 6 rows when a higher limit allows it', async () => {
+    const manyEntries = Array.from({ length: 8 }, (_, i) => entry(`e${i}`, `Food ${i}`));
+    const { getByTestId } = await render(
+      <RecentFoodPicker entries={manyEntries} onSelect={jest.fn()} limit={50} />,
+    );
+    for (const e of manyEntries) {
+      expect(getByTestId(`recent-food-${e.name.split(' ')[1]}`)).toBeTruthy();
+    }
+  });
+
+  it('caps rows at the default limit of 6 when no limit prop is passed', async () => {
+    const manyEntries = Array.from({ length: 8 }, (_, i) => entry(`e${i}`, `Food ${i}`));
+    const { getByTestId, queryByTestId } = await render(
+      <RecentFoodPicker entries={manyEntries} onSelect={jest.fn()} />,
+    );
+    expect(getByTestId('recent-food-5')).toBeTruthy();
+    expect(queryByTestId('recent-food-6')).toBeNull();
   });
 });
