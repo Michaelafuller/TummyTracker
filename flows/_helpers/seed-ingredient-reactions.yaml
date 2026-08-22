@@ -1,4 +1,4 @@
-appId: com.tummytracker.app
+appId: com.tummytracker.app.dev
 # Helper — seeds 3 "Onion Dish" meals with sentiment 1 and "onion, garlic"
 # ingredients, each time building tagsJson via extractTags so "onion" and "garlic"
 # accumulate ≥ MIN_TAG_OCCURRENCES (3) in rated food entries.

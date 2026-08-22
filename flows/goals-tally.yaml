@@ -1,4 +1,4 @@
-appId: com.tummytracker.app
+appId: com.tummytracker.app.dev
 # Goals tab — daily tally (2026-08-15 release, part 1).
 #   - Goals is the 5th bottom tab and renders today's tally (empty state first)
 #   - Logging a meal with calories updates the tally same-day

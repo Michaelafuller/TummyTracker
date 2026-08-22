@@ -1,4 +1,4 @@
-appId: com.tummytracker.app
+appId: com.tummytracker.app.dev
 # Phase 1e — Reminders: toggle the breakfast reminder on; OS notification
 # permission prompt should appear (or be silently granted if already given).
 # Verifies the settings screen is functional and doesn't crash on toggle.

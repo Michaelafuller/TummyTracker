@@ -1,16 +1,19 @@
-# HANDOFF.md — Execute session: build-variant split (dev vs. real app)
+# HANDOFF.md — Execute session: build-variant split + Home-screen layout
 
 > **Read first:** this file only. `CLAUDE.md` is auto-loaded (§0 build decisions,
 > §4 rungs, §8 conventions). This cycle touches `app.json` → **`app.config.ts`**,
-> `eas.json`, `src/lib/appVariant.ts` (new), `flows/*.yaml` (mechanical), and
-> `docs/E2E.md` + `CLAUDE.md §0` (docs). **This is a config cycle — `npm run
-> bundle:check` is a mandatory rung this time**, in addition to the usual three.
-> No new dependency, no schema change, no device needed (flow edits are
-> authored-only; running them is a later test session's job, after the owner
-> installs the new dev-variant build).
+> `eas.json`, `src/lib/appVariant.ts` (new), `flows/*.yaml` (mechanical),
+> `docs/E2E.md` + `CLAUDE.md §0` (docs), and — Part B — `src/app/(tabs)/index.tsx`
+> + `src/features/logging/RecentFoodPicker.tsx` (+ its test). **Part A is a
+> config cycle — `npm run bundle:check` is a mandatory rung this time**, in
+> addition to the usual three. No new dependency, no schema change, no device
+> needed (flow edits are authored-only; running them is a later test session's
+> job, after the owner installs the new dev-variant build).
 
-**Planned 2026-08-21 (Fable plan session). Owner-approved 2026-08-16 (PROGRESS
-Tier 4).** One cycle.
+**Planned 2026-08-21 (Fable plan session). Part A owner-approved 2026-08-16
+(PROGRESS Tier 4); Part B owner-requested 2026-08-21.** One cycle, two
+independent parts — commit them separately; if one part hits trouble, the
+other still lands.
 
 ---
 
@@ -137,6 +140,61 @@ actually exercised). No other changes; remember the strict schema.
   via the eas.json development profile's env; config lives in `app.config.ts`;
   the resolver is unit-tested in `src/lib/appVariant.ts`").
 
+## 1B. Part B — Home tab: frozen hero/actions, scrolling Recent
+
+**Owner ask (verbatim intent):** the Recent section should use more of the
+viewport, and the title + main buttons should stay frozen — only the Recent
+list scrolls.
+
+Current state (verified): `src/app/(tabs)/index.tsx` wraps the whole screen in
+one `ScrollView` (`scrollContent` has `flexGrow: 1, justifyContent: 'center'`),
+and `RecentFoodPicker` renders search field + up to `limit = 6` rows inline
+(Home fetches 50 via `listRecentFoodEntries(50)`; `filterRecents` caps display
+at `limit`). `RecentFoodPicker` is used ONLY by the Home screen (verified), so
+its API can change freely.
+
+### 1B.1 Layout restructure (`src/app/(tabs)/index.tsx`)
+
+- Remove the outer `ScrollView`. New structure inside the `SafeAreaView`: a
+  plain column — hero (fixed), actions (fixed), then the Recent section with
+  `flex: 1` so it fills all remaining viewport (this is the "show more"
+  part — the section now owns the rest of the screen instead of 6 rows).
+- Drop `justifyContent: 'center'`/`flexGrow` (they only made sense for a
+  short centered scroll page); keep existing horizontal padding, top padding,
+  gaps, and `BottomTabInset` bottom padding so nothing else visually moves.
+- Keep the `recents.length > 0` gate: with no recents the lower area is
+  simply empty, same as today.
+
+### 1B.2 Scrolling rows (`src/features/logging/RecentFoodPicker.tsx`)
+
+- Heading ("Recent") and the search field stay fixed; only the **rows** live
+  in a scrollable container. Put the `ScrollView` inside `RecentFoodPicker`,
+  wrapping just the rows list: container gets `flex: 1`, the rows
+  `ScrollView` gets `flex: 1` with the existing `gap` moved to its
+  `contentContainerStyle`, plus `keyboardShouldPersistTaps="handled"` (so a
+  row tap works while the search keyboard is up — same option every other
+  scroll screen here uses) and `showsVerticalScrollIndicator` left on
+  (default) since the list is now genuinely scrollable.
+- A plain `ScrollView` over `.map()` rows is fine at this scale (display cap
+  ≤ 50 lightweight rows; `FlashList`/virtualization is explicitly a Tier-4
+  backlog item, don't reach for it, and `FlatList` would be a gratuitous
+  restructure).
+- Raise the display cap so the taller viewport actually shows more: Home
+  passes `limit={50}` (matching the existing fetch). Keep the prop default
+  at 6 — the component stays usable inline elsewhere.
+- No behavior change to search filtering (`filterRecents`) or `onSelect`.
+
+### 1B.3 Tests
+
+- `RecentFoodPicker.test.tsx`: update for the new structure (rows render
+  inside the scroll container; more than 6 rows render when `limit` allows —
+  e.g. 8 entries + `limit={50}` → all 8 rows present; search filtering still
+  works). RNTL renders ScrollView children synchronously, so existing
+  queries should mostly survive.
+- If a Home-screen test exists (check `src/app/(tabs)/__tests__/`), update it
+  for the removed outer ScrollView; if none exists, don't add one this cycle
+  (the interaction wiring is unchanged — prefill + push on row tap).
+
 ## 2. Definition of done (config cycle — four rungs, not three)
 
 - `npm run typecheck` && `npm run lint` && `npm test` green.
@@ -156,6 +214,10 @@ actually exercised). No other changes; remember the strict schema.
      (includes the app.json deletion + eas.json env)
   3. `chore(e2e): point flows at the dev-variant appId and scheme` (+ docs
      edits — or split docs into a 4th `docs:` commit if cleaner)
+  4. `feat(home): freeze hero and actions, let Recent fill and scroll`
+     (Part B, fully independent of 1–3)
+- Part B is covered by the three normal rungs (pure JS/TS); the fourth rung
+  (`bundle:check`) is owed to Part A but run it after both parts are in.
 - End with an execute summary: what shipped per commit, file list, all four
   rung results, both `expo config` spot-check outputs, deviations, punts.
 
@@ -173,3 +235,13 @@ actually exercised). No other changes; remember the strict schema.
 4. Test-execute (later session): full Maestro re-run against the dev variant
    (shared-infra rule — appId/scheme changed under every flow), with the
    reconnect helper's Metro port updated per session as usual.
+5. Flow rework owed for Part B (test-plan session's call, flagged here):
+   `flows/h-recent-foods.yaml` scrolls the old full-page ScrollView to reach
+   the second Recent row ("Pizza slice") — with the page no longer scrollable
+   and rows in a nested ScrollView, that step's semantics change
+   (`scrollUntilVisible` scrolls the innermost scrollable under its target,
+   which should still work, but the assertion set deserves a re-check — and
+   the frozen CTAs mean `scrollUntilVisible` on "Add an entry manually" et
+   al. in other flows now no-op-pass, which is fine). Also re-check the
+   keyboard-covers-list behavior noted in RESULTS root cause #5 still holds
+   with `keyboardShouldPersistTaps="handled"`.

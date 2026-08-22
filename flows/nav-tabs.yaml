@@ -1,4 +1,4 @@
-appId: com.tummytracker.app
+appId: com.tummytracker.app.dev
 # Nav — all five bottom tabs reachable without crash; each screen renders
 # its landmark content. (Goals tab added 2026-08-15 cycle — this flow was
 # stale at 4 tabs until the 2026-08-16 test-backfill verification pass.)

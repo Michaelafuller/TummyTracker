@@ -1,4 +1,4 @@
-appId: com.tummytracker.app
+appId: com.tummytracker.app.dev
 # Trigger watchlist / elimination mode (2026-08-15 release).
 # CORRECTION vs. HANDOFF.md's "Settings → add a watch term": WatchlistSection
 # is actually rendered on the Insights tab (src/app/(tabs)/insights.tsx:156),

@@ -1,4 +1,4 @@
-appId: com.tummytracker.app
+appId: com.tummytracker.app.dev
 # Helper — adds "Oatmeal" (very satisfied) and "Pizza slice" (very unhappy) via
 # the two-screen component -> review chain (Home's "Add an entry manually"
 # opens ComponentForm at /meal/component, not the old single-screen

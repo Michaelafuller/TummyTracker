@@ -1,4 +1,4 @@
-appId: com.tummytracker.app
+appId: com.tummytracker.app.dev
 # E — Temporal insights (partial / best-effort):
 #   Assert the Insights summary counts render correctly after seeding food entries.
 #   "Timing patterns" requires a 24h windowed join between food and adverse outcome;

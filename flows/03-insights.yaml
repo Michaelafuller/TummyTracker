@@ -1,4 +1,4 @@
-appId: com.tummytracker.app
+appId: com.tummytracker.app.dev
 # Phase 3 — Insights: screen renders with seeded data and shows at least one
 # food finding ("Wheat Bread") with a sample-size citation ("across N logs").
 # NOTE: "Observation only" framing appears only when temporal data exists

@@ -1,4 +1,4 @@
-appId: com.tummytracker.app
+appId: com.tummytracker.app.dev
 # Tier-0 H — Recent foods searchable quick-add (HANDOFF 1.4).
 #   - After logging meals, the "Recent" section appears on the Home screen
 #   - Typing in the search field filters the suggestion rows

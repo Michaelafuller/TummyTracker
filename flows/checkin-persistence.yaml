@@ -1,4 +1,4 @@
-appId: com.tummytracker.app
+appId: com.tummytracker.app.dev
 # Check-in persistence + 7-day horizon (2026-08-16 release) — THE regression
 # flow for the check-in-toggle bug fix: persisted prefs are now the source of
 # truth for "enabled" (CheckInSection.tsx), not the OS-scheduled notification

@@ -1,4 +1,4 @@
-appId: com.tummytracker.app
+appId: com.tummytracker.app.dev
 # D — "Ingredients you react to" insight:
 #   Seed ≥ 3 rated food entries sharing "onion" tag (MIN_TAG_OCCURRENCES = 3),
 #   navigate to Insights, assert the section and the tag card appear.

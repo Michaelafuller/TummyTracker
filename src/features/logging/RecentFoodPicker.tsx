@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedTextInput } from '@/components/form-fields';
 import { ThemedText } from '@/components/themed-text';
@@ -27,9 +27,10 @@ export interface RecentFoodPickerProps {
 
 /**
  * Searchable quick-add list for the Home screen's "Recent" section (HANDOFF
- * 1.4) — replaces the old horizontal chip ScrollView. A ThemedTextInput above
- * a plain conditional list of up to `limit` suggestion rows; no dropdown/
- * overlay library, this renders inline inside the caller's ScrollView.
+ * 1.4). A fixed ThemedTextInput above a scrollable list of up to `limit`
+ * suggestion rows — the search field stays put while only the rows
+ * (`.map()` over a plain `ScrollView`, fine at this display-cap scale) scroll
+ * inside the component's own `flex: 1` container (HANDOFF 1B.2).
  */
 export function RecentFoodPicker({ entries, onSelect, limit = 6 }: RecentFoodPickerProps) {
   const theme = useTheme();
@@ -46,7 +47,10 @@ export function RecentFoodPicker({ entries, onSelect, limit = 6 }: RecentFoodPic
         accessibilityLabel="Search past foods"
         autoCapitalize="none"
       />
-      <View style={styles.list}>
+      <ScrollView
+        style={styles.list}
+        contentContainerStyle={styles.listContent}
+        keyboardShouldPersistTaps="handled">
         {results.map((entry) => {
           const secondary = secondaryLine(entry);
           return (
@@ -68,16 +72,20 @@ export function RecentFoodPicker({ entries, onSelect, limit = 6 }: RecentFoodPic
             </Pressable>
           );
         })}
-      </View>
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
     gap: Spacing.two,
   },
   list: {
+    flex: 1,
+  },
+  listContent: {
     gap: Spacing.two,
   },
   row: {
