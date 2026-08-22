@@ -1,5 +1,5 @@
 import type { LogEntry } from '@/db/schema';
-import { tallyDailyNutrition } from '../dailyTally';
+import { nutrientContributions, tallyDailyNutrition } from '../dailyTally';
 import { dayBounds, formatDateInput } from '../datetime';
 
 let seq = 0;
@@ -145,5 +145,63 @@ describe('tallyDailyNutrition', () => {
     const tally = tallyDailyNutrition(entries, start, end);
     expect(tally.entryCount).toBe(1);
     expect(tally.nutrients.calories.total).toBe(30);
+  });
+});
+
+describe('nutrientContributions', () => {
+  it('sorts contributors by value desc, tiebreaking by loggedAt asc, and splits out missing in time order', () => {
+    const start = 0;
+    const end = 1000;
+    const entries = [
+      entry({ type: 'meal', loggedAt: 100, name: 'Burger', fatG: 30 }),
+      entry({ type: 'meal', loggedAt: 50, name: 'Salad', fatG: 5 }),
+      entry({ type: 'meal', loggedAt: 200, name: 'Chips', fatG: 30 }), // ties Burger's value
+      entry({ type: 'meal', loggedAt: 300, name: 'Tea', fatG: null }),
+      entry({ type: 'meal', loggedAt: 10, name: 'Water', fatG: null }),
+    ];
+    const result = nutrientContributions(entries, 'fatG', start, end);
+    expect(result.contributors.map((c) => c.name)).toEqual(['Burger', 'Chips', 'Salad']);
+    expect(result.contributors.map((c) => c.value)).toEqual([30, 30, 5]);
+    expect(result.missing.map((m) => m.name)).toEqual(['Water', 'Tea']);
+  });
+
+  it('excludes non-food and out-of-range entries', () => {
+    const start = 1000;
+    const end = 2000;
+    const entries = [
+      entry({ type: 'meal', loggedAt: 1500, name: 'In range', calories: 100 }),
+      entry({ type: 'bowel_movement', loggedAt: 1500, bristolScale: 4 }),
+      entry({ type: 'meal', loggedAt: 500, name: 'Too early', calories: 200 }),
+      entry({ type: 'meal', loggedAt: 2500, name: 'Too late', calories: 300 }),
+    ];
+    const result = nutrientContributions(entries, 'calories', start, end);
+    expect(result.contributors).toHaveLength(1);
+    expect(result.contributors[0].name).toBe('In range');
+    expect(result.missing).toHaveLength(0);
+  });
+
+  it('a logged 0 counts as a contributor, not missing', () => {
+    const start = 0;
+    const end = 100;
+    const entries = [entry({ type: 'meal', loggedAt: 10, name: 'Zero fat', fatG: 0 })];
+    const result = nutrientContributions(entries, 'fatG', start, end);
+    expect(result.contributors).toEqual([{ id: entries[0].id, name: 'Zero fat', loggedAt: 10, value: 0 }]);
+    expect(result.missing).toHaveLength(0);
+  });
+
+  it('invariant: contributor values sum to the tally total, and counts add up to entryCount', () => {
+    const start = 0;
+    const end = 1000;
+    const entries = [
+      entry({ type: 'meal', loggedAt: 10, name: 'A', proteinG: 12.34 }),
+      entry({ type: 'snack', loggedAt: 20, name: 'B', proteinG: 5.6 }),
+      entry({ type: 'meal', loggedAt: 30, name: 'C', proteinG: null }),
+      entry({ type: 'meal', loggedAt: 40, name: 'D', proteinG: 0 }),
+    ];
+    const tally = tallyDailyNutrition(entries, start, end);
+    const result = nutrientContributions(entries, 'proteinG', start, end);
+    const sum = result.contributors.reduce((acc, c) => acc + c.value, 0);
+    expect(sum).toBeCloseTo(tally.nutrients.proteinG.total ?? 0);
+    expect(result.contributors.length + result.missing.length).toBe(tally.entryCount);
   });
 });

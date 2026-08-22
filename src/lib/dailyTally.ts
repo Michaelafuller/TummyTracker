@@ -31,6 +31,27 @@ export interface DailyTally {
   nutrients: Record<NutritionField, NutrientTally>;
 }
 
+export interface NutrientContribution {
+  id: string;
+  name: string;
+  loggedAt: number;
+  /** Rounded with decimalsFor(field). */
+  value: number;
+}
+
+export interface NutrientMissing {
+  id: string;
+  name: string;
+  loggedAt: number;
+}
+
+export interface NutrientContributions {
+  /** Value desc, ties broken by loggedAt asc. */
+  contributors: NutrientContribution[];
+  /** loggedAt asc. */
+  missing: NutrientMissing[];
+}
+
 /** Matches the OFF mapper's display precision (src/lib/openFoodFacts.ts): calories
  *  and sodium to 0 decimals, gram fields to 1. */
 function decimalsFor(field: NutritionField): number {
@@ -40,6 +61,13 @@ function decimalsFor(field: NutritionField): number {
 function round(value: number, decimals: number): number {
   const f = 10 ** decimals;
   return Math.round(value * f) / f;
+}
+
+/** Food-type entries in [start, end) — the shared filter behind every tally view. */
+function entriesInRange(entries: readonly LogEntry[], start: number, end: number): LogEntry[] {
+  return entries.filter(
+    (entry) => FOOD_TYPES_SET.has(entry.type) && entry.loggedAt >= start && entry.loggedAt < end,
+  );
 }
 
 /**
@@ -52,9 +80,7 @@ export function tallyDailyNutrition(
   start: number,
   end: number,
 ): DailyTally {
-  const inRange = entries.filter(
-    (entry) => FOOD_TYPES_SET.has(entry.type) && entry.loggedAt >= start && entry.loggedAt < end,
-  );
+  const inRange = entriesInRange(entries, start, end);
 
   const nutrients = {} as Record<NutritionField, NutrientTally>;
   for (const field of NUTRITION_FIELDS) {
@@ -78,4 +104,36 @@ export function tallyDailyNutrition(
   }
 
   return { entryCount: inRange.length, nutrients };
+}
+
+/**
+ * The per-entry breakdown behind one nutrient's tally total — the drill-down
+ * data for an expandable tally row (HANDOFF.md "Goals tab" cycle). Same
+ * food-type + [start, end) filtering as `tallyDailyNutrition`; a logged `0`
+ * is a contributor (value 0), not missing, matching the tally's own rule.
+ */
+export function nutrientContributions(
+  entries: readonly LogEntry[],
+  field: NutritionField,
+  start: number,
+  end: number,
+): NutrientContributions {
+  const inRange = entriesInRange(entries, start, end);
+  const decimals = decimalsFor(field);
+
+  const contributors: NutrientContribution[] = [];
+  const missing: NutrientMissing[] = [];
+  for (const entry of inRange) {
+    const value = entry[field];
+    if (value == null) {
+      missing.push({ id: entry.id, name: entry.name, loggedAt: entry.loggedAt });
+    } else {
+      contributors.push({ id: entry.id, name: entry.name, loggedAt: entry.loggedAt, value: round(value, decimals) });
+    }
+  }
+
+  contributors.sort((a, b) => b.value - a.value || a.loggedAt - b.loggedAt);
+  missing.sort((a, b) => a.loggedAt - b.loggedAt);
+
+  return { contributors, missing };
 }
