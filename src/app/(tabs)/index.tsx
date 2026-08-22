@@ -90,7 +90,7 @@ export default function HomeScreen() {
                     styles.pairedCta,
                     { backgroundColor: theme.backgroundElement, borderColor: theme.border },
                   ])}>
-                  <ThemedText style={styles.ctaLabel}>💩 Bowel movement</ThemedText>
+                  <ThemedText style={styles.ctaLabel}>💩 BM</ThemedText>
                 </Pressable>
               </Link>
 

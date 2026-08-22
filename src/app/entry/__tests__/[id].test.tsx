@@ -32,8 +32,8 @@ jest.mock('@/db/repository', () => ({
 // Jest — render its children and right-actions side by side instead (HANDOFF
 // meal-component delete §B.5) so the delete action stays reachable by label.
 jest.mock('react-native-gesture-handler/ReanimatedSwipeable', () => {
-  const ReactLib = require('react');
-  const { View } = require('react-native');
+  const ReactLib = jest.requireActual('react');
+  const { View } = jest.requireActual('react-native');
   return {
     __esModule: true,
     default: ({ children, renderRightActions }: any) =>
