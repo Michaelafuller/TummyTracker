@@ -8,5 +8,5 @@ tags: [smoke]
 - assertVisible: "TummyTracker"
 - assertVisible: "Scan barcode"
 - assertVisible: "+ Add manually"
-- assertVisible: "💩 Log bowel movement"
-- assertVisible: "🤢 Log symptom"
+- assertVisible: "💩 Bowel movement"
+- assertVisible: "🤢 Symptom"

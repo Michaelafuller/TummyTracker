@@ -50,7 +50,7 @@ export default function HomeScreen() {
               TummyTracker
             </ThemedText>
             <ThemedText type="small" themeColor="textSecondary" style={styles.subtitle}>
-              Log what you eat, note how it sits with you, and spot the patterns.
+              Log what you eat and spot the patterns.
             </ThemedText>
           </ThemedView>
 
@@ -80,30 +80,33 @@ export default function HomeScreen() {
               </Pressable>
             </Link>
 
-            <Link href="/bm/new" asChild>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Log a bowel movement"
-                style={StyleSheet.flatten([
-                  styles.secondaryCta,
-                  { backgroundColor: theme.backgroundElement, borderColor: theme.border },
-                ])}>
-                <ThemedText style={styles.ctaLabel}>💩 Log bowel movement</ThemedText>
-              </Pressable>
-            </Link>
+            <ThemedView style={styles.pairedRow}>
+              <Link href="/bm/new" asChild>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Log a bowel movement"
+                  style={StyleSheet.flatten([
+                    styles.secondaryCta,
+                    styles.pairedCta,
+                    { backgroundColor: theme.backgroundElement, borderColor: theme.border },
+                  ])}>
+                  <ThemedText style={styles.ctaLabel}>💩 Bowel movement</ThemedText>
+                </Pressable>
+              </Link>
 
-            <Link href="/symptom/new" asChild>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Log a symptom"
-                style={StyleSheet.flatten([
-                  styles.secondaryCta,
-                  { backgroundColor: theme.backgroundElement, borderColor: theme.border },
-                ])}>
-                <ThemedText style={styles.ctaLabel}>🤢 Log symptom</ThemedText>
-              </Pressable>
-            </Link>
-
+              <Link href="/symptom/new" asChild>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Log a symptom"
+                  style={StyleSheet.flatten([
+                    styles.secondaryCta,
+                    styles.pairedCta,
+                    { backgroundColor: theme.backgroundElement, borderColor: theme.border },
+                  ])}>
+                  <ThemedText style={styles.ctaLabel}>🤢 Symptom</ThemedText>
+                </Pressable>
+              </Link>
+            </ThemedView>
           </ThemedView>
 
           {recents.length > 0 && (
@@ -132,7 +135,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: Spacing.four,
     paddingTop: Spacing.four,
-    gap: Spacing.four,
+    gap: Spacing.three,
   },
   hero: {
     gap: Spacing.three,
@@ -146,15 +149,22 @@ const styles = StyleSheet.create({
   actions: {
     gap: Spacing.three,
   },
+  pairedRow: {
+    flexDirection: 'row',
+    gap: Spacing.three,
+  },
+  pairedCta: {
+    flex: 1,
+  },
   cta: {
     borderRadius: Spacing.three,
-    paddingVertical: Spacing.three,
+    paddingVertical: Spacing.two + Spacing.one,
     alignItems: 'center',
   },
   secondaryCta: {
     borderRadius: Spacing.three,
     borderWidth: StyleSheet.hairlineWidth,
-    paddingVertical: Spacing.three,
+    paddingVertical: Spacing.two + Spacing.one,
     alignItems: 'center',
   },
   ctaLabel: {
