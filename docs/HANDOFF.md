@@ -1,189 +1,175 @@
-# HANDOFF.md — Execute session: meal-component drill-down (edit after save)
+# HANDOFF.md — Execute session: build-variant split (dev vs. real app)
 
-> **Read first:** this file only. `CLAUDE.md` is auto-loaded (§4 rungs = definition
-> of done, §8 conventions). This cycle touches `src/app/entry/`, `src/app/_layout.tsx`,
-> `src/features/logging/`, `src/lib/mealAggregate.ts`, `src/db/repository.ts`.
-> No new dependency, no schema change, no migration. Pure JS/TS cycle — no build,
-> no device work; Maestro flows are a later test session's job.
+> **Read first:** this file only. `CLAUDE.md` is auto-loaded (§0 build decisions,
+> §4 rungs, §8 conventions). This cycle touches `app.json` → **`app.config.ts`**,
+> `eas.json`, `src/lib/appVariant.ts` (new), `flows/*.yaml` (mechanical), and
+> `docs/E2E.md` + `CLAUDE.md §0` (docs). **This is a config cycle — `npm run
+> bundle:check` is a mandatory rung this time**, in addition to the usual three.
+> No new dependency, no schema change, no device needed (flow edits are
+> authored-only; running them is a later test session's job, after the owner
+> installs the new dev-variant build).
 
-**Planned 2026-08-21 (Fable plan session).** One cycle, one feature, plus two
-small test hardenings from the same session's serving-size discovery.
+**Planned 2026-08-21 (Fable plan session). Owner-approved 2026-08-16 (PROGRESS
+Tier 4).** One cycle.
 
 ---
 
-## 0. Context — what the plan session verified (do not re-derive)
+## 0. Context — why (verified 2026-08-21, don't re-derive)
 
-The discovery question this cycle answered: *does the servings multiplier
-correctly scale nutrition (1 serving = 1 fat → 2 servings = 2 fat)?* **Yes —
-verified, no fix needed.** The contract, so you don't break it while editing:
+All three EAS profiles currently build the same Android package
+`com.tummytracker.app` (`app.json:18`), so the dev client and any
+preview/production install **displace each other** on the Pixel — and Maestro's
+`clearState` wipes whichever app holds that identity, i.e. potentially the
+owner's real journal (bit us 2026-08-16). The split gives the development
+profile its own identity so both apps coexist and automation is permanently
+walled off from real data.
 
-- `mealComponent` nutrition fields are **per ONE serving**; `servings` is the
-  multiplier (`src/db/schema.ts` ~63–99, comment is explicit).
-- `aggregateComponents` (`src/lib/mealAggregate.ts:27`) sums `value × servings`
-  per field; null only when every component lacks the field. Unit-tested incl.
-  servings=2, 0.5, rounding (`src/lib/__tests__/mealAggregate.test.ts`).
-- Save path: `buildMealEntry` (`src/features/logging/mealReviewFormModel.ts:91`)
-  and `createMealWithComponents` (`src/db/repository.ts:57`) both write the
-  aggregate onto the parent `logEntry` row. Everything downstream (daily tally,
-  goal caps, insights, watchlist) reads that entry-level aggregate — the
-  multiply is baked in once, at aggregation.
-- Display rows multiply the same way: review screen (`src/app/meal/review.tsx:132`)
-  and entry view (`src/app/entry/[id].tsx:147`) show `calories × servings`.
-- OFF prefill fills the nutrition grid with per-serving values (per-100g base ×
-  servingG/100). Changing **servingG** rescales the grid from `nutritionBase`;
-  changing **servings** deliberately does not touch the grid (per-serving
-  semantics; the multiply happens at aggregate). This is correct — don't
-  "fix" it.
+Verified surface (plan session, this worktree):
+- `app.json` is static; no `app.config.js/ts` exists yet. Full contents must
+  carry over **byte-equivalent for the default variant** — including
+  `extra.eas.projectId` (`f7438f6a-…`), `slug: "tummytracker"` (BOTH variants
+  keep the same slug/projectId — one EAS project, two packages; standard Expo
+  multi-variant practice), plugins, adaptive-icon, notification, splash,
+  `experiments` blocks.
+- **No app code reads the scheme or app name from config** — no
+  `Linking.createURL`, no `expoConfig` identity usage (grepped `src/`). The
+  Home header "TummyTracker" is an in-app literal
+  (`src/app/(tabs)/index.tsx:52`) and does NOT change with the variant.
+- 27 flow files carry `appId: com.tummytracker.app` (23 flows + 4 helpers in
+  `flows/_helpers/`). The only live deep-link scheme reference is
+  `flows/_helpers/reconnect-dev-client.yaml:31`. (`docs/RESULTS.md:70` also
+  shows it but is a historical run report — leave it.)
+- `eas.json` has a **strict schema** (CLAUDE.md §0): no comments, no unknown
+  keys. `env` is a valid build-profile key.
+- Jest uses the `jest-expo` preset with default test matching — a test under
+  `src/lib/__tests__/` is picked up automatically.
 
-Known wrinkle, **out of scope, do not change**: a single-component meal saved
-with servings≠1 stores `servingG` for one serving but nutrition for N servings
-on the entry row, and hides its component row (`componentCount > 1` gate). Noted
-for a future cycle.
+## 1. The change
 
-## 1. The feature — tap a component row to view/edit it, with re-aggregation
+### 1.1 Pure resolver first — `src/lib/appVariant.ts` (new)
 
-**Owner ask:** drill into a saved meal's components to see each component's
-nutrition — a quick tap on the row opening the component's update screen. This
-implements the Tier-2 backlog row "Meal-component editing after save".
-
-Today `src/app/entry/[id].tsx` renders grouped-meal components as read-only rows
-(name · N× serving · kcal). v1 saved components immutably. This cycle makes each
-row tappable → a new screen showing the full `ComponentForm` prefilled with that
-component (the whole nutrition grid is the "see the nutritional information"
-part) → Save updates the `mealComponent` row **and re-aggregates the parent
-entry** so totals/tags stay consistent.
-
-### 1.1 Pure logic first (`src/lib/mealAggregate.ts`)
-
-Add a pure helper so the re-aggregation contract is Jest-testable without a DB:
+Pure, no React, no Expo imports (it will be evaluated by Node when the config
+loads, and by Jest):
 
 ```ts
-/** Patch for the parent entry after its components changed: fresh nutrition
- *  aggregate + additive tag merge (a removed word never deletes a tag). */
-export function reaggregateEntryPatch(
-  components: readonly ComponentLike&Tags[],   // saved MealComponent rows
-  existingEntryTagsJson: string | null,
-): { nutrition: NutritionValues; tagsJson: string | null }
+export type AppVariant = 'development' | 'production';
+
+export interface AppIdentity {
+  variant: AppVariant;
+  name: string;              // display name
+  androidPackage: string;
+  iosBundleIdentifier: string;
+  scheme: string;            // deep-link scheme
+}
+
+export function resolveAppIdentity(variantEnv: string | undefined): AppIdentity
 ```
 
-- `nutrition` = `aggregateComponents(components)` — recomputed **fresh** (an
-  edit that lowers fat must lower the total; nutrition is not additive-only).
-- `tagsJson` = `mergeTags(parseTagsJson(existingEntryTagsJson),
-  unionComponentTags(components))`, serialized; null when empty. Additive-only
-  is the project's tag policy (2026-08-15 ingredient-hardening) — renaming a
-  component must never strip a previously captured tag from the entry.
-- Entry `name`, `ingredientsText`, `servingG`, `barcode`, `sentiment`,
-  `loggedAt`, `componentCount`: **untouched** (user-editable / meal-level;
-  clobbering a user's own edits is worse than a stale derived string).
+- `variantEnv === 'development'` → `{ variant: 'development', name:
+  'TummyTracker (dev)', androidPackage: 'com.tummytracker.app.dev',
+  iosBundleIdentifier: 'com.tummytracker.app.dev', scheme: 'tummytracker-dev' }`.
+- Anything else (undefined, `''`, `'production'`, unknown values) → the
+  production identity: `TummyTracker` / `com.tummytracker.app` /
+  `com.tummytracker.app` / `tummytracker`. Unknown values deliberately fall
+  back to production, never to dev — a typo must not ship a dev-looking
+  release identity, and must never let a "real" build land on the dev package.
 
-Use exact existing types rather than the sketch above (`MealComponent` is
-already re-exported from `mealAggregate.ts`).
+Unit tests (`src/lib/__tests__/appVariant.test.ts`): the two identities, plus
+the fallback cases (undefined, empty string, arbitrary junk → production).
 
-### 1.2 Form-state round-trip (`src/features/logging/componentFormModel.ts`)
+### 1.2 `app.json` → `app.config.ts`
 
-Add `mealComponentToFormState(row: MealComponent): Partial<ComponentFormState>`
-mirroring `logEntryToFormState` conventions (`formModel.ts:~94`): numbers →
-strings (`''` when null), `nutritionBase: null` with the same comment as the
-entry edit path (per-100g base isn't persisted, so servingG rescaling is
-unavailable when editing — typing a new servingG must NOT rescale the grid
-here, which `handleServingChange` already guarantees when `nutritionBase` is
-null), `tagsJson` passed through so `buildComponentDraft`'s additive merge
-keeps OFF tags.
+- Create `app.config.ts` at the repo root exporting a function of
+  `({ config })` returning the full `ExpoConfig`. Import the resolver with a
+  **relative path** (`./src/lib/appVariant`) — the `@/*` alias is a
+  Metro/tsconfig alias and does not exist when Expo CLI evaluates the config
+  in Node. Type it with `ExpoConfig` from `expo/config` (already a transitive
+  dependency of `expo` — do NOT add a package).
+- Body: today's `app.json` contents verbatim, with exactly four fields driven
+  by `resolveAppIdentity(process.env.APP_VARIANT)`: `name`, `scheme`,
+  `ios.bundleIdentifier`, `android.package`. Everything else identical —
+  icons, splash, notification color, permissions, plugins, `experiments`,
+  `extra` (projectId), `web`, `version`, `orientation`, `slug`.
+- **Delete `app.json` in the same commit** (if both exist, Expo may prefer or
+  merge confusingly; one source of truth).
+- Icon badging for the dev variant: **out of scope** (owner-approved as
+  optional; asset work is not worth it this cycle — the "(dev)" name is the
+  distinguisher).
 
-### 1.3 Repository (`src/db/repository.ts`)
+### 1.3 `eas.json`
 
-- `getMealComponent(id: string): Promise<MealComponent | undefined>`.
-- `updateMealComponentAndReaggregate(componentId, draft: MealComponentDraft):
-  Promise<void>` — one transaction:
-  1. Update the component row from the draft, **keeping its existing
-     `sortOrder`** (pass the row's own sortOrder into `buildComponentDraft` at
-     the call site) and `createdAt`/`id`/`entryId`.
-  2. Re-read all components for the entry (post-update), compute
-     `reaggregateEntryPatch(components, entry.tagsJson)`.
-  3. Update the entry row with the patch's nutrition fields + tagsJson +
-     `updatedAt: Date.now()`.
+Add to the `development` profile only:
 
-### 1.4 New route `src/app/entry/component/[componentId].tsx`
+```json
+"env": { "APP_VARIANT": "development" }
+```
 
-- Register in `src/app/_layout.tsx`: `<Stack.Screen
-  name="entry/component/[componentId]" options={{ title: 'Edit component' }} />`
-  (plain push like `entry/[id]`, not modal — it's an edit drill-down).
-- Screen shape mirrors `entry/[id].tsx`: load via `getMealComponent`
-  (undefined=loading spinner, null=not-found state), then render
-  `ComponentForm` inside the same `KeyboardAvoidingView`/`ScrollView` chrome
-  with `initial={mealComponentToFormState(row)}`,
-  `sortOrder={row.sortOrder}`, `submitLabel="Save changes"`, `onSubmit` →
-  `updateMealComponentAndReaggregate(row.id, draft)` → `router.back()`. No
-  secondary action, no delete (component removal is deliberately out of scope
-  this cycle).
-- `ComponentForm` gets a disabled/submitting guard only if trivial — its
-  current API lacks a `submitting` prop; do NOT redesign it. An in-screen
-  `submitting` state that ignores re-entry (like `handleSubmit` in
-  `entry/[id].tsx`) is enough.
+`preview`/`production` get nothing (they resolve to the production identity by
+fallback — deliberately not an explicit env, so the fallback path is the one
+actually exercised). No other changes; remember the strict schema.
 
-### 1.5 Entry view wiring (`src/app/entry/[id].tsx`)
+### 1.4 Maestro flows (mechanical, authored-only)
 
-- Wrap each component row in a `Pressable` (`accessibilityRole="button"`,
-  `accessibilityLabel={`Edit ${component.name}`}`, `testID` per row) →
-  `router.push(\`/entry/component/${component.id}\`)`. Add a small "›"
-  affordance (ThemedText, textSecondary) so it reads as tappable.
-- **Refresh on return** — the screen currently loads entry + components once.
-  After editing a component, back-navigation must show fresh data (both the
-  component row and the re-aggregated nutrition inside `LogEntryForm`):
-  - Re-fetch entry (and thus components, via the existing effect chain) on
-    focus: `useFocusEffect` from `expo-router` (already a dependency; import
-    `useCallback` wrapper per its API).
-  - `LogEntryForm`/`BmForm`/`SymptomForm` seed state from `initial` once —
-    remount on data change with `key={String(entry.updatedAt)}` so the
-    re-aggregated totals actually appear.
-  - Keep the `componentCount > 1` gate exactly as is.
+- All 27 files under `flows/` (including `_helpers/`): `appId:
+  com.tummytracker.app` → `appId: com.tummytracker.app.dev`.
+- `flows/_helpers/reconnect-dev-client.yaml:31`: `tummytracker://…` →
+  `tummytracker-dev://expo-development-client/?url=…` (keep the port note and
+  the encoded localhost URL exactly as is).
+- **Do NOT touch any `assertVisible: "TummyTracker"` line.** Those are
+  post-save sync points pinning the in-app Home header literal
+  (`index.tsx:52`), which is variant-independent. Maestro text selectors are
+  full-regex-match (RESULTS.md 2026-08-16/17 root cause #3), so the new native
+  label "TummyTracker (dev)" can no longer accidentally satisfy them — the
+  split actually removes the connect-screen/header ambiguity RESULTS root
+  cause #2 complained about. Leave them alone.
 
-### 1.6 Tests (same change, per CLAUDE.md §4)
+### 1.5 Docs
 
-Follow existing patterns — RNTL v14 is async (`await render`, destructure
-queries from the awaited result; never the global `screen`).
+- `docs/E2E.md`: update the three `com.tummytracker.app` references (the
+  "App not found" troubleshooting row, the `dumpsys` and `run-as` commands in
+  the bundle-staleness row) to `com.tummytracker.app.dev`, and add one short
+  paragraph: flows now target the dev variant; the real app
+  (`com.tummytracker.app`) is never touched by automation; Metro sessions do
+  NOT need `APP_VARIANT` set (native identity is baked into the installed
+  build — served JS is identity-agnostic).
+- Root `CLAUDE.md` §0: add one build-decision bullet — the variant split
+  (what/why, one paragraph max, incl. "dev builds get `APP_VARIANT=development`
+  via the eas.json development profile's env; config lives in `app.config.ts`;
+  the resolver is unit-tested in `src/lib/appVariant.ts`").
 
-- `mealAggregate.test.ts`: `reaggregateEntryPatch` — fresh-recompute lowers
-  totals after an edit; additive tag merge keeps a tag the edited component no
-  longer carries; multiply still applied (`servings: 2` → doubled
-  contribution).
-- `componentFormModel.test.ts`: `mealComponentToFormState` round-trip — row →
-  state → `buildComponentDraft` reproduces the row's values (name, servings,
-  servingG, nutrition, tags preserved additively).
-- New screen test `src/app/entry/component/__tests__/[componentId].test.tsx`
-  modeled on `src/app/meal/__tests__/component.test.tsx` +
-  `src/app/entry/__tests__/[id].test.tsx` (mock `expo-router` +
-  `@/db/repository` the same way): renders prefilled name/servings, editing
-  servings + save calls `updateMealComponentAndReaggregate` with the new
-  draft and navigates back.
-- `[id].test.tsx`: component rows navigate on press (assert `router.push`
-  with the component id).
+## 2. Definition of done (config cycle — four rungs, not three)
 
-### 1.7 Discovery hardenings (small, same cycle)
+- `npm run typecheck` && `npm run lint` && `npm test` green.
+- **`npm run bundle:check` green** — mandatory: the three rungs never evaluate
+  `app.config.ts` through the real export path; this does.
+- Config spot-check, both variants (do it, paste results into your summary):
+  - `npx expo config --type public` → name `TummyTracker`, package/scheme
+    production values.
+  - Same with `APP_VARIANT=development` in the environment (PowerShell:
+    `$env:APP_VARIANT='development'; npx expo config --type public;
+    Remove-Item Env:APP_VARIANT`) → `TummyTracker (dev)` /
+    `com.tummytracker.app.dev` / `tummytracker-dev`.
+- No `// @ts-ignore`, no lint disables, no new dependency.
+- Suggested commit split (imperative, scoped, one logical change each):
+  1. `feat(config): add unit-tested app-variant identity resolver`
+  2. `feat(config): split dev/prod app identity via app.config.ts + eas env`
+     (includes the app.json deletion + eas.json env)
+  3. `chore(e2e): point flows at the dev-variant appId and scheme` (+ docs
+     edits — or split docs into a 4th `docs:` commit if cleaner)
+- End with an execute summary: what shipped per commit, file list, all four
+  rung results, both `expo config` spot-check outputs, deviations, punts.
 
-1. `mealReviewFormModel.test.ts`: if not already covered, one test that
-   `buildMealEntry` writes multiplied aggregates onto the entry
-   (component `fatG: 1, servings: 2` → `entry.fatG` includes 2).
-2. `review.test.tsx` / existing display tests: only if trivially cheap, assert
-   the row string shows `calories × servings` (e.g. 100 kcal × 2 → "200 kcal").
-   Skip if the existing tests already pin this.
+## 3. Not this session (sequencing for the owner, after merge)
 
-## 2. Definition of done
-
-- `npm run typecheck` && `npm run lint` && `npm test` — all green, run them.
-- No `// @ts-ignore`, no lint disables, no new dependency, no schema change.
-- Commits: small, imperative, scoped — suggested split:
-  1. `feat(logging): add reaggregateEntryPatch + mealComponentToFormState`
-  2. `feat(logging): editable meal components after save with re-aggregation`
-  3. `test(logging): serving-multiply hardening from discovery`
-  (or 2 commits if the hardenings fold naturally into 1/2's test files).
-- End with a brief execute summary (what shipped, file list, rung status,
-  anything punted) — the review pass reads it.
-
-## 3. For the later test-plan session (do not do now)
-
-On-device coverage owed once this ships: extend or sibling a flow next to
-`flows/01d-browse-edit.yaml` — build a 2-component meal, open the entry, tap a
-component row, change servings 1→2, save, assert the entry's aggregate line
-reflects the doubled kcal and persists across relaunch. ACCEPTANCE.md rows to
-add accordingly.
+1. `eas build --profile development --platform android` → install: appears as
+   a separate "TummyTracker (dev)" app; the existing install is untouched.
+2. Reclaim `com.tummytracker.app` as the real journal app:
+   `eas build --profile preview --platform android` → installs **in place**
+   over the currently installed (dev-client) build — same EAS signing key, so
+   data survives; export an in-app backup first anyway (CLAUDE.md §0 signing
+   caveat).
+3. iOS: the variant applies automatically via `ios.bundleIdentifier` whenever
+   a development-profile iOS build is next made; no extra work owed now.
+4. Test-execute (later session): full Maestro re-run against the dev variant
+   (shared-infra rule — appId/scheme changed under every flow), with the
+   reconnect helper's Metro port updated per session as usual.
