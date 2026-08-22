@@ -2,6 +2,11 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    // app.config.ts imports src/lib/appVariant.ts with an explicit `.ts`
+    // extension (see the comment there) — required so Node's CJS loader
+    // resolves it when @expo/config evaluates the config outside Metro.
+    // Safe alongside `noEmit` (inherited from expo/tsconfig.base).
+    "allowImportingTsExtensions": true,
     "types": ["jest", "node", "expo/types"],
     "paths": {
       "@/*": [
