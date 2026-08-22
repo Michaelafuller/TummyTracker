@@ -1,12 +1,16 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import type { MealComponent } from '@/db/schema';
-import { getMealComponent, updateMealComponentAndReaggregate } from '@/db/repository';
+import {
+  deleteMealComponentAndReaggregate,
+  getMealComponent,
+  updateMealComponentAndReaggregate,
+} from '@/db/repository';
 import { ComponentForm } from '@/features/logging/ComponentForm';
 import { mealComponentToFormState } from '@/features/logging/componentFormModel';
 import type { MealComponentDraft } from '@/lib/mealAggregate';
@@ -20,8 +24,10 @@ type LoadState = MealComponent | null | undefined;
  * Full nutrition grid doubles as "see the nutritional information" for that
  * component. Save re-aggregates the parent entry (updateMealComponentAndReaggregate)
  * so totals/tags stay consistent, then returns to the entry screen — which
- * refreshes on focus to show the new totals. No delete here; component
- * removal is deliberately out of scope this cycle.
+ * refreshes on focus to show the new totals. Delete does the same
+ * re-aggregation via deleteMealComponentAndReaggregate after a confirm
+ * Alert; a 'last' result (this is the entry's only component) shows a
+ * keep-one-item alert instead of deleting (HANDOFF.md meal-component delete).
  */
 export default function EditComponentScreen() {
   const router = useRouter();
@@ -48,6 +54,38 @@ export default function EditComponentScreen() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function handleDelete() {
+    if (submitting || !component) return;
+    const target = component;
+    Alert.alert(
+      'Remove from this meal?',
+      `${target.name} will be removed and the meal's totals recalculated.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            setSubmitting(true);
+            try {
+              const result = await deleteMealComponentAndReaggregate(target.id);
+              if (result === 'last') {
+                Alert.alert(
+                  'Keep at least one item',
+                  'A meal needs one item — delete the whole entry instead.',
+                );
+                return;
+              }
+              router.back();
+            } finally {
+              setSubmitting(false);
+            }
+          },
+        },
+      ],
+    );
   }
 
   if (component === undefined) {
@@ -79,6 +117,7 @@ export default function EditComponentScreen() {
           sortOrder={component.sortOrder}
           submitLabel="Save changes"
           onSubmit={handleSubmit}
+          onDelete={handleDelete}
         />
       </ScrollView>
     </KeyboardAvoidingView>

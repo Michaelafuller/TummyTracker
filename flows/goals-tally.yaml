@@ -1,4 +1,5 @@
 appId: com.tummytracker.app.dev
+tags: [goals]
 # Goals tab — daily tally (2026-08-15 release, part 1).
 #   - Goals is the 5th bottom tab and renders today's tally (empty state first)
 #   - Logging a meal with calories updates the tally same-day
@@ -68,3 +69,39 @@ appId: com.tummytracker.app.dev
       text: "1 entry missing"
     direction: DOWN
 - assertVisible: "1 entry missing"
+
+# --- Header: "Today" + long date ---
+- scrollUntilVisible:
+    element:
+      text: "Today"
+    direction: UP
+- assertVisible: "Today"
+- assertVisible: ".*, 20[0-9][0-9]"
+
+# --- Expand a tally row: drill down to the entries behind the total ---
+- tapOn:
+    id: "tally-row-calories"
+- waitForAnimationToEnd
+- assertVisible: "Open Tally Test Meal"
+- assertVisible: "[0-9]{1,2}:[0-9]{2} (AM|PM)"
+
+# --- Collapse: the sub-row disappears ---
+- tapOn:
+    id: "tally-row-calories"
+- assertNotVisible: "Open Tally Test Meal"
+
+# --- Missing data: Fat (g) has no value for this entry ---
+- tapOn:
+    id: "tally-row-fatG"
+- assertVisible: "no data"
+
+# --- Drill to entry: tapping a sub-row opens its edit screen ---
+- tapOn: "Open Tally Test Meal"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "Save changes"
+    direction: DOWN
+- assertVisible: "Save changes"
+- back
+- assertVisible: "Today"

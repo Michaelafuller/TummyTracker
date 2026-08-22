@@ -1,8 +1,9 @@
-import { fireEvent, render } from '@testing-library/react-native';
+import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { useEffect as mockUseEffect } from 'react';
+import { Alert } from 'react-native';
 
 import type { LogEntry, MealComponent, WatchlistItem } from '@/db/schema';
-import { getLogEntry, getMealComponents } from '@/db/repository';
+import { deleteMealComponentAndReaggregate, getLogEntry, getMealComponents } from '@/db/repository';
 import { useWatchlistStore } from '@/features/watchlist/watchlistStore';
 import EditEntryScreen from '../[id]';
 
@@ -21,10 +22,24 @@ jest.mock('@/db/repository', () => ({
   getMealComponents: jest.fn(),
   updateLogEntry: jest.fn(),
   deleteLogEntry: jest.fn(),
+  deleteMealComponentAndReaggregate: jest.fn(),
   listWatchlistItems: jest.fn(),
   addWatchlistItem: jest.fn(),
   removeWatchlistItem: jest.fn(),
 }));
+
+// ReanimatedSwipeable needs the native Worklets runtime, unavailable under
+// Jest — render its children and right-actions side by side instead (HANDOFF
+// meal-component delete §B.5) so the delete action stays reachable by label.
+jest.mock('react-native-gesture-handler/ReanimatedSwipeable', () => {
+  const ReactLib = jest.requireActual('react');
+  const { View } = jest.requireActual('react-native');
+  return {
+    __esModule: true,
+    default: ({ children, renderRightActions }: any) =>
+      ReactLib.createElement(View, null, children, renderRightActions ? renderRightActions() : null),
+  };
+});
 
 const BASE_ENTRY: LogEntry = {
   id: 'e1',
@@ -104,6 +119,67 @@ describe('EditEntryScreen grouped-meal display', () => {
     const { findByLabelText } = await render(<EditEntryScreen />);
     await fireEvent.press(await findByLabelText('Edit Peas'));
     expect(mockPush).toHaveBeenCalledWith('/entry/component/c1');
+  });
+});
+
+describe('EditEntryScreen swipe-to-delete component', () => {
+  beforeEach(() => {
+    // Approximate the confirm Alert as "user taps the destructive button".
+    jest.spyOn(Alert, 'alert').mockImplementation((_title, _message, buttons) => {
+      const destructive = buttons?.find((button) => button.style === 'destructive');
+      destructive?.onPress?.();
+    });
+  });
+
+  afterEach(() => {
+    (Alert.alert as jest.Mock).mockRestore();
+  });
+
+  it('deletes the component and re-fetches the entry + components on confirm', async () => {
+    (getLogEntry as jest.Mock).mockResolvedValue({ ...BASE_ENTRY, componentCount: 2 });
+    (getMealComponents as jest.Mock).mockResolvedValue([COMPONENT]);
+    (deleteMealComponentAndReaggregate as jest.Mock).mockResolvedValue('deleted');
+
+    const { findByTestId } = await render(<EditEntryScreen />);
+    await fireEvent.press(await findByTestId('component-delete-c1'));
+
+    expect(deleteMealComponentAndReaggregate).toHaveBeenCalledWith('c1');
+    // Initial focus-effect fetch, plus the post-delete refresh (loadEntry).
+    expect(getLogEntry).toHaveBeenCalledTimes(2);
+  });
+
+  it('shows a keep-one-item alert and does not refetch when the component is the entry\'s last one', async () => {
+    (getLogEntry as jest.Mock).mockResolvedValue({ ...BASE_ENTRY, componentCount: 2 });
+    (getMealComponents as jest.Mock).mockResolvedValue([COMPONENT]);
+    (deleteMealComponentAndReaggregate as jest.Mock).mockResolvedValue('last');
+
+    const { findByTestId } = await render(<EditEntryScreen />);
+    await fireEvent.press(await findByTestId('component-delete-c1'));
+
+    expect(deleteMealComponentAndReaggregate).toHaveBeenCalledWith('c1');
+    expect(getLogEntry).toHaveBeenCalledTimes(1);
+    expect(Alert.alert).toHaveBeenLastCalledWith(
+      'Keep at least one item',
+      'A meal needs one item — delete the whole entry instead.',
+    );
+  });
+
+  it('clears the "In this meal" list once a delete leaves the entry with one component', async () => {
+    (getLogEntry as jest.Mock)
+      .mockResolvedValueOnce({ ...BASE_ENTRY, componentCount: 2 })
+      .mockResolvedValueOnce({ ...BASE_ENTRY, componentCount: 1 });
+    (getMealComponents as jest.Mock).mockResolvedValue([COMPONENT]);
+    (deleteMealComponentAndReaggregate as jest.Mock).mockResolvedValue('deleted');
+
+    const { findByTestId, queryByText, queryByTestId } = await render(<EditEntryScreen />);
+    expect(await findByTestId('component-delete-c1')).toBeTruthy();
+
+    await fireEvent.press(await findByTestId('component-delete-c1'));
+
+    await waitFor(() => {
+      expect(queryByText('In this meal')).toBeNull();
+    });
+    expect(queryByTestId('component-row-c1')).toBeNull();
   });
 });
 

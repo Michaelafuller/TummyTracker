@@ -18,7 +18,7 @@ const TYPE_EMOJI: Partial<Record<string, string>> = {
 
 function subtitle(entry: LogEntry): string {
   if (entry.type === 'bowel_movement') {
-    const parts: string[] = ['Bowel movement'];
+    const parts: string[] = ['BM'];
     if (isBristolValue(entry.bristolScale)) parts.push(`Type ${entry.bristolScale}`);
     return parts.join(' · ');
   }

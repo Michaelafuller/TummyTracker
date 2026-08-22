@@ -1,9 +1,14 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render } from '@testing-library/react-native';
+import { Alert } from 'react-native';
 
 import type { MealComponent } from '@/db/schema';
-import { getMealComponent, updateMealComponentAndReaggregate } from '@/db/repository';
+import {
+  deleteMealComponentAndReaggregate,
+  getMealComponent,
+  updateMealComponentAndReaggregate,
+} from '@/db/repository';
 import EditComponentScreen from '../[componentId]';
 
 const mockBack = jest.fn();
@@ -15,6 +20,7 @@ jest.mock('expo-router', () => ({
 jest.mock('@/db/repository', () => ({
   getMealComponent: jest.fn(),
   updateMealComponentAndReaggregate: jest.fn(),
+  deleteMealComponentAndReaggregate: jest.fn(),
 }));
 
 // ComponentForm fires an OFF name-search via react-query; give it a client.
@@ -75,5 +81,45 @@ describe('EditComponentScreen', () => {
       expect.objectContaining({ name: 'Peas', servings: 3, sortOrder: 0 }),
     );
     expect(mockBack).toHaveBeenCalled();
+  });
+});
+
+describe('EditComponentScreen delete', () => {
+  beforeEach(() => {
+    // Approximate the confirm Alert as "user taps the destructive button".
+    jest.spyOn(Alert, 'alert').mockImplementation((_title, _message, buttons) => {
+      const destructive = buttons?.find((button) => button.style === 'destructive');
+      destructive?.onPress?.();
+    });
+  });
+
+  afterEach(() => {
+    (Alert.alert as jest.Mock).mockRestore();
+  });
+
+  it('confirming delete calls deleteMealComponentAndReaggregate with the id, then navigates back', async () => {
+    (getMealComponent as jest.Mock).mockResolvedValue(COMPONENT);
+    (deleteMealComponentAndReaggregate as jest.Mock).mockResolvedValue('deleted');
+    const { findByLabelText, getByTestId } = await render(<EditComponentScreen />, { wrapper });
+    await findByLabelText('Component name');
+    await fireEvent.press(getByTestId('component-delete'));
+
+    expect(deleteMealComponentAndReaggregate).toHaveBeenCalledWith('c1');
+    expect(mockBack).toHaveBeenCalled();
+  });
+
+  it('a \'last\' result shows the keep-one-item alert and does not navigate back', async () => {
+    (getMealComponent as jest.Mock).mockResolvedValue(COMPONENT);
+    (deleteMealComponentAndReaggregate as jest.Mock).mockResolvedValue('last');
+    const { findByLabelText, getByTestId } = await render(<EditComponentScreen />, { wrapper });
+    await findByLabelText('Component name');
+    await fireEvent.press(getByTestId('component-delete'));
+
+    expect(deleteMealComponentAndReaggregate).toHaveBeenCalledWith('c1');
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(Alert.alert).toHaveBeenLastCalledWith(
+      'Keep at least one item',
+      'A meal needs one item — delete the whole entry instead.',
+    );
   });
 });

@@ -55,6 +55,30 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   drill-down flows (meal components + tally rows) owed + full re-run owed
   (appId/scheme moved under every flow), after the owner's device
   sequencing (HANDOFF §3).
+- **✅ Fixed 2026-08-21 (on-device verified):** Home Recent list was still
+  truncated after the layout change — root cause (painted-box screenshots +
+  uiautomator): `BottomTabInset` reserved 80dp of dead bottom padding on
+  Android (native tab bar is in-flow; the constant only makes sense for the
+  absolute-positioned **web** bar, where it was ironically 0). Now
+  `Platform.select({ web: 80, default: 0 })` + gap tightening on Home; the
+  rows list grew 77px → 385px (≈3 full rows on a Pixel 5). Goals/Insights/
+  Settings just lose scroll slack. **Next lever if more is wanted:** put
+  "Log bowel movement" + "Log symptom" side by side (≈ +1 row) — owner's call.
+- **✅ Shipped + device-verified 2026-08-21 (evening cycle, survived two host
+  BSODs):** (A) Home fits 5 Recent rows on a Pixel 5 — rows list measured
+  763px (≥ 623 needed); BM + symptom buttons side by side ("💩 BM" / "🤢
+  Symptom"), one-line tagline, 12dp button padding, 16dp section gap.
+  (B) delete a saved meal component — swipe-to-delete on the entry screen
+  (RNGH `ReanimatedSwipeable`, root `GestureHandlerRootView`) + Delete next
+  to Save on the component editor, re-aggregating the parent; refuses the
+  last component. One review remediation (stale list after a delete left
+  one component → render-time `visibleComponents`). Both paths exercised on
+  the Pixel via scratch Maestro flows (swipe reveal, confirm, totals 300→100,
+  section hidden). (C) BM entries labelled "BM" (owner edits ported from the
+  main checkout). **Haptics (`expo-haptics`) owner-approved but deferred to
+  the next native-build cycle** — not in the installed dev build.
+  **Infra finding:** Metro's watcher missed a committed edit — restart Metro
+  after source changes before trusting device runs (`docs/E2E.md`).
 - **Still owed (test sessions):** manual-only items per `docs/E2E.md` (camera
   loop, notification timing, dictation double-text check on both platforms,
   light/dark visual walkthrough, import round-trip content, migration
@@ -62,7 +86,12 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   component-drill-down once it ships (spec in HANDOFF §3).
 - **Carried recommendations (RESULTS 2026-08-16/17):** root-level React error
   boundary around the tab navigator · "Insights" subtitle heading for
-  label-consistency.
+  label-consistency · **dev-mode React warning on launch (seen 2026-08-21 on
+  the Pixel, post-fix relaunch): "Can't perform a React state update on a
+  component that hasn't mounted yet" — non-fatal, no stack captured; repro
+  with LogBox open and read the component stack before fixing (candidates:
+  async setState in a lazily-loaded route; `AppProviders`' store loads are
+  already inside effects).**
 - **Owner on-device checklist (carried):** iOS app icon (needs EAS build), iOS
   time-picker Done-button feel, light-mode look, and the full scan →
   add-next → finish-meal → review → save loop (camera).

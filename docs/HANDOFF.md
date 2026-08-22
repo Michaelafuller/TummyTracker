@@ -1,177 +1,182 @@
-# HANDOFF.md — Execute session: Goals tab — tally drill-down, "Today" rename, long date
+# HANDOFF.md — Execute session: Home fits 5 Recent rows · meal-component delete (swipe + button)
 
 > **Read first:** this file only. `CLAUDE.md` is auto-loaded (§4 rungs, §8
-> conventions). This cycle touches `src/app/(tabs)/goals.tsx` (+ its test),
-> `src/lib/dailyTally.ts` (+ test), `src/lib/datetime.ts` (+ test), and a
-> one-line import swap in `src/lib/journal.ts`. Pure JS/TS — no dependency, no
-> schema change, no config change, no build, no device. Maestro work is a later
-> test session's job (§3).
+> conventions, §9 guardrails). Part A touches `src/app/(tabs)/index.tsx` (+
+> `flows/00-launch.yaml` labels). Part B touches `src/app/_layout.tsx`,
+> `src/app/entry/[id].tsx`, `src/app/entry/component/[componentId].tsx`,
+> `src/features/logging/ComponentForm.tsx`, `src/db/repository.ts`,
+> `jest.config.js`, and tests. **No new dependency** — `react-native-gesture-handler`
+> (~2.31) and `react-native-reanimated` (4.3) are already direct deps and are in
+> the installed dev build. **`expo-haptics` is NOT installed and must NOT be
+> added this cycle** (a native module absent from the dev build crashes the
+> Metro-loaded client); haptics are scheduled for the next native-build cycle.
+> A Metro server on port 8081 serves this worktree to the owner's Pixel — do
+> not start/stop it or run Maestro; the review pass verifies on device.
 
-**Planned 2026-08-21 (Fable plan session), owner-requested.** One cycle, three
-small pieces on one screen — commit them separately.
+**Planned 2026-08-21 (Fable plan session), owner-requested.** Two independent
+parts — commit separately (A, then B in 2–3 commits).
 
 ---
 
-## 0. Context (verified by the plan session — don't re-derive)
+## Part A — Home: fit ≥4 Recent rows, target 5 (Pixel 5)
 
-- `src/app/(tabs)/goals.tsx` renders, top to bottom: a header (`<ThemedText
-  type="subtitle">Goals</ThemedText>` + `todayHeading(now)` = `"Today ·
-  2026-08-21"` via `formatDateInput`), then the **daily tally table** (one
-  `View` row per `NUTRITION_FIELDS` entry; each row is `accessible` with a
-  composite `accessibilityLabel`, shows label + missing-data caveat on the
-  left and total / goal progress on the right), then `<GoalsSection />` (its
-  own `"Goals"` subtitle + per-nutrient goal rows that **expand inline** when
-  tapped — the accordion idiom this cycle reuses), then `<CheckInSection />`.
-- `src/lib/dailyTally.ts` → `tallyDailyNutrition(entries, start, end)`
-  sums food-type parent rows (`FOOD_TYPES`) in `[start, end)`; per-nutrient
-  `total` is null only when no entry had a value; `decimalsFor(field)`
-  rounds calories/sodium to 0 dp, grams to 1 dp. There is **no per-entry
-  contribution data** today — that's the new pure function.
-- `src/lib/datetime.ts` has `formatDateInput` (YYYY-MM-DD), `formatTime12h`
-  (`"3:07 PM"`), `dayBounds`. No long-date formatter exists. `src/lib/journal.ts`
-  has a private `MONTHS_LONG` array (full month names) used only by
-  `formatPeriodLabel`'s month mode.
-- `nutritionUnit(field)` returns `'g'`, `'mg'`, or `''` (calories); the table
-  renders calories totals with no unit (e.g. `"500"`). `NUTRITION_NOUNS`
-  gives lowercase nouns ("fat", "saturated fat").
-- Tests: `src/app/(tabs)/__tests__/goals.test.tsx` mocks
-  `@/features/logging/useEntries`, `@/db/repository`, and
-  `@/features/goals/checkInService`; it does **not** mock `expo-router`
-  (the screen doesn't use it yet) and asserts no heading/date text. It
-  asserts tally totals by bare text (`getByText('450')`), so the table's
-  number nodes must keep rendering as standalone text.
-- Maestro flows assert `"Goals"` (still satisfied by `GoalsSection`'s own
-  subtitle after the rename), `"From 1 entry today"`, `"500"`, `"1 entry
-  missing"`, `"10g / 50g"` — all text nodes that must survive unchanged.
-  None taps a tally row.
+### A.0 Measured budget (uiautomator, real px at 2.75 px/dp, post-`63a7336`)
 
-## 1. The change
+Rows `ScrollView` = **385px**; a row is 107px + 22px gap → 3 rows. Need **494px
+for 4**, **623px for 5**. Hero = title 158 + gap 44 + 2-line subtitle 122;
+buttons 161px each with 44px gaps; section gap 66.
 
-### 1.1 Pure logic — `src/lib/dailyTally.ts`
+### A.1 Changes (`src/app/(tabs)/index.tsx`) — all four, they add up to ≈ +376px
 
-Add, alongside `tallyDailyNutrition` (same food-type + `[start, end)`
-filtering — factor the filter into a shared private helper rather than
-duplicating it):
+1. **"Log bowel movement" + "Log symptom" side by side** in one row
+   (`flexDirection: 'row', gap: Spacing.three`, each `flex: 1`). Visible
+   labels shorten so they don't wrap at half width: `💩 Bowel movement` and
+   `🤢 Symptom`. **Keep the `accessibilityLabel`s exactly** `"Log a bowel
+   movement"` / `"Log a symptom"` — three Maestro flows tap by those. Keep
+   `StyleSheet.flatten` on `<Link asChild>` children (dev-mode array-style
+   crash, see the existing comment). (+205px)
+2. **Subtitle to one line**: `Log what you eat and spot the patterns.` (39
+   chars fits one line at `small`; the current 68-char line wraps to two).
+   Keep `textAlign: 'center'`. (+61px)
+3. **Buttons slightly shorter**: `paddingVertical` `Spacing.three` →
+   `Spacing.two + Spacing.one` (12dp) on both `cta` and `secondaryCta`. (+66px)
+4. **Section gap**: `content.gap` `Spacing.four` → `Spacing.three` (16dp).
+   (+44px)
 
-```ts
-export interface NutrientContribution {
-  id: string;        // logEntry id (for navigation)
-  name: string;
-  loggedAt: number;
-  value: number;     // rounded with decimalsFor(field)
-}
-export interface NutrientMissing { id: string; name: string; loggedAt: number }
-export interface NutrientContributions {
-  contributors: NutrientContribution[];   // value desc, ties by loggedAt asc
-  missing: NutrientMissing[];             // loggedAt asc
-}
-export function nutrientContributions(
-  entries: readonly LogEntry[], field: NutritionField, start: number, end: number,
-): NutrientContributions
-```
+Don't touch `RecentFoodPicker`, the frozen layout, `limit={50}`, or the
+bottom inset (fixed in `63a7336`).
 
-A logged `0` is a contributor (value 0), not missing — same rule as the tally.
+### A.2 Flow label follow-through (mechanical)
 
-Tests (`src/lib/__tests__/dailyTally.test.ts`): contributors sorted by value
-desc with the loggedAt tiebreak; missing split out and in time order;
-non-food and out-of-range entries excluded; a `0` value counts as a
-contributor; **invariant** — the sum of contributors' values equals
-`tallyDailyNutrition(...).nutrients[field].total` for the same inputs
-(within rounding), and `contributors.length + missing.length ===
-entryCount`.
+`flows/00-launch.yaml:11-12` assert the full visible button texts
+(`"💩 Log bowel movement"`, `"🤢 Log symptom"`, full-regex match) — update those
+two lines to the new visible labels. Nothing else in `flows/` references the
+visible text (the other flows use the accessibility labels, unchanged).
 
-### 1.2 Pure logic — `src/lib/datetime.ts`
+### A.3 Test
 
-- Export `MONTHS_LONG` from `datetime.ts` (move the array out of
-  `journal.ts`; `journal.ts` imports it from `@/lib/datetime` and drops its
-  local copy — no behavior change, existing journal tests must stay green).
-- Add `formatLongDate(epochMs: number): string` → local-time
-  `"August 21, 2026"` (full month name, unpadded day, 4-digit year). Use
-  `Date` getters like every other formatter here — **not**
-  `toLocaleDateString` — so output is deterministic in Jest and on Hermes.
+Existing `RecentFoodPicker.test.tsx` is untouched. Add no Home test unless one
+exists (there is none).
 
-Tests (`src/lib/__tests__/datetime.test.ts`, extend the existing file):
-a fixed local date built with `new Date(2026, 7, 21, 12).getTime()` →
-`"August 21, 2026"`; a single-digit day (`new Date(2026, 0, 5, 12)`) →
-`"January 5, 2026"`.
+## Part B — Meal-component delete (swipe on the list + Delete button on the edit screen)
 
-### 1.3 Screen — `src/app/(tabs)/goals.tsx`
+### B.0 Context (verified)
 
-**Rename + date.** The page header's `"Goals"` subtitle becomes `"Today"`;
-the line under it becomes just `formatLongDate(now)` (drop the `"Today · "`
-prefix — redundant under a "Today" heading). Delete `todayHeading`. The
-**tab** label stays `"Goals"` (`src/components/app-tabs.tsx` untouched) and
-`GoalsSection`'s `"Goals"` subtitle is untouched — it is now the one and
-only "Goals" heading on the page, which is the point of the rename.
+- `src/app/entry/[id].tsx` lists a grouped meal's components (gate
+  `componentCount > 1`) as `Pressable` rows → `/entry/component/<id>`; it
+  re-fetches on focus (`useFocusEffect`) and remounts its form on
+  `entry.updatedAt`.
+- `src/app/entry/component/[componentId].tsx` renders `ComponentForm`
+  (`submitLabel="Save changes"`) and calls `updateMealComponentAndReaggregate`.
+- `ComponentForm`'s actions block (~line 250) renders an optional secondary
+  `Pressable` + `PrimaryButton`. `reaggregateEntryPatch` (pure,
+  `src/lib/mealAggregate.ts`) is the re-aggregation contract: nutrition
+  recomputed fresh, tags merged additively.
+- `react-native-reanimated` is already used (`animated-icon.tsx`,
+  `collapsible.tsx`) and its tests pass under `jest-expo`; RNGH is not yet
+  used anywhere and `expo-router` does **not** wrap the root in
+  `GestureHandlerRootView` (only its stack's own gesture view).
+- `jest.config.js` has no `setupFiles`; `react-native-gesture-handler/jestSetup.js`
+  exists.
 
-**Expandable tally rows** (the feature):
-- `const [expandedField, setExpandedField] = useState<NutritionField | null>(null)`
-  — one row open at a time, tapping the open row collapses it (mirror
-  `GoalsSection.toggleExpand`).
-- Each tally row becomes a `Pressable` (keep `accessible` + the existing
-  composite `accessibilityLabel` verbatim; add `accessibilityRole="button"`,
-  `accessibilityState={{ expanded: expandedField === field }}`,
-  `accessibilityHint="Shows the entries that make up this total"`,
-  `testID={`tally-row-${field}`}`). Add a small trailing chevron glyph
-  (`ThemedText` textSecondary, `"›"` collapsed / `"⌄"` expanded) after the
-  progress text so the row reads as tappable; keep the progress text node
-  exactly as today (flows assert its bare text).
-- When `expandedField === field`, render a panel directly beneath that row,
-  inside the table (themed `backgroundSelected`-ish inset, hairline top
-  border), computed via `nutrientContributions(entries, field, start, end)`
-  (memoize on `[entries, expandedField, start, end]` is fine; it's a tiny
-  list):
-  - One sub-row per contributor: left = entry name (`numberOfLines={1}`) with
-    a secondary line `formatTime12h(loggedAt)` (append ` · ${mealSlot}` when
-    set); right = `smallBold` amount `unit ? `${value}${unit}` : String(value)`
-    (matches the table's own unit convention — calories stay unitless).
-  - Then one sub-row per missing entry: name + time on the left, right text
-    `"no data"` in textSecondary — this is the "1 entry missing" caveat made
-    actionable.
-  - Every sub-row is a `Pressable` → `router.push(`/entry/${id}`)` (the
-    existing edit screen is the natural next drill-down; `useRouter` from
-    `expo-router`), `accessibilityRole="button"`,
-    `accessibilityLabel={`Open ${name}`}`, `testID={`tally-item-${id}`}`.
-  - Empty-contributors + empty-missing cannot happen for a rendered table
-    (entryCount > 0), so no empty state is needed in the panel.
-- Don't reorder or restyle anything else on the screen.
+### B.1 Repository — `deleteMealComponentAndReaggregate(componentId): Promise<'deleted' | 'last' | 'missing'>`
 
-### 1.4 Tests — `src/app/(tabs)/__tests__/goals.test.tsx`
+One transaction: read the component (→ `'missing'` if absent); read its
+siblings; if it is the **only** component of the entry return `'last'` and
+change nothing (a meal must keep ≥1 component — the user deletes the whole
+entry instead); otherwise delete the row, re-read the remaining components,
+apply `reaggregateEntryPatch(remaining, entry.tagsJson)` to the parent
+(nutrition fresh; tags stay additive — a deleted component's tags remain on
+the entry by the project's additive-only policy, document this in the
+docstring), set `componentCount = remaining.length`, bump `updatedAt`, return
+`'deleted'`. Entry `name`/`ingredientsText` untouched (user-owned). Note in
+the docstring: when `remaining.length === 1` the entry screen's `> 1` gate
+hides the list — the entry then behaves as a single-item entry editable at
+entry level (deliberate; the single-component wrinkle is a known follow-up).
 
-Add `jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }))`
-with a hoisted `mockPush` (same pattern as `entry/__tests__/[id].test.tsx`).
-New cases:
-- Header renders `"Today"` and a long date matching `/^[A-Z][a-z]+ \d{1,2}, \d{4}$/`
-  (don't pin the real date); and `"Today · "` no longer appears.
-- Tapping `tally-row-fatG` with entries `{name:'Burger', fatG: 30, loggedAt: t1}`,
-  `{name:'Salad', fatG: 5, loggedAt: t0}`, `{name:'Tea', fatG: null}` shows
-  `Burger` before `Salad` (use `getAllByTestId(/tally-item-/)` order or
-  rendered-text order), shows `"30g"` and `"5g"`, and shows `Tea` with
-  `"no data"`.
-- Tapping the open row again hides the panel; tapping a different row
-  swaps which one is open.
-- Pressing `tally-item-<id>` calls `mockPush('/entry/<id>')`.
-- Existing tests must pass unchanged (they assert bare totals like `'450'`).
+### B.2 Root wrapper — `src/app/_layout.tsx`
+
+Wrap the rendered tree in `<GestureHandlerRootView style={{ flex: 1 }}>`
+(outermost, around `ThemeProvider`). Required for RNGH gestures anywhere.
+
+### B.3 Swipe-to-delete on the entry screen — `src/app/entry/[id].tsx`
+
+- Wrap each component row in `ReanimatedSwipeable` (import from
+  `react-native-gesture-handler/ReanimatedSwipeable`), `renderRightActions`
+  → a danger-colored action (`Pressable`, `accessibilityRole="button"`,
+  `accessibilityLabel={`Delete ${component.name}`}`,
+  `testID={`component-delete-${component.id}`}`, label "Delete", background
+  `theme.danger`, full row height, ~88dp wide, `overshootRight={false}`,
+  `friction={2}`). The row itself stays a `Pressable` that navigates.
+- On press: `Alert.alert('Remove from this meal?', `${name} will be removed
+  and the meal's totals recalculated.`, [Cancel, Remove(destructive)])`. On
+  confirm: `await deleteMealComponentAndReaggregate(id)`; if `'last'` →
+  `Alert.alert('Keep at least one item', 'A meal needs one item — delete the
+  whole entry instead.')`; on `'deleted'` → re-run the same loader the focus
+  effect uses (extract `loadEntry()` into a `useCallback` used by both the
+  focus effect and the post-delete refresh) so the row disappears and the
+  re-aggregated totals show (the `updatedAt` key remount already handles the
+  form).
+- Theme: `theme.danger` exists (used for the watch banner).
+
+### B.4 Delete button on the component edit screen
+
+- `ComponentForm` gains `onDelete?: () => void | Promise<void>` and
+  `deleteLabel?: string` (default `'Delete'`). When `onDelete` is provided,
+  the actions block renders a **row** `[Delete] [Save changes]` with
+  `justifyContent: 'space-between'`, both buttons `flex: 1`, `gap:
+  Spacing.three`: Delete is an outline button with `borderColor:
+  theme.danger` and danger-colored label, `accessibilityRole="button"`,
+  `accessibilityLabel={deleteLabel}`, `testID="component-delete"`; Save stays
+  the `PrimaryButton`. Without `onDelete` the block renders exactly as today
+  (the builder's "Add & scan next" / "Finish meal" path must not change).
+- `src/app/entry/component/[componentId].tsx`: pass `onDelete` → same
+  confirm `Alert` → `deleteMealComponentAndReaggregate(component.id)` →
+  `'deleted'` → `router.back()`; `'last'` → the keep-one alert. Guard with the
+  existing `submitting` state.
+
+### B.5 Tests
+
+- `jest.config.js`: add `setupFiles: ['./node_modules/react-native-gesture-handler/jestSetup.js']`
+  (keep the existing preset/mappers). If `ReanimatedSwipeable` still fails to
+  render under Jest after that, mock `react-native-gesture-handler/ReanimatedSwipeable`
+  **in the affected test file** with a component that renders `children` and
+  `renderRightActions()` side by side — never disable a rule or skip a test.
+- `[id].test.tsx`: pressing `component-delete-<id>` → `Alert.alert` (mock
+  `Alert.alert` to invoke the destructive button) → repository called with
+  the id → entry + components re-fetched. A `'last'` result shows the keep-one
+  alert and does not refetch.
+- `[componentId].test.tsx`: Delete button present only on the edit screen,
+  confirm → repository → `router.back()`; `'last'` → alert, no back.
+- `ComponentForm.test.tsx`: no Delete button without `onDelete`; with it,
+  both buttons render and Delete calls the handler.
+- A pure test is owed if you add any pure helper; `reaggregateEntryPatch` is
+  already covered.
+
+### B.6 Not this cycle (owner-approved dependency, needs a native build)
+
+`expo-haptics` — `Haptics.impactAsync(ImpactFeedbackStyle.Medium)` when the
+swipe action reveals / on delete, `notificationAsync(Success)` on save. Add it
+in the next native-build cycle (together with the pending iOS build), then
+wire it here. Do not import it now.
 
 ## 2. Definition of done
 
-- `npm run typecheck` && `npm run lint` && `npm test` — green, run them.
-- No `// @ts-ignore`, no lint disables, no new dependency.
-- Suggested commits:
-  1. `feat(goals): add nutrientContributions + formatLongDate pure helpers`
-  2. `feat(goals): rename tally header to Today with a long date`
-  3. `feat(goals): expand a tally row to list the entries behind its total`
-- End with an execute summary: per-commit contents, file list, rung results
-  (suite/test counts), deviations, punts.
+- `npm run typecheck` && `npm run lint` && `npm test` green — run them.
+- No `// @ts-ignore`, no lint disables, **no new dependency**.
+- Commits (imperative, scoped): `feat(home): fit five Recent rows — side-by-side
+  log buttons, one-line tagline, tighter spacing` · `feat(logging): delete a
+  saved meal component with re-aggregation (repository + root gesture view)` ·
+  `feat(logging): swipe-to-delete on the entry screen + Delete next to Save on
+  the component editor`.
+- Execute summary: per-commit contents, file list, rung counts, any Jest
+  mocking needed for the swipeable, deviations.
 
-## 3. Not this session (for the test-plan session)
+## 3. After this (review pass + test sessions)
 
-- Maestro: extend `flows/goals-tally.yaml` — after the tally renders, tap
-  `tally-row-calories`, assert `"Tally Test Meal"` and `"500"` appear in the
-  panel (note `"500"` now also exists in the row total — prefer the
-  `tally-item-*` id or the `"Open Tally Test Meal"` label), then tap
-  `tally-row-fatG` and assert `"no data"`. Assert `"Today"` and a
-  `".*, 2026"`-style date once. `flows/nav-tabs.yaml:27`'s comment ("Goals
-  subtitle renders unconditionally (goals.tsx header)") is now satisfied by
-  `GoalsSection`'s subtitle instead — update the comment, not the assertion.
-- ACCEPTANCE.md rows for the three pieces.
+Fable re-measures Home on the Pixel (target: rows `ScrollView` ≥ 623px) and
+exercises a swipe-delete on a seeded 2-component meal. Test session: extend
+`flows/01d-browse-edit.yaml` or the planned `j-component-drilldown.yaml` with
+`swipe` on `component-row-<id>` → tap `"Delete <name>"` → confirm → row gone
+and totals updated; plus the component-screen Delete path; `00-launch.yaml`
+labels re-verified.

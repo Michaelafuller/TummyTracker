@@ -1,4 +1,5 @@
 appId: com.tummytracker.app.dev
+tags: [goals]
 # Nav — all five bottom tabs reachable without crash; each screen renders
 # its landmark content. (Goals tab added 2026-08-15 cycle — this flow was
 # stale at 4 tabs until the 2026-08-16 test-backfill verification pass.)
@@ -24,7 +25,8 @@ appId: com.tummytracker.app.dev
 - tapOn:
     id: "tab-goals"
 - waitForAnimationToEnd
-# "Goals" subtitle renders unconditionally (goals.tsx header)
+# "Goals" subtitle now comes from GoalsSection's heading, not the page
+# header (goals.tsx header reads "Today" + long date as of 2026-08-21).
 - assertVisible: "Goals"
 
 - tapOn:

@@ -1,12 +1,19 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import type { LogEntry, MealComponent } from '@/db/schema';
-import { deleteLogEntry, getLogEntry, getMealComponents, updateLogEntry } from '@/db/repository';
+import {
+  deleteLogEntry,
+  deleteMealComponentAndReaggregate,
+  getLogEntry,
+  getMealComponents,
+  updateLogEntry,
+} from '@/db/repository';
 import { BmForm } from '@/features/bm/BmForm';
 import { bmEntryToFormState, type BuiltBmEntry } from '@/features/bm/formModel';
 import type { BuiltLogEntry } from '@/features/logging/formModel';
@@ -31,24 +38,30 @@ export default function EditEntryScreen() {
   const watchlistItems = useWatchlistStore((state) => state.items);
   const watchedMatches = entry ? findWatchedTags(entry.tagsJson, watchlistItems) : [];
 
+  // Shared by the focus effect below and the post-delete refresh
+  // (handleDeleteComponent) — a new `entry` object reference re-triggers the
+  // components effect below and remounts the form via its `key={entry.updatedAt}`
+  // (HANDOFF meal-component drill-down / meal-component delete).
+  const loadEntry = useCallback(async () => {
+    const found = await getLogEntry(id);
+    setEntry(found ?? null);
+  }, [id]);
+
   // Re-fetch on every focus (not just mount) so returning from the component
-  // edit screen shows fresh data — a new `entry` object reference also
-  // re-triggers the components effect below and remounts the form via its
-  // `key={entry.updatedAt}` (HANDOFF meal-component drill-down).
+  // edit screen shows fresh data.
   useFocusEffect(
     useCallback(() => {
-      let active = true;
-      getLogEntry(id).then((found) => {
-        if (active) setEntry(found ?? null);
-      });
-      return () => {
-        active = false;
-      };
-    }, [id]),
+      loadEntry();
+    }, [loadEntry]),
   );
 
   // A grouped meal (componentCount > 1) has child rows worth showing —
   // tapping one opens its edit screen (HANDOFF meal-component drill-down).
+  // The gate below leaves `components` untouched when it fails (no entry,
+  // null count, or count <= 1) — `visibleComponents` below re-derives from
+  // `entry` on every render so a delete that leaves one component hides the
+  // "In this meal" section immediately, without needing a setState here that
+  // would just cascade another render.
   useEffect(() => {
     if (!entry || entry.componentCount == null || entry.componentCount <= 1) return;
     let active = true;
@@ -59,6 +72,9 @@ export default function EditEntryScreen() {
       active = false;
     };
   }, [entry]);
+
+  const visibleComponents =
+    entry && entry.componentCount != null && entry.componentCount > 1 ? components : [];
 
   async function handleSubmit(updated: BuiltLogEntry | BuiltBmEntry | BuiltSymptomEntry) {
     setSubmitting(true);
@@ -82,6 +98,31 @@ export default function EditEntryScreen() {
         },
       },
     ]);
+  }
+
+  function handleDeleteComponent(component: MealComponent) {
+    Alert.alert(
+      'Remove from this meal?',
+      `${component.name} will be removed and the meal's totals recalculated.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            const result = await deleteMealComponentAndReaggregate(component.id);
+            if (result === 'last') {
+              Alert.alert(
+                'Keep at least one item',
+                'A meal needs one item — delete the whole entry instead.',
+              );
+              return;
+            }
+            await loadEntry();
+          },
+        },
+      ],
+    );
   }
 
   if (entry === undefined) {
@@ -144,25 +185,41 @@ export default function EditEntryScreen() {
           submitting={submitting}
         />
       )}
-      {components.length > 0 ? (
+      {visibleComponents.length > 0 ? (
         <View style={styles.componentSection}>
           <ThemedText type="smallBold">In this meal</ThemedText>
           <View style={styles.componentList}>
-            {components.map((component) => (
-              <Pressable
+            {visibleComponents.map((component) => (
+              <ReanimatedSwipeable
                 key={component.id}
-                accessibilityRole="button"
-                accessibilityLabel={`Edit ${component.name}`}
-                testID={`component-row-${component.id}`}
-                onPress={() => router.push(`/entry/component/${component.id}`)}
-                style={[styles.componentRow, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
-                <ThemedText type="small" numberOfLines={1} style={styles.componentRowText}>
-                  {`${component.name} · ${component.servings}× serving${component.calories != null ? ` · ${Math.round(component.calories * component.servings)} kcal` : ''}`}
-                </ThemedText>
-                <ThemedText type="small" themeColor="textSecondary">
-                  ›
-                </ThemedText>
-              </Pressable>
+                overshootRight={false}
+                friction={2}
+                renderRightActions={() => (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Delete ${component.name}`}
+                    testID={`component-delete-${component.id}`}
+                    onPress={() => handleDeleteComponent(component)}
+                    style={[styles.deleteAction, { backgroundColor: theme.danger }]}>
+                    <ThemedText style={[styles.deleteActionLabel, { color: theme.backgroundElement }]}>
+                      Delete
+                    </ThemedText>
+                  </Pressable>
+                )}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Edit ${component.name}`}
+                  testID={`component-row-${component.id}`}
+                  onPress={() => router.push(`/entry/component/${component.id}`)}
+                  style={[styles.componentRow, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+                  <ThemedText type="small" numberOfLines={1} style={styles.componentRowText}>
+                    {`${component.name} · ${component.servings}× serving${component.calories != null ? ` · ${Math.round(component.calories * component.servings)} kcal` : ''}`}
+                  </ThemedText>
+                  <ThemedText type="small" themeColor="textSecondary">
+                    ›
+                  </ThemedText>
+                </Pressable>
+              </ReanimatedSwipeable>
             ))}
           </View>
         </View>
@@ -217,6 +274,16 @@ const styles = StyleSheet.create({
   },
   componentRowText: {
     flex: 1,
+  },
+  deleteAction: {
+    width: 88,
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: Spacing.three,
+  },
+  deleteActionLabel: {
+    fontWeight: '600',
   },
   watchBanner: {
     gap: Spacing.half,

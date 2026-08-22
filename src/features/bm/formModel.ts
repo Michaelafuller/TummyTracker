@@ -10,7 +10,7 @@ import { formatDateInput, formatTimeInput, parseDateTime } from '@/lib/datetime'
 import { validateNotes } from '@/lib/validation';
 import { type BristolValue, isBristolValue } from './bristol';
 
-export const BM_ENTRY_NAME = 'Bowel movement';
+export const BM_ENTRY_NAME = 'BM';
 
 export interface BmFormState {
   dateInput: string;

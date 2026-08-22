@@ -80,5 +80,10 @@ export const Spacing = {
   six: 64,
 } as const;
 
-export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
+/** Extra bottom padding tab screens need UNDER the tab bar. Only the web tab
+ *  bar (app-tabs.web.tsx) is position:absolute and overlays content; native
+ *  bottom tabs are in-flow, so the screen area already stops above the bar
+ *  (verified on-device 2026-08-21 — this used to reserve 80dp of dead space
+ *  on Android and starve Home's Recent list). */
+export const BottomTabInset = Platform.select({ web: 80, default: 0 });
 export const MaxContentWidth = 800;
