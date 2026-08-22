@@ -57,6 +57,11 @@ export default function EditEntryScreen() {
 
   // A grouped meal (componentCount > 1) has child rows worth showing —
   // tapping one opens its edit screen (HANDOFF meal-component drill-down).
+  // The gate below leaves `components` untouched when it fails (no entry,
+  // null count, or count <= 1) — `visibleComponents` below re-derives from
+  // `entry` on every render so a delete that leaves one component hides the
+  // "In this meal" section immediately, without needing a setState here that
+  // would just cascade another render.
   useEffect(() => {
     if (!entry || entry.componentCount == null || entry.componentCount <= 1) return;
     let active = true;
@@ -67,6 +72,9 @@ export default function EditEntryScreen() {
       active = false;
     };
   }, [entry]);
+
+  const visibleComponents =
+    entry && entry.componentCount != null && entry.componentCount > 1 ? components : [];
 
   async function handleSubmit(updated: BuiltLogEntry | BuiltBmEntry | BuiltSymptomEntry) {
     setSubmitting(true);
@@ -177,11 +185,11 @@ export default function EditEntryScreen() {
           submitting={submitting}
         />
       )}
-      {components.length > 0 ? (
+      {visibleComponents.length > 0 ? (
         <View style={styles.componentSection}>
           <ThemedText type="smallBold">In this meal</ThemedText>
           <View style={styles.componentList}>
-            {components.map((component) => (
+            {visibleComponents.map((component) => (
               <ReanimatedSwipeable
                 key={component.id}
                 overshootRight={false}

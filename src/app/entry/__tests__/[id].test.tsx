@@ -1,4 +1,4 @@
-import { fireEvent, render } from '@testing-library/react-native';
+import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { useEffect as mockUseEffect } from 'react';
 import { Alert } from 'react-native';
 
@@ -162,6 +162,24 @@ describe('EditEntryScreen swipe-to-delete component', () => {
       'Keep at least one item',
       'A meal needs one item — delete the whole entry instead.',
     );
+  });
+
+  it('clears the "In this meal" list once a delete leaves the entry with one component', async () => {
+    (getLogEntry as jest.Mock)
+      .mockResolvedValueOnce({ ...BASE_ENTRY, componentCount: 2 })
+      .mockResolvedValueOnce({ ...BASE_ENTRY, componentCount: 1 });
+    (getMealComponents as jest.Mock).mockResolvedValue([COMPONENT]);
+    (deleteMealComponentAndReaggregate as jest.Mock).mockResolvedValue('deleted');
+
+    const { findByTestId, queryByText, queryByTestId } = await render(<EditEntryScreen />);
+    expect(await findByTestId('component-delete-c1')).toBeTruthy();
+
+    await fireEvent.press(await findByTestId('component-delete-c1'));
+
+    await waitFor(() => {
+      expect(queryByText('In this meal')).toBeNull();
+    });
+    expect(queryByTestId('component-row-c1')).toBeNull();
   });
 });
 
