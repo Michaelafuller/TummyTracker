@@ -344,7 +344,7 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
       lists both `com.tummytracker.app.dev` and `com.tummytracker.app`, and the
       `.dev` package reports `DEBUGGABLE`. · manual — observed 2026-08-21 by the
       test-plan session over USB
-- [ ] `_helpers/reconnect-dev-client.yaml` reconnects the **dev-variant** client
+- [x] `_helpers/reconnect-dev-client.yaml` reconnects the **dev-variant** client
       to Metro via `tummytracker-dev://…` after `clearState` and after a plain
       relaunch. · auto `flows/00-launch.yaml` + `flows/checkin-persistence.yaml`
 - [ ] Maestro `clearState` wipes only the `.dev` app — the real app's journal is
@@ -357,16 +357,16 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
       intact. · manual (owner, EAS)
 
 ### Goals tab — tally drill-down, "Today" header, long date
-- [ ] Header reads "Today" with a long date ("August 21, 2026" style), and the
+- [x] Header reads "Today" with a long date ("August 21, 2026" style), and the
       Goals section below is the only "Goals" heading. · auto
       `flows/goals-tally.yaml`
-- [ ] Tapping a tally row expands the entries behind its total (name, amount,
+- [x] Tapping a tally row expands the entries behind its total (name, amount,
       time); tapping again collapses it. · auto `flows/goals-tally.yaml`
-- [ ] Entries with no value for that nutrient are listed as "no data". · auto
+- [x] Entries with no value for that nutrient are listed as "no data". · auto
       `flows/goals-tally.yaml`
-- [ ] Tapping a listed entry opens its edit screen. · auto
+- [x] Tapping a listed entry opens its edit screen. · auto
       `flows/goals-tally.yaml`
-- [ ] Goal editor, cap notice, and check-in persistence still pass on the new
+- [x] Goal editor, cap notice, and check-in persistence still pass on the new
       header/row structure. · auto `flows/goal-editor.yaml`,
       `flows/checkin-persistence.yaml`, `flows/nav-tabs.yaml`
 
