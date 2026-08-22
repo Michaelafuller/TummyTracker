@@ -120,6 +120,15 @@ describe('buildMealEntry', () => {
     expect(buildMealEntry(baseState({ notes: ' tasty ' }), [draft('Peas')]).entry?.notes).toBe('tasty');
   });
 
+  it('writes the servings-multiplied aggregate onto the entry, not the raw per-serving value', () => {
+    // Discovery hardening (2026-08-21 plan session): pins that buildMealEntry's
+    // aggregate goes through aggregateComponents' value × servings multiply,
+    // not just a straight sum of the per-serving fields.
+    const components = [draft('Peas', { fatG: 1, servings: 2 })];
+    const result = buildMealEntry(baseState(), components);
+    expect(result.entry?.fatG).toBe(2);
+  });
+
   it('allows a null sentiment (set later)', () => {
     const result = buildMealEntry(baseState({ sentiment: null }), [draft('Peas')]);
     expect(result.valid).toBe(true);

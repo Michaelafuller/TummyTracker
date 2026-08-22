@@ -2,6 +2,8 @@ import {
   aggregateComponents,
   defaultMealName,
   mealIngredientsText,
+  reaggregateEntryPatch,
+  type MealComponent,
   type MealComponentDraft,
   unionComponentTags,
 } from '../mealAggregate';
@@ -22,6 +24,29 @@ function draft(overrides: Partial<MealComponentDraft> & { name: string }): MealC
     ingredientsText: null,
     tagsJson: null,
     sortOrder: 0,
+    ...overrides,
+  };
+}
+
+function savedComponent(overrides: Partial<MealComponent> & { name: string }): MealComponent {
+  return {
+    id: 'c1',
+    entryId: 'e1',
+    barcode: null,
+    servings: 1,
+    servingG: null,
+    calories: null,
+    fatG: null,
+    saturatedFatG: null,
+    carbsG: null,
+    proteinG: null,
+    fiberG: null,
+    sugarG: null,
+    sodiumMg: null,
+    ingredientsText: null,
+    tagsJson: null,
+    sortOrder: 0,
+    createdAt: 1,
     ...overrides,
   };
 }
@@ -123,6 +148,33 @@ describe('mealIngredientsText', () => {
       draft({ name: 'Eggs', ingredientsText: 'Eggs' }),
     ];
     expect(mealIngredientsText(components)).toBe('Tofu, Eggs');
+  });
+});
+
+describe('reaggregateEntryPatch', () => {
+  it('recomputes nutrition fresh so an edit that lowers a value lowers the total (not additive)', () => {
+    const before = reaggregateEntryPatch([savedComponent({ name: 'Peas', fatG: 10 })], null);
+    const after = reaggregateEntryPatch([savedComponent({ name: 'Peas', fatG: 3 })], null);
+    expect(before.nutrition.fatG).toBe(10);
+    expect(after.nutrition.fatG).toBe(3);
+  });
+
+  it('still applies the servings multiplier when aggregating', () => {
+    const patch = reaggregateEntryPatch([savedComponent({ name: 'Peas', calories: 100, servings: 2 })], null);
+    expect(patch.nutrition.calories).toBe(200);
+  });
+
+  it('additively merges tags — a tag the edited component no longer carries survives', () => {
+    const components = [savedComponent({ name: 'Peas', tagsJson: null })];
+    const existingEntryTagsJson = JSON.stringify(['shellfish']);
+    const patch = reaggregateEntryPatch(components, existingEntryTagsJson);
+    const tags = JSON.parse(patch.tagsJson as string) as string[];
+    expect(tags).toEqual(['shellfish', 'peas']);
+  });
+
+  it('returns null tagsJson when there is nothing to union', () => {
+    const patch = reaggregateEntryPatch([], null);
+    expect(patch.tagsJson).toBeNull();
   });
 });
 

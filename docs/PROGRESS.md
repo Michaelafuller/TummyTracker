@@ -22,88 +22,46 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
 
 ## Status
 
-- **Everything through the 2026-07-03 cycle is on `main`** and running on the Pixel 5.
-  (Manual & barcode entry, meal builder, browse/edit with calendar, reminders, BM +
-  symptom logging, insights v2, serving-size scaling, backup/restore, 4-tab nav,
-  offline mode, OFF search-by-name + unbranded re-ranking.)
-- **Health:** all three rungs + `bundle:check` green at `main` HEAD. Maestro full
-  regression 2026-07-03: **18/19** (best-ever clean run); the one red
-  (`e-temporal-insights`) is a classified flow-bug with the fix applied — re-run
-  pending, not an app defect (`docs/RESULTS.md`).
-- **Five cycles complete 2026-08-15**: ingredient-capture hardening ·
-  Search-a-licious migration & tag backfill · trigger watchlist ·
-  Goals tab part 1 (daily tally, new 5th tab) · **Goals part 2 (threshold
-  goals + daily check-in, migration 0008)**. Plus the cleared-name search-reset
-  bugfix. Rungs green at HEAD (56 suites / 479 tests) + `bundle:check`.
-- **Android adaptive icon layers — ✅ fixed 2026-08-15:** owner supplied the
-  transparent foreground export; all three layers re-processed (foreground +
-  monochrome padded into the ~62% launcher safe zone at 1024², background made
-  full-bleed). `notification-icon.png` verified as a proper white-alpha
-  silhouette — no change needed. **Icon changes are baked at build time — the
-  next EAS build is when this becomes visible on device.**
-- **✅ Device-verified 2026-08-15 (owner, EAS preview build):** new search API
-  works great on the Pixel — search smoke passed; migration 0007 + backfill ran
-  against the real install without incident (implied by a working post-migration
-  build; explicit tag spot-check still worthwhile).
-- **Next up (planned 2026-08-16, specced in `docs/HANDOFF.md` — four cycles):**
-  1. **Check-in persistence fix** — owner-reported: the daily check-in fires
-     once then dies with the toggle reading OFF. Confirmed real statefulness
-     bug: "enabled" lives only as the pending OS notification, which firing
-     consumes, so the re-arm gate always reads disabled afterward. Fix:
-     persist enabled/hour/minute in prefs + schedule a 7-day one-shot
-     horizon. Also resolves the old cap-only-goals toggle quirk.
-  2. **Dictation double-text fix** — owner-reported: speech-to-text inserts
-     the dictated phrase twice. Confirmed controlled-TextInput vs. iOS
-     marked-text issue; single-point fix in `ThemedTextInput`.
-  3. **Light-theme palette pass** — palette-driven navigation themes (the
-     real "black text" source was stock react-navigation themes), shared
-     `PrimaryButton` on `primary` tokens (replacing ~10 inverted black/white
-     fills), new violet `accent` tokens + plum light `textSecondary`
-     (brings the purples to light mode; all pairs computed ≥7:1).
-  4. **Splash/notification blues → palette** — splash to `#0D1C20` (matches
-     adaptive icon bg; white logo silhouette sits on it), notifications
-     plugin to `#5BC0BE`, dead `AnimatedIcon` template leftovers deleted.
-     `app.json` changes are baked at build time — **visible on the next EAS
-     preview build**, which also delivers the pending icon-layer fix.
-- **Still owed (test sessions):** targeted Maestro re-run of
-  `ab-satfat-ingredients` + `01b-manual-entry` · new Maestro flows: watchlist
-  loop, Goals tally, goal editor (set floor → progress shows → remove), cap
-  notice on review · spot-checks: pre-hardening entry gained parenthetical
-  tags; cleared-name search fix · **live check-in test (device only —
-  re-spec after the persistence fix ships; re-arm becomes horizon-based)** ·
-  migration 0008 against the real DB · after the theme cycle: dictation
-  manual check (iOS + Android voice typing), light/dark visual walkthrough,
-  full Maestro re-run (shared-infra rule).
-- **⛔ Device loop blocked (found 2026-08-16, diagnosis in `docs/RESULTS.md`):**
-  the Pixel's installed APK is the 2026-08-15 EAS **preview** build — a
-  release build with its JS baked in; it can never load from Metro, so
-  "Metro-into-dev-client" is impossible until the owner installs a
-  **development-profile** build (`eas build --profile development --platform
-  android`; export an in-app backup first per the signing caveat, though
-  same-key EAS builds should update in place). That build also delivers the
-  pending splash/notification/icon changes. Test-execute 2026-08-16 authored
-  all backfill flows (Phases 1–2 complete, committed) and correctly refused
-  to run the suite against the stale bundle — only the run itself (Phases
-  3–4) is owed once the dev build is on.
+- **Everything through the 2026-08-16 cycles is on `main`** and running on the
+  Pixel 5 via the development-profile dev client (installed 2026-08-16).
+  Feature surface: manual & barcode entry, meal builder, browse/edit with
+  calendar, reminders, BM + symptom logging, insights v2, serving-size scaling,
+  backup/restore, 5-tab nav (incl. Goals), offline mode, OFF Search-a-licious
+  search, trigger watchlist, threshold goals + daily check-in.
+- **Health:** rungs green at HEAD (58 suites / 505 tests) + `bundle:check`.
+  **Maestro full regression 2026-08-16/17: 23/23 — the new clean baseline**
+  (`docs/RESULTS.md`). The dev-client reconnect gap is handled by flow infra
+  (`flows/_helpers/reconnect-dev-client.yaml` — hardcodes Metro port 8084;
+  update per session).
+- **✅ Shipped this cycle (planned + executed + reviewed 2026-08-21):**
+  meal-component drill-down — tap a saved meal's component row → component
+  edit screen (full nutrition visible) → save re-aggregates the parent
+  entry (fresh nutrition, additive tags). Rungs green (59 suites / 519
+  tests), Fable-reviewed, no remediations. Maestro flow owed (HANDOFF §3).
+  Discovery result: serving-multiply (nutrition × servings) **verified
+  correct** across builder → save → display → tally; no defect found.
+- **Still owed (test sessions):** manual-only items per `docs/E2E.md` (camera
+  loop, notification timing, dictation double-text check on both platforms,
+  light/dark visual walkthrough, import round-trip content, migration
+  spot-checks 0006–0008 against the real DB) · flow for the new
+  component-drill-down once it ships (spec in HANDOFF §3).
+- **Carried recommendations (RESULTS 2026-08-16/17):** root-level React error
+  boundary around the tab navigator · "Insights" subtitle heading for
+  label-consistency.
 - **Owner on-device checklist (carried):** iOS app icon (needs EAS build), iOS
-  time-picker Done-button feel, light-mode look, migration 0006 against a real
-  database, and the full scan → add-next → finish-meal → review → save loop (camera).
+  time-picker Done-button feel, light-mode look, and the full scan →
+  add-next → finish-meal → review → save loop (camera).
 
 ### Shipped last cycle (overwrite each plan cycle; full history = `git log`)
 
-2026-08-15 (five cycles, planned Fable 5, executed Sonnet 5 — details in `git log`):
-- **Ingredient-capture hardening** — parenthetical sub-ingredients captured as
-  tags; additive-only tag policy (a removed word never deletes a tag).
-- **Search-a-licious migration + historical tag backfill** — English
-  generic-first search off the dead legacy endpoint; run-once additive
-  re-derive over pre-hardening rows.
-- **Trigger watchlist / elimination mode** (migration 0007) —
-  prefix-at-word-boundary matching, clean-streak stats, quick-watch from
-  findings, non-blocking flags on entry view + review.
-- **Goals tab parts 1+2** (migration 0008) — daily tally with missing-data
-  honesty; floor/cap thresholds; one-shot self-re-arming daily check-in
-  (floors notify, caps alert in-app at save, never gating the save).
-- **Fix:** clearing the Name field resets the search session.
+2026-08-16/17 (planned 2026-08-16, executed + test-executed through 2026-08-17):
+- **Check-in persistence fix** — enabled/hour/minute persisted in prefs +
+  7-day one-shot horizon re-arm (the fired-notification-consumes-state bug).
+- **Dictation double-text fix** in `ThemedTextInput` (device check still owed).
+- **Light-theme palette pass** + **splash/notification colors → palette**
+  (visible with the next EAS build).
+- **Test-execute: 23/23 Maestro baseline** — dev-client reconnect helper,
+  three flow-bug fixes, ACCEPTANCE.md flips (23 items). See `docs/RESULTS.md`.
 
 ---
 
@@ -139,7 +97,7 @@ Sentiment trend chart, confidence labeling, and ingredient-pair analysis **✅ s
 | **Nutrient threshold goals + daily check-in** | Floors (≥) and caps (≤) per nutrient, one daily check-in | M | **✅ shipped 2026-08-15** (migration 0008) — floors notify / caps alert at save; **persistence bug found 2026-08-16, fix planned (see Status)**; follow-on: cap alert on the entry-**edit** path |
 | **Per-food / ingredient drill-down** | Tap a finding → every instance + outcomes | S–M | no dep; natural follow-on to insights v2 |
 | **BM-regularity + intake charts** | Complete the trends story beyond sentiment | S–M | reuse the zero-dep chart components |
-| **Meal-component editing after save** | v1 meal builder saves components immutably; edit/remove with re-aggregation is the obvious next ask | S–M | builds on migration 0006 |
+| **Meal-component editing after save** | v1 meal builder saves components immutably; edit/remove with re-aggregation is the obvious next ask | S–M | **✅ shipped 2026-08-21** (edit + re-aggregate; removal + single-component-meal drill-down deferred) — Maestro flow owed |
 | **Doctor / dietitian PDF report** | Share a date range + insights with a pro | M | ⚠ `expo-print` |
 
 ## Tier 3 — Quality of life
@@ -161,7 +119,7 @@ hardcoded Sunday, default meal slot by time of day).
 
 | Item | Why it matters | Effort | Notes |
 |------|----------------|:--:|------|
-| **Build-variant split (dev vs. real app)** | The dev client and preview build share `com.tummytracker.app`, so they displace each other — and Maestro's `clearState` wipes whichever app holds the identity, i.e. the owner's real journal (bit us 2026-08-16; backup existed). A `com.tummytracker.app.dev` variant makes both coexist and walls automation off from real data permanently. | S–M | **Owner-approved 2026-08-16, top of next plan cycle.** Expo-recommended pattern: convert `app.json` → `app.config.js` reading `APP_VARIANT` from the `eas.json` development profile; switch `android.package` + display name ("TummyTracker (dev)"), optionally badge the icon; suffix the deep-link scheme; update `flows/*` `appId` to the dev variant. Config change ⇒ `bundle:check` + one new EAS dev build. iOS later via `bundleIdentifier`. |
+| **Build-variant split (dev vs. real app)** | The dev client and preview build share `com.tummytracker.app`, so they displace each other — and Maestro's `clearState` wipes whichever app holds the identity, i.e. the owner's real journal (bit us 2026-08-16; backup existed). A `com.tummytracker.app.dev` variant makes both coexist and walls automation off from real data permanently. | S–M | **🔨 in flight 2026-08-21** — specced in `docs/HANDOFF.md` (app.config.ts + unit-tested resolver, eas.json dev env, dev scheme, flow appIds; icon badge skipped). Config change ⇒ `bundle:check` + one new EAS dev build; owner sequencing in HANDOFF §3. iOS covered via `bundleIdentifier` in the same resolver. |
 
 Also: iOS pass (BUILD_PLAN "iOS crossover"; the icon, picker, and light-mode blockers
 are all now addressed) · **finish the Maestro backlog** (see Status + RESULTS.md for
