@@ -71,7 +71,12 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   component-drill-down once it ships (spec in HANDOFF §3).
 - **Carried recommendations (RESULTS 2026-08-16/17):** root-level React error
   boundary around the tab navigator · "Insights" subtitle heading for
-  label-consistency.
+  label-consistency · **dev-mode React warning on launch (seen 2026-08-21 on
+  the Pixel, post-fix relaunch): "Can't perform a React state update on a
+  component that hasn't mounted yet" — non-fatal, no stack captured; repro
+  with LogBox open and read the component stack before fixing (candidates:
+  async setState in a lazily-loaded route; `AppProviders`' store loads are
+  already inside effects).**
 - **Owner on-device checklist (carried):** iOS app icon (needs EAS build), iOS
   time-picker Done-button feel, light-mode look, and the full scan →
   add-next → finish-meal → review → save loop (camera).
