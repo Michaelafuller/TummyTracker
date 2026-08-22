@@ -1,94 +1,182 @@
-# HANDOFF.md — Execute session: Home "Recent" viewport budget (bottom-inset fix)
+# HANDOFF.md — Execute session: Home fits 5 Recent rows · meal-component delete (swipe + button)
 
 > **Read first:** this file only. `CLAUDE.md` is auto-loaded (§4 rungs, §8
-> conventions). Touches `src/constants/theme.ts`, `src/app/(tabs)/index.tsx`,
-> and a new tiny test. Pure JS/TS — no dependency, no schema, no config, no
-> build. The device check is done by the review pass (Fable has the Pixel +
-> Metro on 8081), not by you.
+> conventions, §9 guardrails). Part A touches `src/app/(tabs)/index.tsx` (+
+> `flows/00-launch.yaml` labels). Part B touches `src/app/_layout.tsx`,
+> `src/app/entry/[id].tsx`, `src/app/entry/component/[componentId].tsx`,
+> `src/features/logging/ComponentForm.tsx`, `src/db/repository.ts`,
+> `jest.config.js`, and tests. **No new dependency** — `react-native-gesture-handler`
+> (~2.31) and `react-native-reanimated` (4.3) are already direct deps and are in
+> the installed dev build. **`expo-haptics` is NOT installed and must NOT be
+> added this cycle** (a native module absent from the dev build crashes the
+> Metro-loaded client); haptics are scheduled for the next native-build cycle.
+> A Metro server on port 8081 serves this worktree to the owner's Pixel — do
+> not start/stop it or run Maestro; the review pass verifies on device.
 
-**Planned 2026-08-21 (Fable plan session) from an on-device finding.** One
-small cycle, one commit (two if you prefer test separate).
+**Planned 2026-08-21 (Fable plan session), owner-requested.** Two independent
+parts — commit separately (A, then B in 2–3 commits).
 
 ---
 
-## 0. The finding (verified on the Pixel 5 — don't re-derive)
+## Part A — Home: fit ≥4 Recent rows, target 5 (Pixel 5)
 
-The owner reported that the Home tab's Recent list still looks truncated after
-the 2026-08-21 "freeze hero/actions, let Recent fill and scroll" change. A
-uiautomator dump + painted-box screenshots on the dev variant showed:
+### A.0 Measured budget (uiautomator, real px at 2.75 px/dp, post-`63a7336`)
 
-- The `flex: 1` chain (`content` → `recentSection` → picker `container` →
-  rows `ScrollView`) **works** — it fills whatever remainder it is given.
-- The remainder is tiny because `safeArea` reserves
-  `paddingBottom: BottomTabInset + Spacing.four` = **104dp ≈ 286px** of dead
-  space. The native tab bar is **in-flow** (react-navigation bottom tabs; the
-  tab-screen area ends at y=2139 and the bar occupies 2139–2340 *below* it),
-  so nothing ever overlaps that padding. `BottomTabInset` only makes sense for
-  **web**, where `src/components/app-tabs.web.tsx` positions its tab bar
-  `position: 'absolute'` — and ironically `BottomTabInset` resolves to `0`
-  on web today (`Platform.select({ ios: 50, android: 80 }) ?? 0`), i.e. the
-  constant is backwards: applied where it's dead space, absent where it's
-  needed.
-- Hero (title + subtitle) + four 59dp buttons + 32dp gaps + 24dp paddings eat
-  the rest. Net: the rows `ScrollView` got ~140px ≈ one row on a Pixel 5.
+Rows `ScrollView` = **385px**; a row is 107px + 22px gap → 3 rows. Need **494px
+for 4**, **623px for 5**. Hero = title 158 + gap 44 + 2-line subtitle 122;
+buttons 161px each with 44px gaps; section gap 66.
 
-All four tab screens use the constant (`index.tsx`, `goals.tsx`,
-`insights.tsx`, `settings.tsx`). The three `ScrollView` screens just end up
-with ~104dp of useless scroll slack; Home is the only non-scrolling screen,
-so it's the only one where the waste is visible.
+### A.1 Changes (`src/app/(tabs)/index.tsx`) — all four, they add up to ≈ +376px
 
-## 1. The change
+1. **"Log bowel movement" + "Log symptom" side by side** in one row
+   (`flexDirection: 'row', gap: Spacing.three`, each `flex: 1`). Visible
+   labels shorten so they don't wrap at half width: `💩 Bowel movement` and
+   `🤢 Symptom`. **Keep the `accessibilityLabel`s exactly** `"Log a bowel
+   movement"` / `"Log a symptom"` — three Maestro flows tap by those. Keep
+   `StyleSheet.flatten` on `<Link asChild>` children (dev-mode array-style
+   crash, see the existing comment). (+205px)
+2. **Subtitle to one line**: `Log what you eat and spot the patterns.` (39
+   chars fits one line at `small`; the current 68-char line wraps to two).
+   Keep `textAlign: 'center'`. (+61px)
+3. **Buttons slightly shorter**: `paddingVertical` `Spacing.three` →
+   `Spacing.two + Spacing.one` (12dp) on both `cta` and `secondaryCta`. (+66px)
+4. **Section gap**: `content.gap` `Spacing.four` → `Spacing.three` (16dp).
+   (+44px)
 
-### 1.1 `src/constants/theme.ts` — make the inset platform-correct
+Don't touch `RecentFoodPicker`, the frozen layout, `limit={50}`, or the
+bottom inset (fixed in `63a7336`).
 
-```ts
-/** Extra bottom padding tab screens need UNDER the tab bar. Only the web tab
- *  bar (app-tabs.web.tsx) is position:absolute and overlays content; native
- *  bottom tabs are in-flow, so the screen area already stops above the bar
- *  (verified on-device 2026-08-21 — this used to reserve 80dp of dead space
- *  on Android and starve Home's Recent list). */
-export const BottomTabInset = Platform.select({ web: <web bar height>, default: 0 });
-```
+### A.2 Flow label follow-through (mechanical)
 
-Take `<web bar height>` from `app-tabs.web.tsx`'s tab-bar style (its
-height/padding; if it has no explicit height, use 80 — the old Android value
-— and say so in the commit). Keep the export name and type (`number`).
+`flows/00-launch.yaml:11-12` assert the full visible button texts
+(`"💩 Log bowel movement"`, `"🤢 Log symptom"`, full-regex match) — update those
+two lines to the new visible labels. Nothing else in `flows/` references the
+visible text (the other flows use the accessibility labels, unchanged).
 
-### 1.2 `src/app/(tabs)/index.tsx` — reclaim the space, tighten gently
+### A.3 Test
 
-- `safeArea.paddingBottom` → `BottomTabInset + Spacing.two` (breathing room
-  above the bar; `SafeAreaView` already applies the OS bottom inset).
-- `content.gap` → `Spacing.four` (was `five`; 8dp × 2 gaps back to the list).
-- Nothing else: keep the hero, the four buttons, their sizes, the frozen
-  layout, `limit={50}`, and `RecentFoodPicker` untouched.
+Existing `RecentFoodPicker.test.tsx` is untouched. Add no Home test unless one
+exists (there is none).
 
-Do **not** touch `goals.tsx` / `insights.tsx` / `settings.tsx`: they pick up
-the corrected constant automatically (their `insets.bottom + BottomTabInset +
-Spacing.four` becomes `insets.bottom + Spacing.four`), which only removes
-scroll slack.
+## Part B — Meal-component delete (swipe on the list + Delete button on the edit screen)
 
-### 1.3 Test
+### B.0 Context (verified)
 
-Add `src/constants/__tests__/theme.test.ts` (create the dir): under
-jest-expo's default native platform, `BottomTabInset` is `0`; and `Spacing`
-values are ascending (cheap guard that nobody re-orders the scale). Keep it
-tiny.
+- `src/app/entry/[id].tsx` lists a grouped meal's components (gate
+  `componentCount > 1`) as `Pressable` rows → `/entry/component/<id>`; it
+  re-fetches on focus (`useFocusEffect`) and remounts its form on
+  `entry.updatedAt`.
+- `src/app/entry/component/[componentId].tsx` renders `ComponentForm`
+  (`submitLabel="Save changes"`) and calls `updateMealComponentAndReaggregate`.
+- `ComponentForm`'s actions block (~line 250) renders an optional secondary
+  `Pressable` + `PrimaryButton`. `reaggregateEntryPatch` (pure,
+  `src/lib/mealAggregate.ts`) is the re-aggregation contract: nutrition
+  recomputed fresh, tags merged additively.
+- `react-native-reanimated` is already used (`animated-icon.tsx`,
+  `collapsible.tsx`) and its tests pass under `jest-expo`; RNGH is not yet
+  used anywhere and `expo-router` does **not** wrap the root in
+  `GestureHandlerRootView` (only its stack's own gesture view).
+- `jest.config.js` has no `setupFiles`; `react-native-gesture-handler/jestSetup.js`
+  exists.
+
+### B.1 Repository — `deleteMealComponentAndReaggregate(componentId): Promise<'deleted' | 'last' | 'missing'>`
+
+One transaction: read the component (→ `'missing'` if absent); read its
+siblings; if it is the **only** component of the entry return `'last'` and
+change nothing (a meal must keep ≥1 component — the user deletes the whole
+entry instead); otherwise delete the row, re-read the remaining components,
+apply `reaggregateEntryPatch(remaining, entry.tagsJson)` to the parent
+(nutrition fresh; tags stay additive — a deleted component's tags remain on
+the entry by the project's additive-only policy, document this in the
+docstring), set `componentCount = remaining.length`, bump `updatedAt`, return
+`'deleted'`. Entry `name`/`ingredientsText` untouched (user-owned). Note in
+the docstring: when `remaining.length === 1` the entry screen's `> 1` gate
+hides the list — the entry then behaves as a single-item entry editable at
+entry level (deliberate; the single-component wrinkle is a known follow-up).
+
+### B.2 Root wrapper — `src/app/_layout.tsx`
+
+Wrap the rendered tree in `<GestureHandlerRootView style={{ flex: 1 }}>`
+(outermost, around `ThemeProvider`). Required for RNGH gestures anywhere.
+
+### B.3 Swipe-to-delete on the entry screen — `src/app/entry/[id].tsx`
+
+- Wrap each component row in `ReanimatedSwipeable` (import from
+  `react-native-gesture-handler/ReanimatedSwipeable`), `renderRightActions`
+  → a danger-colored action (`Pressable`, `accessibilityRole="button"`,
+  `accessibilityLabel={`Delete ${component.name}`}`,
+  `testID={`component-delete-${component.id}`}`, label "Delete", background
+  `theme.danger`, full row height, ~88dp wide, `overshootRight={false}`,
+  `friction={2}`). The row itself stays a `Pressable` that navigates.
+- On press: `Alert.alert('Remove from this meal?', `${name} will be removed
+  and the meal's totals recalculated.`, [Cancel, Remove(destructive)])`. On
+  confirm: `await deleteMealComponentAndReaggregate(id)`; if `'last'` →
+  `Alert.alert('Keep at least one item', 'A meal needs one item — delete the
+  whole entry instead.')`; on `'deleted'` → re-run the same loader the focus
+  effect uses (extract `loadEntry()` into a `useCallback` used by both the
+  focus effect and the post-delete refresh) so the row disappears and the
+  re-aggregated totals show (the `updatedAt` key remount already handles the
+  form).
+- Theme: `theme.danger` exists (used for the watch banner).
+
+### B.4 Delete button on the component edit screen
+
+- `ComponentForm` gains `onDelete?: () => void | Promise<void>` and
+  `deleteLabel?: string` (default `'Delete'`). When `onDelete` is provided,
+  the actions block renders a **row** `[Delete] [Save changes]` with
+  `justifyContent: 'space-between'`, both buttons `flex: 1`, `gap:
+  Spacing.three`: Delete is an outline button with `borderColor:
+  theme.danger` and danger-colored label, `accessibilityRole="button"`,
+  `accessibilityLabel={deleteLabel}`, `testID="component-delete"`; Save stays
+  the `PrimaryButton`. Without `onDelete` the block renders exactly as today
+  (the builder's "Add & scan next" / "Finish meal" path must not change).
+- `src/app/entry/component/[componentId].tsx`: pass `onDelete` → same
+  confirm `Alert` → `deleteMealComponentAndReaggregate(component.id)` →
+  `'deleted'` → `router.back()`; `'last'` → the keep-one alert. Guard with the
+  existing `submitting` state.
+
+### B.5 Tests
+
+- `jest.config.js`: add `setupFiles: ['./node_modules/react-native-gesture-handler/jestSetup.js']`
+  (keep the existing preset/mappers). If `ReanimatedSwipeable` still fails to
+  render under Jest after that, mock `react-native-gesture-handler/ReanimatedSwipeable`
+  **in the affected test file** with a component that renders `children` and
+  `renderRightActions()` side by side — never disable a rule or skip a test.
+- `[id].test.tsx`: pressing `component-delete-<id>` → `Alert.alert` (mock
+  `Alert.alert` to invoke the destructive button) → repository called with
+  the id → entry + components re-fetched. A `'last'` result shows the keep-one
+  alert and does not refetch.
+- `[componentId].test.tsx`: Delete button present only on the edit screen,
+  confirm → repository → `router.back()`; `'last'` → alert, no back.
+- `ComponentForm.test.tsx`: no Delete button without `onDelete`; with it,
+  both buttons render and Delete calls the handler.
+- A pure test is owed if you add any pure helper; `reaggregateEntryPatch` is
+  already covered.
+
+### B.6 Not this cycle (owner-approved dependency, needs a native build)
+
+`expo-haptics` — `Haptics.impactAsync(ImpactFeedbackStyle.Medium)` when the
+swipe action reveals / on delete, `notificationAsync(Success)` on save. Add it
+in the next native-build cycle (together with the pending iOS build), then
+wire it here. Do not import it now.
 
 ## 2. Definition of done
 
 - `npm run typecheck` && `npm run lint` && `npm test` green — run them.
-- No `// @ts-ignore`, no lint disables, no new dependency.
-- Commit: `fix(home): stop reserving a phantom tab-bar inset so Recent can fill
-  the viewport` (test may ride along or be `test(theme): …`).
-- Execute summary: what changed, the web inset value you chose and why, rung
-  counts, deviations.
+- No `// @ts-ignore`, no lint disables, **no new dependency**.
+- Commits (imperative, scoped): `feat(home): fit five Recent rows — side-by-side
+  log buttons, one-line tagline, tighter spacing` · `feat(logging): delete a
+  saved meal component with re-aggregation (repository + root gesture view)` ·
+  `feat(logging): swipe-to-delete on the entry screen + Delete next to Save on
+  the component editor`.
+- Execute summary: per-commit contents, file list, rung counts, any Jest
+  mocking needed for the swipeable, deviations.
 
-## 3. After this (review pass, not you)
+## 3. After this (review pass + test sessions)
 
-Fable re-screenshots Home on the Pixel via Metro 8081 and confirms ≥4 Recent
-rows visible with the seeded journal. If "a little more" is still wanted,
-the next lever is layout, not padding: put "Log bowel movement" and "Log
-symptom" side by side (≈ +67dp ≈ one more row) — owner's call, not this
-cycle. Maestro: Goals/Insights/Settings flows that scroll to the bottom lose
-~104dp of slack; `scrollUntilVisible` is unaffected, but the full regression
-already owed will confirm.
+Fable re-measures Home on the Pixel (target: rows `ScrollView` ≥ 623px) and
+exercises a swipe-delete on a seeded 2-component meal. Test session: extend
+`flows/01d-browse-edit.yaml` or the planned `j-component-drilldown.yaml` with
+`swipe` on `component-row-<id>` → tap `"Delete <name>"` → confirm → row gone
+and totals updated; plus the component-screen Delete path; `00-launch.yaml`
+labels re-verified.
