@@ -25,10 +25,10 @@ appId: com.tummytracker.app.dev
 # NOTE — the port below must match whatever port Metro is serving this
 # worktree on for the current session (see docs/E2E.md "Test-execute
 # protocol"). Update it here once at the top of a session rather than at
-# each call site.
+# each call site. Currently 8081 (2026-08-21 targeted Goals run).
 ---
 - assertVisible: "Development Build"
-- openLink: "tummytracker-dev://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8084"
+- openLink: "tummytracker-dev://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8081"
 - extendedWaitUntil:
     visible: "TummyTracker"
     timeout: 20000

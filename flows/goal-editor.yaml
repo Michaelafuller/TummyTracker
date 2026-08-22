@@ -1,4 +1,5 @@
 appId: com.tummytracker.app.dev
+tags: [goals]
 # Goals — thresholds + daily check-in (2026-08-15 release, part 2, migration
 # 0008).
 #   - Set a floor goal on Protein; progress renders against the tally
