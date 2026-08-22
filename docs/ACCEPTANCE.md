@@ -329,3 +329,61 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
 - [ ] Notification accent/tint is teal, not blue. · manual (EAS build)
 - [ ] Android launcher icon renders inside the safe zone (icon-layer fix riding
       this build). · manual (EAS build)
+
+---
+
+## Post-MVP · 2026-08-21 release (component drill-down · variant split · Home layout · Goals drill-down)
+
+> Structured by the 2026-08-21 test-plan session. `· auto` rows flip only from a
+> green `<testcase>` in `flows/results.xml`; this release is the **first run
+> against the dev variant** (`com.tummytracker.app.dev`), so the reconnect
+> helper's `tummytracker-dev://` deep link is itself under test.
+
+### Build-variant split (dev vs. real app)
+- [x] Dev client and real app coexist on the Pixel — `adb shell pm list packages`
+      lists both `com.tummytracker.app.dev` and `com.tummytracker.app`, and the
+      `.dev` package reports `DEBUGGABLE`. · manual — observed 2026-08-21 by the
+      test-plan session over USB
+- [ ] `_helpers/reconnect-dev-client.yaml` reconnects the **dev-variant** client
+      to Metro via `tummytracker-dev://…` after `clearState` and after a plain
+      relaunch. · auto `flows/00-launch.yaml` + `flows/checkin-persistence.yaml`
+- [ ] Maestro `clearState` wipes only the `.dev` app — the real app's journal is
+      untouched after a run. · manual (owner: open the real app after a test
+      session; entries still there)
+- [ ] Full Maestro suite passes against the dev variant (appId/scheme changed
+      under every flow — shared-infra rule). · auto — full `npm run e2e:ci`
+      run, owed after the iOS deployment
+- [ ] Preview build reclaims `com.tummytracker.app` in place with the journal
+      intact. · manual (owner, EAS)
+
+### Goals tab — tally drill-down, "Today" header, long date
+- [ ] Header reads "Today" with a long date ("August 21, 2026" style), and the
+      Goals section below is the only "Goals" heading. · auto
+      `flows/goals-tally.yaml`
+- [ ] Tapping a tally row expands the entries behind its total (name, amount,
+      time); tapping again collapses it. · auto `flows/goals-tally.yaml`
+- [ ] Entries with no value for that nutrient are listed as "no data". · auto
+      `flows/goals-tally.yaml`
+- [ ] Tapping a listed entry opens its edit screen. · auto
+      `flows/goals-tally.yaml`
+- [ ] Goal editor, cap notice, and check-in persistence still pass on the new
+      header/row structure. · auto `flows/goal-editor.yaml`,
+      `flows/checkin-persistence.yaml`, `flows/nav-tabs.yaml`
+
+### Meal-component drill-down (edit after save)
+- [ ] Open a 2-component meal → tap a component row → its edit screen shows the
+      component's nutrition; change servings 1→2 and save → the entry's totals
+      reflect the doubled contribution and persist across relaunch. · auto
+      `flows/j-component-drilldown.yaml` (new — owed to the full-run session)
+- [ ] Tags stay additive after a component edit (a renamed component never
+      strips a previously captured tag). · Jest
+      `src/lib/__tests__/mealAggregate.test.ts` (`reaggregateEntryPatch`) — no
+      device item
+
+### Home tab — frozen hero/actions, scrolling Recent
+- [ ] Title and the four action buttons stay fixed; only the Recent rows scroll,
+      and Recent fills the rest of the viewport (more than 6 rows visible on a
+      Pixel 5 when available). · manual (visual)
+- [ ] Recent search + row tap still work inside the nested scroll. · auto
+      `flows/h-recent-foods.yaml` (re-run owed to the full-run session —
+      nested-scroll semantics)
