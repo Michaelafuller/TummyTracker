@@ -55,6 +55,14 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   drill-down flows (meal components + tally rows) owed + full re-run owed
   (appId/scheme moved under every flow), after the owner's device
   sequencing (HANDOFF §3).
+- **🔨 In flight (planned 2026-08-21, `docs/HANDOFF.md`):** Home Recent list
+  still truncated on-device after the layout change — root cause found by
+  painted-box screenshots + uiautomator: `BottomTabInset` reserves 80dp of
+  dead bottom padding on Android (native tab bar is in-flow; the constant
+  only makes sense for the absolute-positioned **web** bar, where it is
+  ironically 0). Fix: platform-correct constant (`web: h, default: 0`) +
+  gentle gap tightening on Home. Affects all four tab screens (ScrollView
+  screens just lose scroll slack).
 - **Still owed (test sessions):** manual-only items per `docs/E2E.md` (camera
   loop, notification timing, dictation double-text check on both platforms,
   light/dark visual walkthrough, import round-trip content, migration
