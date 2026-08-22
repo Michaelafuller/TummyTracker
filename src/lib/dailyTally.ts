@@ -11,7 +11,7 @@
 // (false comfort). Each nutrient's `total` is null only when NO in-range
 // entry had a value for it; a logged 0 counts as logged and contributes 0.
 
-import { FOOD_TYPES, type LogEntry } from '@/db/schema';
+import { FOOD_TYPES, type LogEntry, type MealSlot } from '@/db/schema';
 import { NUTRITION_FIELDS, type NutritionField } from '@/lib/validation';
 
 const FOOD_TYPES_SET = new Set(FOOD_TYPES as readonly string[]);
@@ -35,6 +35,7 @@ export interface NutrientContribution {
   id: string;
   name: string;
   loggedAt: number;
+  mealSlot: MealSlot | null;
   /** Rounded with decimalsFor(field). */
   value: number;
 }
@@ -43,6 +44,7 @@ export interface NutrientMissing {
   id: string;
   name: string;
   loggedAt: number;
+  mealSlot: MealSlot | null;
 }
 
 export interface NutrientContributions {
@@ -126,9 +128,15 @@ export function nutrientContributions(
   for (const entry of inRange) {
     const value = entry[field];
     if (value == null) {
-      missing.push({ id: entry.id, name: entry.name, loggedAt: entry.loggedAt });
+      missing.push({ id: entry.id, name: entry.name, loggedAt: entry.loggedAt, mealSlot: entry.mealSlot });
     } else {
-      contributors.push({ id: entry.id, name: entry.name, loggedAt: entry.loggedAt, value: round(value, decimals) });
+      contributors.push({
+        id: entry.id,
+        name: entry.name,
+        loggedAt: entry.loggedAt,
+        mealSlot: entry.mealSlot,
+        value: round(value, decimals),
+      });
     }
   }
 

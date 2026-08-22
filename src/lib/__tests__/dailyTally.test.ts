@@ -185,7 +185,9 @@ describe('nutrientContributions', () => {
     const end = 100;
     const entries = [entry({ type: 'meal', loggedAt: 10, name: 'Zero fat', fatG: 0 })];
     const result = nutrientContributions(entries, 'fatG', start, end);
-    expect(result.contributors).toEqual([{ id: entries[0].id, name: 'Zero fat', loggedAt: 10, value: 0 }]);
+    expect(result.contributors).toEqual([
+      { id: entries[0].id, name: 'Zero fat', loggedAt: 10, mealSlot: null, value: 0 },
+    ]);
     expect(result.missing).toHaveLength(0);
   });
 
