@@ -1,13 +1,59 @@
 import type { ExpoConfig } from 'expo/config';
 
-// Relative import — the `@/*` alias is a Metro/tsconfig alias and does not
-// exist when the Expo CLI evaluates this file in plain Node. The explicit
-// `.ts` extension is required too: @expo/config only runs this entry file
-// itself through TypeScript transpilation — a nested `require('./foo')` with
-// no extension falls through to Node's plain CJS resolver, which only probes
-// `.js`/`.json`/`.node` (verified: Node 25's native type-stripping loader is
-// keyed to an explicit `.ts` specifier, not implicit extension resolution).
-import { resolveAppIdentity } from './src/lib/appVariant.ts';
+// The variant-identity resolver is INLINED here rather than imported from
+// src/lib/appVariant.ts (deleted). @expo/config only runs *this* entry file
+// through TypeScript transpilation — any nested `import`/`require` of a
+// local .ts file falls through to Node's plain CJS resolver afterward, which
+// would only work on Node >= 23.6 (native type-stripping keyed to an
+// explicit `.ts` specifier) and fails outright on older Node with a
+// "Unexpected token 'export'" syntax error. EAS cloud build workers may run
+// an older/LTS Node, so a runtime import here risked breaking the exact
+// `eas build` this cycle exists to enable. Keeping this file import-free
+// (aside from the type-only `expo/config` import, which is erased before
+// runtime) sidesteps the whole problem. `resolveAppIdentity` and the types
+// are re-exported as named exports so they stay unit-testable from
+// __tests__/app.config.test.ts.
+
+export type AppVariant = 'development' | 'production';
+
+export interface AppIdentity {
+  variant: AppVariant;
+  name: string;
+  androidPackage: string;
+  iosBundleIdentifier: string;
+  scheme: string;
+}
+
+const DEVELOPMENT_IDENTITY: AppIdentity = {
+  variant: 'development',
+  name: 'TummyTracker (dev)',
+  androidPackage: 'com.tummytracker.app.dev',
+  iosBundleIdentifier: 'com.tummytracker.app.dev',
+  scheme: 'tummytracker-dev',
+};
+
+const PRODUCTION_IDENTITY: AppIdentity = {
+  variant: 'production',
+  name: 'TummyTracker',
+  androidPackage: 'com.tummytracker.app',
+  iosBundleIdentifier: 'com.tummytracker.app',
+  scheme: 'tummytracker',
+};
+
+/**
+ * Resolves the app's identity (display name, package/bundle id, deep-link
+ * scheme) from the `APP_VARIANT` environment variable.
+ *
+ * Unknown/undefined/empty values deliberately fall back to the production
+ * identity, never to development: a typo must not ship a dev-looking release
+ * identity, and must never let a "real" build land on the dev package.
+ */
+export function resolveAppIdentity(variantEnv: string | undefined): AppIdentity {
+  if (variantEnv === 'development') {
+    return DEVELOPMENT_IDENTITY;
+  }
+  return PRODUCTION_IDENTITY;
+}
 
 // Typed separately: TS infers plugin-array entries as plain `(string | any[])[]`
 // from an object-literal position, which isn't assignable to ExpoConfig's
