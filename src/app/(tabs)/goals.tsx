@@ -10,16 +10,11 @@ import { GoalsSection } from '@/features/goals/GoalsSection';
 import { useAllEntries } from '@/features/logging/useEntries';
 import { useGoalsStore } from '@/features/goals/goalsStore';
 import { tallyDailyNutrition } from '@/lib/dailyTally';
-import { dayBounds, formatDateInput } from '@/lib/datetime';
+import { dayBounds, formatLongDate } from '@/lib/datetime';
 import { evaluateGoals, type GoalEvaluation } from '@/lib/goals';
 import { NUTRITION_LABELS, nutritionUnit } from '@/lib/nutrition';
 import { NUTRITION_FIELDS, type NutritionField } from '@/lib/validation';
 import { useTheme } from '@/hooks/use-theme';
-
-/** "Today" plus the local calendar date, e.g. "Today · 2026-08-15". */
-function todayHeading(nowMs: number): string {
-  return `Today · ${formatDateInput(nowMs)}`;
-}
 
 function entriesSummary(entryCount: number): string {
   return `From ${entryCount} ${entryCount === 1 ? 'entry' : 'entries'} today`;
@@ -54,9 +49,9 @@ export default function GoalsScreen() {
           { paddingTop: insets.top + Spacing.three, paddingBottom: insets.bottom + BottomTabInset + Spacing.four },
         ]}>
         <View style={styles.header}>
-          <ThemedText type="subtitle">Goals</ThemedText>
+          <ThemedText type="subtitle">Today</ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
-            {todayHeading(now)}
+            {formatLongDate(now)}
           </ThemedText>
         </View>
 

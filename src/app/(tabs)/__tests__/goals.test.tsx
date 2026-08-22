@@ -89,6 +89,14 @@ beforeEach(() => {
 });
 
 describe('GoalsScreen', () => {
+  it('renders a "Today" header with a long date, and drops the old "Today · " prefix', async () => {
+    const { getByText, queryByText } = await renderScreen(<GoalsScreen />);
+    expect(getByText('Today')).toBeTruthy();
+    const dateNode = getByText(/^[A-Z][a-z]+ \d{1,2}, \d{4}$/);
+    expect(dateNode).toBeTruthy();
+    expect(queryByText(/^Today · /)).toBeNull();
+  });
+
   it('renders the empty state when there are no entries today', async () => {
     mockEntries = [];
     const { getByText } = await renderScreen(<GoalsScreen />);
