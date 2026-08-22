@@ -10,6 +10,11 @@ import { useGoalsStore } from '@/features/goals/goalsStore';
 import { usePrefsStore } from '@/features/prefs/prefsStore';
 import GoalsScreen from '../goals';
 
+const mockPush = jest.fn();
+jest.mock('expo-router', () => ({
+  useRouter: () => ({ push: mockPush }),
+}));
+
 let mockEntries: LogEntry[] = [];
 jest.mock('@/features/logging/useEntries', () => ({
   useAllEntries: () => mockEntries,
@@ -89,6 +94,14 @@ beforeEach(() => {
 });
 
 describe('GoalsScreen', () => {
+  it('renders a "Today" header with a long date, and drops the old "Today · " prefix', async () => {
+    const { getByText, queryByText } = await renderScreen(<GoalsScreen />);
+    expect(getByText('Today')).toBeTruthy();
+    const dateNode = getByText(/^[A-Z][a-z]+ \d{1,2}, \d{4}$/);
+    expect(dateNode).toBeTruthy();
+    expect(queryByText(/^Today · /)).toBeNull();
+  });
+
   it('renders the empty state when there are no entries today', async () => {
     mockEntries = [];
     const { getByText } = await renderScreen(<GoalsScreen />);
@@ -134,6 +147,70 @@ describe('GoalsScreen', () => {
 function goal(overrides: Partial<Goal> & { nutrient: Goal['nutrient']; direction: Goal['direction']; threshold: number }): Goal {
   return { id: `goal-${overrides.nutrient}`, createdAt: 0, ...overrides };
 }
+
+describe('GoalsScreen tally row drill-down', () => {
+  function fatEntries() {
+    const now = Date.now();
+    const t0 = now - 60_000; // earlier today
+    const t1 = now; // later today
+    return {
+      t0,
+      t1,
+      entries: [
+        entry({ type: 'meal', name: 'Burger', fatG: 30, loggedAt: t1 }),
+        entry({ type: 'meal', name: 'Salad', fatG: 5, loggedAt: t0 }),
+        entry({ type: 'meal', name: 'Tea', fatG: null, loggedAt: t0 }),
+      ],
+    };
+  }
+
+  it('tapping a tally row shows the entries behind its total, sorted by value desc, with missing entries as "no data"', async () => {
+    const { entries } = fatEntries();
+    mockEntries = entries;
+    const { getByTestId, getByText, queryByText, getAllByTestId } = await renderScreen(<GoalsScreen />);
+
+    expect(queryByText('Burger')).toBeNull();
+    await fireEvent.press(getByTestId('tally-row-fatG'));
+
+    const itemNames = getAllByTestId(/tally-item-/).map((node) => node.props.accessibilityLabel);
+    expect(itemNames).toEqual(['Open Burger', 'Open Salad', 'Open Tea']);
+    expect(getByText('30g')).toBeTruthy();
+    expect(getByText('5g')).toBeTruthy();
+    expect(getByText('Tea')).toBeTruthy();
+    expect(getByText('no data')).toBeTruthy();
+  });
+
+  it('tapping the open row again collapses it, and tapping a different row swaps which one is open', async () => {
+    mockEntries = [
+      entry({ type: 'meal', name: 'Burger', fatG: 30, calories: 500 }),
+    ];
+    const { getByTestId, getByText, queryByText } = await renderScreen(<GoalsScreen />);
+
+    await fireEvent.press(getByTestId('tally-row-fatG'));
+    expect(getByText('Burger')).toBeTruthy();
+
+    await fireEvent.press(getByTestId('tally-row-fatG'));
+    expect(queryByText('Burger')).toBeNull();
+
+    await fireEvent.press(getByTestId('tally-row-fatG'));
+    expect(getByText('Burger')).toBeTruthy();
+    await fireEvent.press(getByTestId('tally-row-calories'));
+    expect(getByText('Burger')).toBeTruthy(); // still shown: calories row's own panel
+    expect(getByTestId('tally-row-fatG').props.accessibilityState.expanded).toBe(false);
+    expect(getByTestId('tally-row-calories').props.accessibilityState.expanded).toBe(true);
+  });
+
+  it('pressing an entry in the panel navigates to that entry', async () => {
+    const { entries } = fatEntries();
+    mockEntries = entries;
+    const { getByTestId } = await renderScreen(<GoalsScreen />);
+
+    await fireEvent.press(getByTestId('tally-row-fatG'));
+    await fireEvent.press(getByTestId(`tally-item-${entries[0].id}`));
+
+    expect(mockPush).toHaveBeenCalledWith(`/entry/${entries[0].id}`);
+  });
+});
 
 describe('GoalsScreen goal-aware tally progress', () => {
   it('renders a cap-exceeded total in the danger color', async () => {

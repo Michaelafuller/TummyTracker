@@ -46,9 +46,15 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
      remediation: variant resolver inlined into app.config.ts (nested `.ts`
      import needed Node ≥ 23.6 — would have broken EAS cloud workers on
      older Node; regression-checked with `--no-experimental-strip-types`).
-  Rungs green at HEAD (60 suites / 528 tests) + `bundle:check`. Maestro:
-  drill-down flow owed + full re-run owed (appId/scheme moved under every
-  flow), after the owner's device sequencing (HANDOFF §3).
+  3. **Goals tab: tally drill-down + "Today" rename + long date** — tap a
+     daily-tally row to expand the entries behind its total (name, amount,
+     time · meal slot; missing-data entries as "no data"; sub-rows open the
+     entry); page header "Goals" → "Today" so GoalsSection owns the one
+     Goals heading; date line → "August 21, 2026". No remediations.
+  Rungs green at HEAD (60 suites / 538 tests) + `bundle:check`. Maestro:
+  drill-down flows (meal components + tally rows) owed + full re-run owed
+  (appId/scheme moved under every flow), after the owner's device
+  sequencing (HANDOFF §3).
 - **Still owed (test sessions):** manual-only items per `docs/E2E.md` (camera
   loop, notification timing, dictation double-text check on both platforms,
   light/dark visual walkthrough, import round-trip content, migration

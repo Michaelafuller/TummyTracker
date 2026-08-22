@@ -1,6 +1,6 @@
 // Pure helpers for browsing entries by day/week/month and grouping them by day.
 // All date math is local-time. Ranges are half-open: [start, end).
-import { formatDateInput } from './datetime';
+import { formatDateInput, MONTHS_LONG } from './datetime';
 
 export type CalendarMode = 'day' | 'week' | 'month';
 
@@ -87,10 +87,6 @@ export function entryDateKeys<T extends { loggedAt: number }>(entries: readonly 
 
 const MONTHS_SHORT = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-];
-const MONTHS_LONG = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
 ];
 const WEEKDAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 

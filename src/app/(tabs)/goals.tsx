@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Fragment, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -9,17 +10,12 @@ import { CheckInSection } from '@/features/goals/CheckInSection';
 import { GoalsSection } from '@/features/goals/GoalsSection';
 import { useAllEntries } from '@/features/logging/useEntries';
 import { useGoalsStore } from '@/features/goals/goalsStore';
-import { tallyDailyNutrition } from '@/lib/dailyTally';
-import { dayBounds, formatDateInput } from '@/lib/datetime';
+import { nutrientContributions, tallyDailyNutrition } from '@/lib/dailyTally';
+import { dayBounds, formatLongDate, formatTime12h } from '@/lib/datetime';
 import { evaluateGoals, type GoalEvaluation } from '@/lib/goals';
 import { NUTRITION_LABELS, nutritionUnit } from '@/lib/nutrition';
 import { NUTRITION_FIELDS, type NutritionField } from '@/lib/validation';
 import { useTheme } from '@/hooks/use-theme';
-
-/** "Today" plus the local calendar date, e.g. "Today · 2026-08-15". */
-function todayHeading(nowMs: number): string {
-  return `Today · ${formatDateInput(nowMs)}`;
-}
 
 function entriesSummary(entryCount: number): string {
   return `From ${entryCount} ${entryCount === 1 ? 'entry' : 'entries'} today`;
@@ -34,6 +30,7 @@ function progressColor(evaluation: GoalEvaluation): ThemeColor {
 export default function GoalsScreen() {
   const entries = useAllEntries();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   // Lazy-init so Date.now() is read once per mount, not on every render pass
   // (the render function itself must stay pure/idempotent).
   const [now] = useState(() => Date.now());
@@ -46,6 +43,15 @@ export default function GoalsScreen() {
     evaluateGoals(goals, tally).map((evaluation) => [evaluation.goal.nutrient, evaluation] as const),
   );
 
+  // One tally row open at a time (mirrors GoalsSection.toggleExpand's idiom).
+  // Not memoized: this is a tiny per-day list, cheap to recompute on every render.
+  const [expandedField, setExpandedField] = useState<NutritionField | null>(null);
+  const expandedContributions = expandedField ? nutrientContributions(entries, expandedField, start, end) : null;
+
+  function toggleExpandedField(field: NutritionField) {
+    setExpandedField((current) => (current === field ? null : field));
+  }
+
   return (
     <ThemedView style={styles.container}>
       <ScrollView
@@ -54,9 +60,9 @@ export default function GoalsScreen() {
           { paddingTop: insets.top + Spacing.three, paddingBottom: insets.bottom + BottomTabInset + Spacing.four },
         ]}>
         <View style={styles.header}>
-          <ThemedText type="subtitle">Goals</ThemedText>
+          <ThemedText type="subtitle">Today</ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
-            {todayHeading(now)}
+            {formatLongDate(now)}
           </ThemedText>
         </View>
 
@@ -96,24 +102,86 @@ export default function GoalsScreen() {
                     : caveat != null
                       ? `${label}: ${nutrient.total}, ${caveat}`
                       : `${label}: ${nutrient.total}`) + goalCaveat;
+                const isExpanded = expandedField === field;
+
                 return (
-                  <View
-                    key={field}
-                    style={[styles.row, { borderColor: theme.border }]}
-                    accessible
-                    accessibilityLabel={accessibilityLabel}>
-                    <View style={styles.rowLabel}>
-                      <ThemedText type="small">{label}</ThemedText>
-                      {caveat != null ? (
-                        <ThemedText type="small" themeColor="textSecondary">
-                          {caveat}
+                  <Fragment key={field}>
+                    <Pressable
+                      style={[styles.row, { borderColor: theme.border }]}
+                      accessible
+                      accessibilityLabel={accessibilityLabel}
+                      accessibilityRole="button"
+                      accessibilityState={{ expanded: isExpanded }}
+                      accessibilityHint="Shows the entries that make up this total"
+                      testID={`tally-row-${field}`}
+                      onPress={() => toggleExpandedField(field)}>
+                      <View style={styles.rowLabel}>
+                        <ThemedText type="small">{label}</ThemedText>
+                        {caveat != null ? (
+                          <ThemedText type="small" themeColor="textSecondary">
+                            {caveat}
+                          </ThemedText>
+                        ) : null}
+                      </View>
+                      <View style={styles.rowValue}>
+                        <ThemedText type="smallBold" themeColor={evaluation ? progressColor(evaluation) : undefined}>
+                          {progressText}
                         </ThemedText>
-                      ) : null}
-                    </View>
-                    <ThemedText type="smallBold" themeColor={evaluation ? progressColor(evaluation) : undefined}>
-                      {progressText}
-                    </ThemedText>
-                  </View>
+                        <ThemedText type="small" themeColor="textSecondary">
+                          {isExpanded ? '⌄' : '›'}
+                        </ThemedText>
+                      </View>
+                    </Pressable>
+
+                    {isExpanded && expandedContributions ? (
+                      <View
+                        style={[
+                          styles.panel,
+                          { backgroundColor: theme.backgroundSelected, borderColor: theme.border },
+                        ]}>
+                        {expandedContributions.contributors.map((item) => (
+                          <Pressable
+                            key={item.id}
+                            style={styles.panelRow}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Open ${item.name}`}
+                            testID={`tally-item-${item.id}`}
+                            onPress={() => router.push(`/entry/${item.id}`)}>
+                            <View style={styles.panelRowLabel}>
+                              <ThemedText type="small" numberOfLines={1}>
+                                {item.name}
+                              </ThemedText>
+                              <ThemedText type="small" themeColor="textSecondary">
+                                {item.mealSlot ? `${formatTime12h(item.loggedAt)} · ${item.mealSlot}` : formatTime12h(item.loggedAt)}
+                              </ThemedText>
+                            </View>
+                            <ThemedText type="smallBold">{unit ? `${item.value}${unit}` : String(item.value)}</ThemedText>
+                          </Pressable>
+                        ))}
+                        {expandedContributions.missing.map((item) => (
+                          <Pressable
+                            key={item.id}
+                            style={styles.panelRow}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Open ${item.name}`}
+                            testID={`tally-item-${item.id}`}
+                            onPress={() => router.push(`/entry/${item.id}`)}>
+                            <View style={styles.panelRowLabel}>
+                              <ThemedText type="small" numberOfLines={1}>
+                                {item.name}
+                              </ThemedText>
+                              <ThemedText type="small" themeColor="textSecondary">
+                                {item.mealSlot ? `${formatTime12h(item.loggedAt)} · ${item.mealSlot}` : formatTime12h(item.loggedAt)}
+                              </ThemedText>
+                            </View>
+                            <ThemedText type="small" themeColor="textSecondary">
+                              no data
+                            </ThemedText>
+                          </Pressable>
+                        ))}
+                      </View>
+                    ) : null}
+                  </Fragment>
                 );
               })}
             </View>
@@ -156,6 +224,28 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   rowLabel: {
+    gap: Spacing.half,
+  },
+  rowValue: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  panel: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingVertical: Spacing.one,
+    paddingHorizontal: Spacing.three,
+  },
+  panelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: Spacing.two,
+    minHeight: 44,
+  },
+  panelRowLabel: {
+    flex: 1,
+    marginRight: Spacing.three,
     gap: Spacing.half,
   },
 });

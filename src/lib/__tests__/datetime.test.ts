@@ -2,6 +2,7 @@ import {
   formatClock,
   formatClock12h,
   formatDateInput,
+  formatLongDate,
   formatTime12h,
   formatTimeInput,
   parseClockTime,
@@ -50,6 +51,18 @@ describe('clock time', () => {
     expect(parseClockTime('08:60')).toBeNull();
     expect(parseClockTime('8:00')).toBeNull();
     expect(parseClockTime('nope')).toBeNull();
+  });
+});
+
+describe('formatLongDate', () => {
+  it('formats a local date with the full month name and unpadded day', () => {
+    const ms = new Date(2026, 7, 21, 12).getTime();
+    expect(formatLongDate(ms)).toBe('August 21, 2026');
+  });
+
+  it('does not pad a single-digit day', () => {
+    const ms = new Date(2026, 0, 5, 12).getTime();
+    expect(formatLongDate(ms)).toBe('January 5, 2026');
   });
 });
 

@@ -12,6 +12,18 @@ export function formatDateInput(epochMs: number): string {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
+export const MONTHS_LONG = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+/** Format an epoch-ms timestamp to a local long date, e.g. 'August 21, 2026'. Uses
+ *  Date getters (not toLocaleDateString) so output is deterministic in Jest and on Hermes. */
+export function formatLongDate(epochMs: number): string {
+  const d = new Date(epochMs);
+  return `${MONTHS_LONG[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+}
+
 /** Format an epoch-ms timestamp to a local 'HH:MM' time string. */
 export function formatTimeInput(epochMs: number): string {
   const d = new Date(epochMs);
