@@ -1,0 +1,40 @@
+appId: com.tummytracker.app.dev
+# C2 — Multi-symptom logging in one instance (2026-08-24 release):
+#   - Tap TWO symptom-type chips (multi-select) + one severity, save ONCE
+#   - Journal shows TWO separate entries (one row per symptom)
+#   - Opening one of them reloads its own type with the shared severity
+# Companion to c-symptom-logging.yaml (single-tap path, still valid —
+# one tap still selects; a second tap on the same chip now deselects).
+---
+- launchApp:
+    clearState: true
+- runFlow: _helpers/reconnect-dev-client.yaml
+
+# --- Log two symptoms in one pass ---
+- tapOn: "Log a symptom"
+- waitForAnimationToEnd
+- tapOn: "Nausea"
+- tapOn: "Bloating"
+- tapOn: "Severity 3: Significant"
+- tapOn: "Save"
+- waitForAnimationToEnd
+- assertVisible: "TummyTracker"
+
+# --- Journal: one save produced two distinct rows ---
+- tapOn:
+    id: "tab-journal"
+- waitForAnimationToEnd
+- waitForAnimationToEnd
+# EntryRow text is emoji-prefixed and not text-accessible via Maestro getText()
+# (see c-symptom-logging.yaml) — assert by the rows' testIDs. Only two entries
+# exist in clearState, so both sit above the fold.
+- assertVisible:
+    id: "entry-row-nausea"
+- assertVisible:
+    id: "entry-row-bloating"
+
+# --- Each row is its own editable entry with the shared severity ---
+- tapOn:
+    id: "entry-row-nausea"
+- waitForAnimationToEnd
+- assertVisible: "Severity 3: Significant"

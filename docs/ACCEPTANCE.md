@@ -387,3 +387,16 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
 - [ ] Recent search + row tap still work inside the nested scroll. · auto
       `flows/h-recent-foods.yaml` (re-run owed to the full-run session —
       nested-scroll semantics)
+
+## Post-MVP · 2026-08-24 release (multi-symptom logging)
+
+### Multi-symptom logging in one instance
+- [ ] Tapping two symptom-type chips and saving once creates **two** separate
+      journal entries (one per symptom), each opening its own edit screen with
+      the shared severity. · auto `flows/c2-multi-symptom.yaml`
+- [ ] The single-tap symptom path (one chip + severity, filters, edit reload)
+      still passes on the multi-select picker. · auto
+      `flows/c-symptom-logging.yaml`
+- [ ] Tapping a selected chip deselects it; empty selection still saves one
+      generic "Symptom" entry. · Jest
+      `src/features/symptoms/__tests__/SymptomForm.test.tsx` — no device item

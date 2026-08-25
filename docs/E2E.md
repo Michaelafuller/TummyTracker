@@ -100,6 +100,7 @@ maestro test flows/ --format junit --output flows/results.xml
 | B — ingredient capture persists on reopen | `flows/ab-satfat-ingredients.yaml` | ✅ Automated |
 | Ingredient-capture hardening — additive-only tag policy | `flows/ab-satfat-ingredients.yaml` (extend) | ✅ Automated — proxied via the watchlist banner (no direct tag-list UI exists anywhere in the app) |
 | C — symptom log, render, filter, edit reload | `flows/c-symptom-logging.yaml` | ✅ Automated |
+| C2 — multi-symptom: two chips, one save → two journal entries, per-entry edit with shared severity | `flows/c2-multi-symptom.yaml` | ✅ Automated (authored + passed individually 2026-08-24, fresh-bundle-verified) |
 | D — "Ingredients you react to" insight | `flows/d-ingredient-insights.yaml` | ✅ Automated |
 | E — summary counts (food · BM · rated) | `flows/e-temporal-insights.yaml` | ✅ Automated |
 | E — "Timing patterns" section | — | ❌ Manual (24h windowed join can't be constructed deterministically in clearState) |
