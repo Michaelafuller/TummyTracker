@@ -122,6 +122,28 @@ processes; each restart takes the next port (8081, 8082 now both stuck until
 a reboot). Fresh Metro on **8083**, helper port updated. Metro left running
 on 8083 at session end.
 
+## Addendum 4 — finding-drill-down cycle flow (`m-finding-drilldown.yaml`, 2026-08-24 late)
+
+**1/1 passed on the second run (recorded, `flows/results-m.xml`),
+fresh-bundle verified.** Onion seed → tap "See all logs: onion" → detail
+screen: 3 rows with dates/sentiment, ≥1 "Rough outcome within 24 h" marker,
+row tap-through to Edit entry. One **flow-bug** (no app bugs): the first run
+asserted "2 followed by a rough outcome" assuming second-granularity
+timestamps, but the entry forms round `loggedAt` to the **minute** — dishes
+saved in the same minute share an identical timestamp and the strictly-after
+outcome rule correctly skips them, so the exact count is run-dependent. Fixed
+by asserting the stable summary parts + at-least-one marker; now E2E.md
+gotcha #6. The screenshot doubled as visual confirmation the screen renders
+exactly as specced (header = tag, summary, markers, chevron rows).
+
+**Review remediation (before the flow):** tag drill-down matching gated to
+food entries (`9478e90`) — parity with how insights/temporal count a tag
+finding's occurrences. Rungs after: 69 suites / 612 tests.
+
+**Infra:** orphaned-Metro pattern again; fresh Metro on **8084** (helper
+updated; 8081–8083 all held until a host reboot). Left running at session
+end.
+
 ## Findings for the next planning session
 
 - No app bugs found. The multi-symptom fan-out (one save → one row per

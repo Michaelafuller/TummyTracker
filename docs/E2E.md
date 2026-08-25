@@ -115,6 +115,7 @@ maestro test flows/ --format junit --output flows/results.xml
 | J — meal-component drill-down: servings edit re-aggregates totals, swipe-delete + editor Delete (confirms), section hides at 1 component, relaunch persistence | `flows/j-component-drilldown.yaml` | ✅ Automated (authored 2026-08-24; recorded green + confirmation re-run) |
 | K — BM trends: Insights "Digestion" section (regularity line, weekly count bars, Bristol histogram) with 2 seeded BMs; chart a11y summaries asserted | `flows/k-bm-trends.yaml` | ✅ Automated (authored 2026-08-24; caught the missing-`accessible` a11y bug, gotcha #5) |
 | L — intake charts: Insights "Intake" section (Calories + Fiber weekly avg/day) from one 210 kcal / 7 g-fiber meal; summaries asserted | `flows/l-intake-charts.yaml` | ✅ Automated (authored 2026-08-24; passed first try) |
+| M — finding drill-down: tap "See all logs: onion" → detail summary, outcome marker, row → Edit entry | `flows/m-finding-drilldown.yaml` | ✅ Automated (authored 2026-08-24; see gotcha #6 on outcome-count determinism) |
 | Goals — floor/cap thresholds, cap notice, removal | `flows/goal-editor.yaml` | ✅ Automated |
 | Check-in persistence + 7-day horizon | `flows/checkin-persistence.yaml` | ✅ Automated |
 
@@ -234,6 +235,14 @@ occurred:**
    worked. When a flow asserts a summary label on a container View, check the
    component sets `accessible`; the older charts (TrendBars, MiniHistogram,
    BarMeter) still have this gap — flagged as a follow-up task.
+6. **`loggedAt` has MINUTE granularity — never assert a count that depends on
+   sub-minute ordering** (`m-finding-drilldown.yaml`, 2026-08-24): the entry
+   forms round time to the minute, so entries saved in the same minute share
+   an identical timestamp, and strictly-after logic (e.g. the drill-down's
+   followed-by-outcome flag) correctly skips same-instant pairs. Whether two
+   back-to-back seeded saves straddle a minute boundary is run-dependent —
+   assert the stable parts (totals, at-least-one marker), not exact
+   order-dependent counts.
 
 See `docs/RESULTS.md` (2026-08-16/17) for the full diagnosis and the flows each
 fix landed in.

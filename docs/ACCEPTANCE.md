@@ -430,3 +430,16 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
 - [x] `weeklyIntake` math (sum÷7, null = no data ≠ 0, non-food excluded,
       label parity with `weeklySentiment`). · Jest
       `src/lib/__tests__/chartData.test.ts` — no device item
+
+### Per-food / ingredient drill-down
+- [x] Tapping a food, ingredient, or timing finding card opens
+      `/insight/detail`: header shows the food/tag, summary line (logs,
+      rated, avg sentiment, outcome count), one row per matching log with
+      date/time, sentiment, and a "Rough outcome within 24 h" marker; a row
+      opens the entry editor. Pair/nutrient cards are not tappable
+      (deferred). · auto `flows/m-finding-drilldown.yaml` (recorded green,
+      `flows/results-m.xml`)
+- [x] Matching parity with the findings (food-entries-only for both kinds —
+      review-pass remediation `9478e90`), case-insensitive food names, exact
+      tag tokens, outcome-window edges. · Jest
+      `src/features/analysis/__tests__/drilldown.test.ts` — no device item

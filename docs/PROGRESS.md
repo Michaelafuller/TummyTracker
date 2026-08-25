@@ -127,7 +127,7 @@ Completed tiers are collapsed to a single line; their detail lives in git.
 
 | Item | Why it matters | Effort | Notes |
 |------|----------------|:--:|------|
-| **Per-food / ingredient drill-down** | A finding you can't inspect is a finding you can't trust — tap any food/ingredient finding to see every log behind it, with outcomes | S–M | Planned 2026-08-24 (`docs/HANDOFF.md`) — tappable finding cards (food, ingredient, timing) → `/insight/detail` listing every matching log (date, sentiment, rough-outcome-within-24h marker), rows open the entry; pure logic `features/analysis/drilldown.ts` reusing `isOutcome`. Pairs/nutrients deferred (no single target). Sonnet executes; Fable reviews + authors `m-finding-drilldown.yaml`. |
+| **Per-food / ingredient drill-down** | A finding you can't inspect is a finding you can't trust — tap any food/ingredient finding to see every log behind it, with outcomes | S–M | **✅ shipped + device-verified 2026-08-24** (Sonnet executed, Fable review: **one remediation** — tag matching gated to food entries for occurrence-count parity, `9478e90`). Tappable food/ingredient/timing cards → `/insight/detail` (summary line, per-log rows with outcome markers, tap-through to entry). Rungs 69 suites / 612 tests; `flows/m-finding-drilldown.yaml` recorded green (new gotcha #6: minute-granularity `loggedAt` vs order-dependent asserts). Follow-on: pair-finding drill-down (two-tag target). Unpin next plan cycle. |
 
 **Recently shipped pins (2026-08-24):** multi-symptom logging ✅ · BM
 "Digestion" section ✅ (one review remediation: chart `accessible` fix
