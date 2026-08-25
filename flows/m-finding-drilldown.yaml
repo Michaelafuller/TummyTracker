@@ -1,0 +1,39 @@
+appId: com.tummytracker.app.dev
+# M — Per-food / ingredient drill-down (2026-08-24 release):
+#   - Seed 3x "Onion Dish" (sentiment 1, tags onion+garlic) + "Rice" control
+#     (seed-ingredient-reactions, same as d-ingredient-insights)
+#   - Tap the onion ingredient finding's card -> /insight/detail
+#   - Summary: 3 logs, 3 rated, avg sentiment 1 — deterministic. The
+#     followed-by-outcome COUNT is not: the entry form stores loggedAt at
+#     MINUTE granularity, so dishes saved in the same minute share the exact
+#     same timestamp and the strictly-after outcome rule skips them (correct
+#     by design). At least one boundary is always crossed across the seed's
+#     three ~1-min form passes, so >=1 marker is guaranteed — assert that.
+#   - Row opens the entry edit screen
+---
+- launchApp:
+    clearState: true
+- runFlow: _helpers/reconnect-dev-client.yaml
+- runFlow: _helpers/seed-ingredient-reactions.yaml
+
+# --- Insights: tap the onion finding card ---
+- tapOn:
+    id: "tab-insights"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "See all logs: onion"
+    direction: DOWN
+    centerElement: true
+- tapOn: "See all logs: onion"
+- waitForAnimationToEnd
+
+# --- Detail screen: stable summary parts + at least one outcome marker ---
+- assertVisible: ".*3 logs · 3 rated · avg sentiment 1.*"
+- assertVisible: "Rough outcome within 24 h"
+
+# --- Row opens the entry editor ---
+- tapOn: "Open Onion Dish.*"
+- waitForAnimationToEnd
+- assertVisible: "Edit entry"
+- assertVisible: "Onion Dish"
