@@ -166,4 +166,48 @@ describe('InsightsScreen', () => {
     expect(getByText('gluten')).toBeTruthy();
     expect(getByText('Low confidence · 3 meals')).toBeTruthy();
   });
+
+  it('renders the Digestion section when a BM entry is present', async () => {
+    const baseEntry = {
+      mealSlot: null,
+      barcode: null,
+      symptomType: null,
+      severity: null,
+      notes: null,
+      calories: null,
+      fatG: null,
+      saturatedFatG: null,
+      carbsG: null,
+      proteinG: null,
+      fiberG: null,
+      sugarG: null,
+      sodiumMg: null,
+      servingG: null,
+      ingredientsText: null,
+      tagsJson: null,
+      componentCount: null,
+      createdAt: 0,
+      updatedAt: 0,
+    };
+    mockEntries = [
+      {
+        ...baseEntry,
+        id: 'bm1',
+        type: 'bowel_movement',
+        name: 'BM',
+        loggedAt: Date.now(),
+        sentiment: null,
+        bristolScale: 4,
+      },
+    ];
+
+    const { getByText } = await renderScreen(<InsightsScreen />);
+    expect(getByText('Digestion')).toBeTruthy();
+  });
+
+  it('does not render the Digestion section when there are no BM entries', async () => {
+    mockEntries = [];
+    const { queryByText } = await renderScreen(<InsightsScreen />);
+    expect(queryByText('Digestion')).toBeNull();
+  });
 });
