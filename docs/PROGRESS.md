@@ -119,7 +119,7 @@ Completed tiers are collapsed to a single line; their detail lives in git.
 
 | Item | Why it matters | Effort | Notes |
 |------|----------------|:--:|------|
-| **Multi-symptom logging in one instance** | Logging nausea + bloating today means two full passes through the symptom screen; friction here costs outcome data, and outcome data is what correlation runs on | S | Planned 2026-08-24 (`docs/HANDOFF.md`) — multi-select type picker on `/symptom/new`, save fans out one `logEntry` row per symptom (shared time/severity/notes; no schema change, analysis untouched); edit stays single-select. Sonnet executes; Fable reviews for remediation. Maestro flow owed after ship. |
+| **Multi-symptom logging in one instance** | Logging nausea + bloating today means two full passes through the symptom screen; friction here costs outcome data, and outcome data is what correlation runs on | S | **✅ shipped 2026-08-24** (planned by Fable, executed by Sonnet, Fable review: **no remediation needed**) — multi-select picker on `/symptom/new`, save fans out one `logEntry` row per symptom via transactional `createLogEntries` (shared time/severity/notes; no schema change, analysis untouched); edit stays single-select (`single` prop). Rungs green 63 suites / 551 tests. **Owed:** Maestro flow (tap two chips → save once → two journal rows; spec in HANDOFF §4) + device pass next Metro session. Unpin next plan cycle. |
 
 ## Tier 0 — Foundations · ✅ complete
 Saturated fat, backup/export-import, native date/time picker, serving-size scaling,
