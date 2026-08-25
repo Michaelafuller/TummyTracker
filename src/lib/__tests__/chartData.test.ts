@@ -1,5 +1,5 @@
 import type { LogEntry } from '@/db/schema';
-import { weeklySentiment } from '../chartData';
+import { weeklyIntake, weeklySentiment } from '../chartData';
 
 let seq = 0;
 function makeEntry(overrides: Partial<LogEntry>): LogEntry {
@@ -87,5 +87,66 @@ describe('weeklySentiment', () => {
 
   it('defaults to 8 weeks', () => {
     expect(weeklySentiment([], NOW)).toHaveLength(8);
+  });
+});
+
+describe('weeklyIntake', () => {
+  it('averages a food field per day (sum/7) across the bucket, oldest first', () => {
+    const entries = [
+      // Current week (Jun 26 - Jul 2): 210 + 140 = 350 -> 350/7 = 50
+      makeEntry({ loggedAt: new Date(2026, 5, 30, 12, 0, 0).getTime(), calories: 210 }),
+      makeEntry({ loggedAt: new Date(2026, 6, 1, 8, 0, 0).getTime(), calories: 140 }),
+      // Prior week (Jun 19 - Jun 25): 70 -> 70/7 = 10
+      makeEntry({ loggedAt: new Date(2026, 5, 20, 9, 0, 0).getTime(), calories: 70 }),
+    ];
+
+    const buckets = weeklyIntake(entries, NOW, 'calories', 2);
+
+    expect(buckets).toHaveLength(2);
+    expect(buckets[0]).toEqual({ label: 'Jun 19', avg: 10 });
+    expect(buckets[1]).toEqual({ label: 'Jun 26', avg: 50 });
+  });
+
+  it('gives a bucket avg: null (not zero) when no food entry carries the field', () => {
+    const buckets = weeklyIntake([], NOW, 'calories', 3);
+    expect(buckets).toHaveLength(3);
+    for (const bucket of buckets) {
+      expect(bucket.avg).toBeNull();
+    }
+  });
+
+  it('yields avg: 0 (not null) when logged values are explicitly zero', () => {
+    const entries = [makeEntry({ loggedAt: new Date(2026, 5, 30, 12, 0, 0).getTime(), fiberG: 0 })];
+    const buckets = weeklyIntake(entries, NOW, 'fiberG', 1);
+    expect(buckets[0]).toEqual({ label: 'Jun 26', avg: 0 });
+  });
+
+  it('ignores non-food entries (BM/symptom)', () => {
+    const entries = [
+      makeEntry({
+        loggedAt: new Date(2026, 5, 30, 12, 0, 0).getTime(),
+        type: 'bowel_movement',
+        calories: 999,
+        bristolScale: 4,
+      }),
+    ];
+    const buckets = weeklyIntake(entries, NOW, 'calories', 1);
+    expect(buckets[0]).toEqual({ label: 'Jun 26', avg: null });
+  });
+
+  it('uses the same bucket boundaries/labels as weeklySentiment for the same now', () => {
+    const sentimentBuckets = weeklySentiment([], NOW, 4);
+    const intakeBuckets = weeklyIntake([], NOW, 'calories', 4);
+    expect(intakeBuckets.map((b) => b.label)).toEqual(sentimentBuckets.map((b) => b.label));
+  });
+
+  it('is field-generic (works the same for a second field, e.g. fiberG)', () => {
+    const entries = [makeEntry({ loggedAt: new Date(2026, 5, 30, 12, 0, 0).getTime(), fiberG: 7 })];
+    const buckets = weeklyIntake(entries, NOW, 'fiberG', 1);
+    expect(buckets[0]).toEqual({ label: 'Jun 26', avg: 1 });
+  });
+
+  it('defaults to 8 weeks', () => {
+    expect(weeklyIntake([], NOW, 'calories')).toHaveLength(8);
   });
 });

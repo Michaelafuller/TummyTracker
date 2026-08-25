@@ -210,4 +210,42 @@ describe('InsightsScreen', () => {
     const { queryByText } = await renderScreen(<InsightsScreen />);
     expect(queryByText('Digestion')).toBeNull();
   });
+
+  it('renders the Intake section with a Calories block when calories are logged', async () => {
+    const baseEntry = {
+      mealSlot: null,
+      barcode: null,
+      bristolScale: null,
+      symptomType: null,
+      severity: null,
+      notes: null,
+      fatG: null,
+      saturatedFatG: null,
+      carbsG: null,
+      proteinG: null,
+      fiberG: null,
+      sugarG: null,
+      sodiumMg: null,
+      servingG: null,
+      ingredientsText: null,
+      tagsJson: null,
+      componentCount: null,
+      createdAt: 0,
+      updatedAt: 0,
+    };
+    mockEntries = [
+      { ...baseEntry, id: 'm1', type: 'meal', name: 'Food', loggedAt: Date.now(), sentiment: null, calories: 210 },
+    ];
+
+    const { getByText, queryByText } = await renderScreen(<InsightsScreen />);
+    expect(getByText('Intake')).toBeTruthy();
+    expect(getByText('Calories')).toBeTruthy();
+    expect(queryByText('Fiber')).toBeNull();
+  });
+
+  it('does not render the Intake section when there is no nutrition data at all', async () => {
+    mockEntries = [];
+    const { queryByText } = await renderScreen(<InsightsScreen />);
+    expect(queryByText('Intake')).toBeNull();
+  });
 });
