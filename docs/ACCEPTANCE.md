@@ -371,10 +371,13 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
       `flows/checkin-persistence.yaml`, `flows/nav-tabs.yaml`
 
 ### Meal-component drill-down (edit after save)
-- [ ] Open a 2-component meal → tap a component row → its edit screen shows the
-      component's nutrition; change servings 1→2 and save → the entry's totals
-      reflect the doubled contribution and persist across relaunch. · auto
-      `flows/j-component-drilldown.yaml` (new — owed to the full-run session)
+- [x] Open a multi-component meal → tap a component row → its edit screen shows
+      the component's nutrition; change servings 1→2 and save → the entry's
+      totals reflect the doubled contribution and persist across relaunch. Also
+      covers both delete paths (swipe on the entry screen + editor Delete
+      button, each with confirm) and the section hiding at one remaining
+      component. · auto `flows/j-component-drilldown.yaml` (authored
+      2026-08-24, recorded green + one confirmation re-run)
 - [ ] Tags stay additive after a component edit (a renamed component never
       strips a previously captured tag). · Jest
       `src/lib/__tests__/mealAggregate.test.ts` (`reaggregateEntryPatch`) — no

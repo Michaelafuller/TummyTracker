@@ -112,6 +112,7 @@ maestro test flows/ --format junit --output flows/results.xml
 | Settings — offline toggle + sections render | `flows/settings-smoke.yaml` | ✅ Automated (offline-mode switch value is not assertable in Maestro → manual regardless) |
 | Watchlist — add term, non-blocking flag on review + entry view | `flows/watchlist.yaml` | ✅ Automated — targets the **Insights** tab, not Settings (`WatchlistSection` renders in `src/app/(tabs)/insights.tsx`) |
 | Goals tab — daily tally, missing-data disclosure, tally-row drill-down (expand/collapse, "no data" sub-rows, tap-through to edit screen), "Today" + long-date header | `flows/goals-tally.yaml` | ✅ Automated (verified 2026-08-21 on the dev variant, `com.tummytracker.app.dev`) |
+| J — meal-component drill-down: servings edit re-aggregates totals, swipe-delete + editor Delete (confirms), section hides at 1 component, relaunch persistence | `flows/j-component-drilldown.yaml` | ✅ Automated (authored 2026-08-24; recorded green + confirmation re-run) |
 | Goals — floor/cap thresholds, cap notice, removal | `flows/goal-editor.yaml` | ✅ Automated |
 | Check-in persistence + 7-day horizon | `flows/checkin-persistence.yaml` | ✅ Automated |
 
@@ -212,6 +213,16 @@ occurred:**
    visible" while looking present in spirit. Always `scrollUntilVisible` the
    specific row/text you're about to assert, not just the section header
    above it (`h-recent-foods.yaml`'s second "Recent" row, "Pizza slice").
+4. **Swiping (or tapping) a row that `scrollUntilVisible` left half-clipped at
+   the bottom screen edge silently no-ops** — the gesture's start point lands
+   in the Android gesture-nav dead zone and never reaches the target
+   (`j-component-drilldown.yaml`'s swipe-to-delete, 2026-08-24: the swipe
+   "COMPLETED" but the RNGH swipeable never opened; the failure screenshot
+   showed the row hugging the bottom edge). Add `centerElement: true` to the
+   `scrollUntilVisible` before any `swipe: from:` (and before tapping rows in
+   long scrollables), and wrap the swipe in a `repeat: times: N / while:
+   notVisible: <revealed action>` — a single swipe doesn't always drag far
+   enough to latch a friction-2 `ReanimatedSwipeable` open even when centered.
 
 See `docs/RESULTS.md` (2026-08-16/17) for the full diagnosis and the flows each
 fix landed in.

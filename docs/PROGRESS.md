@@ -54,8 +54,8 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
      Goals heading; date line → "August 21, 2026". No remediations.
   Rungs green at HEAD (60 suites / 538 tests) + `bundle:check`. Maestro:
   tally-row drill-down verified 2026-08-21; **full re-run done 2026-08-24
-  (24/24)**; only `j-component-drilldown.yaml` (meal-component drill-down +
-  delete coverage) remains unauthored.
+  (24/24)**; `j-component-drilldown.yaml` authored + verified 2026-08-24 —
+  **no owed flows remain** (suite is now 25).
 - **✅ Fixed 2026-08-21 (on-device verified):** Home Recent list was still
   truncated after the layout change — root cause (painted-box screenshots +
   uiautomator): `BottomTabInset` reserved 80dp of dead bottom padding on
@@ -83,8 +83,8 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
 - **Still owed (test sessions):** manual-only items per `docs/E2E.md` (camera
   loop, notification timing, dictation double-text check on both platforms,
   light/dark visual walkthrough, import round-trip content, migration
-  spot-checks 0006–0008 against the real DB) · flow for the new
-  component-drill-down once it ships (spec in HANDOFF §3).
+  spot-checks 0006–0008 against the real DB). The automated flow backlog is
+  **clear** as of 2026-08-24 (`j-component-drilldown.yaml` was the last).
 - **Carried recommendations (RESULTS 2026-08-16/17):** root-level React error
   boundary around the tab navigator · "Insights" subtitle heading for
   label-consistency · **dev-mode React warning on launch (seen 2026-08-21 on

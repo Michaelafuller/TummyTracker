@@ -54,14 +54,40 @@ goal-editor 2m46s · goals-tally 1m37s · h-recent-foods 2m4s · i-backup 1m42s 
 journal-calendar 1m57s · nav-tabs 37s · settings-smoke 31s · ux3-scan-screen
 29s · watchlist 1m32s.
 
+## Addendum — same-day targeted run: `j-component-drilldown.yaml` authored (2026-08-24, later session)
+
+**1/1 passed (recorded, `flows/results-j.xml`) + one confirmation re-run, also
+green.** The last unauthored owed flow now exists and covers the whole
+meal-component surface in one pass: build a 3-component meal (Rice 200 / Beans
+100 / Corn 50 kcal) through the builder's scan-fallback loop → drill into Rice,
+servings 1→2, save → row re-aggregates to "Rice · 2× serving · 400 kcal" (parent
+tally 550) → swipe-delete Beans (confirm) → editor-Delete Corn (confirm) →
+"In this meal" hides at one remaining component, parent Calories 400 → relaunch
+→ 400 + hidden section persist. The `'last'`-component refusal is unreachable
+from UI (the section hides at 1) and stays Jest-covered.
+
+Two **flow-bugs** found and fixed during authoring (no app bugs):
+
+1. **Wrong journal-row selector assumption.** A multi-component meal's name
+   prefills via `defaultMealName` to `"Rice + 2 more"` (first + N more), not
+   the joined component names — so the row testID is `entry-row-rice-2-more`.
+2. **Swipe start point in the gesture-nav dead zone.** `scrollUntilVisible`
+   stopped with the Beans row half-clipped at the bottom screen edge; the
+   swipe "completed" without ever reaching the RNGH swipeable (failed 2 of 3
+   early runs — the first pass had luckier scroll positioning). Fixed with
+   `centerElement: true` + a bounded swipe-repeat; now E2E.md flow-authoring
+   gotcha #4. Two consecutive green runs post-fix.
+
+ACCEPTANCE flip: "Meal-component drill-down" → drill-down row `[ ]` → `[x]`
+(row text extended to name the delete coverage). **No owed flows remain.**
+
 ## Findings for the next planning session
 
 - No app bugs found. The multi-symptom fan-out (one save → one row per
   symptom, shared time/severity/notes) behaves as specced on-device.
-- **`flows/j-component-drilldown.yaml` remains the only unauthored owed flow**
-  (meal-component drill-down + swipe/button delete coverage; spec was in the
-  2026-08-21 HANDOFF §3). Everything else previously owed to "the full-run
-  session" is now closed.
+- ~~`flows/j-component-drilldown.yaml` remains the only unauthored owed flow~~
+  **Authored + verified same day — see the Addendum above. The flow backlog is
+  fully clear**; the next full `e2e:ci` run will sweep 25 flows.
 - Carried from before (unchanged): root-level React error boundary ·
   "Insights" subtitle heading · the dev-mode "state update on a component that
   hasn't mounted yet" warning (repro with LogBox open still owed).

@@ -1,0 +1,224 @@
+appId: com.tummytracker.app.dev
+# J — Meal-component drill-down + delete (2026-08-21 release, flow owed since):
+#   - Build a 3-component meal (Rice 200 / Beans 100 / Corn 50 kcal)
+#   - Tap a component row -> its edit screen (nutrition visible); servings 1->2
+#     and save -> the row shows the doubled contribution (Rice · 2x · 400 kcal)
+#   - Swipe-to-delete on the entry screen (Beans) with confirm
+#   - Delete button on the component editor (Corn) with confirm
+#   - One component left -> "In this meal" section hides (deliberate v1 wrinkle);
+#     parent totals re-aggregate to 400 and persist across relaunch
+# The last-component 'last' refusal is unreachable from UI (section hides at 1)
+# and is Jest-covered (repository) — not driven here.
+# Component rows are selected by accessibilityLabel ("Edit <name>" /
+# "Delete <name>"), never testID — component ids are uuids.
+---
+- launchApp:
+    clearState: true
+    permissions:
+      camera: allow
+- runFlow: _helpers/reconnect-dev-client.yaml
+
+# --- Build the meal: component 1 (Rice, 200 kcal) ---
+- tapOn:
+    text: "Add an entry manually"
+- assertVisible:
+    text: "Component name"
+- tapOn:
+    text: "Component name"
+- inputText: "Rice"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Calories"
+    direction: DOWN
+- tapOn:
+    text: "Calories"
+- inputText: "200"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Add & scan next"
+    direction: DOWN
+- tapOn:
+    text: "Add & scan next"
+- waitForAnimationToEnd
+
+# --- Component 2 (Beans, 100 kcal) via the scan screen's manual fallback ---
+- assertVisible: "Point at a product barcode"
+- tapOn:
+    text: "Enter product manually"
+- waitForAnimationToEnd
+- tapOn:
+    text: "Component name"
+- inputText: "Beans"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Calories"
+    direction: DOWN
+- tapOn:
+    text: "Calories"
+- inputText: "100"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Add & scan next"
+    direction: DOWN
+- tapOn:
+    text: "Add & scan next"
+- waitForAnimationToEnd
+
+# --- Component 3 (Corn, 50 kcal), then finish ---
+- assertVisible: "Point at a product barcode"
+- tapOn:
+    text: "Enter product manually"
+- waitForAnimationToEnd
+- tapOn:
+    text: "Component name"
+- inputText: "Corn"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Calories"
+    direction: DOWN
+- tapOn:
+    text: "Calories"
+- inputText: "50"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Finish meal"
+    direction: DOWN
+- tapOn:
+    text: "Finish meal"
+- waitForAnimationToEnd
+
+# --- Review: components listed, save (defaultMealName prefills "Rice + 2 more",
+#     which slugs to the entry-row-rice-2-more testID used below; the entry name
+#     is user-owned and unchanged by later component deletes) ---
+- assertVisible: "Rice · 1× serving · 200 kcal"
+- scrollUntilVisible:
+    element:
+      text: "Save meal"
+    direction: DOWN
+- tapOn:
+    text: "Save meal"
+- waitForAnimationToEnd
+- waitForAnimationToEnd
+- tapOn:
+    id: "tab-home"
+
+# --- Open the saved meal from Journal ---
+- tapOn:
+    id: "tab-journal"
+- waitForAnimationToEnd
+- tapOn:
+    id: "entry-row-rice-2-more"
+- waitForAnimationToEnd
+
+# --- Drill down: component row -> editor shows nutrition; servings 1 -> 2 ---
+- scrollUntilVisible:
+    element:
+      text: "Rice · 1× serving · 200 kcal"
+    direction: DOWN
+- tapOn: "Edit Rice"
+- waitForAnimationToEnd
+# The editor is the full ComponentForm — its nutrition grid holds the saved value
+- scrollUntilVisible:
+    element:
+      text: "Ingredients"
+    direction: DOWN
+- tapOn:
+    text: "Servings"
+- eraseText
+- inputText: "2"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Save changes"
+    direction: DOWN
+- tapOn:
+    text: "Save changes"
+- waitForAnimationToEnd
+
+# --- Back on the entry: row re-aggregated (200 kcal x 2 servings) ---
+- scrollUntilVisible:
+    element:
+      text: "Rice · 2× serving · 400 kcal"
+    direction: DOWN
+
+# --- Swipe-to-delete Beans (entry-screen path) ---
+# centerElement is load-bearing: without it the row can stop half-clipped at
+# the bottom screen edge, where the swipe start point lands in the gesture-nav
+# dead zone and never reaches the swipeable (failed screenshot 2026-08-24).
+# The repeat guards the remaining flake: one swipe doesn't always drag far
+# enough to latch the action open on a friction-2 ReanimatedSwipeable.
+- scrollUntilVisible:
+    element:
+      text: "Beans · 1× serving · 100 kcal"
+    direction: DOWN
+    centerElement: true
+- repeat:
+    times: 4
+    while:
+      notVisible: "Delete Beans"
+    commands:
+      - swipe:
+          from:
+            text: "Edit Beans"
+          direction: LEFT
+      - waitForAnimationToEnd
+- assertVisible: "Delete Beans"
+- tapOn: "Delete Beans"
+- assertVisible: "Remove from this meal?"
+- tapOn: "Remove"
+- waitForAnimationToEnd
+- assertNotVisible: "Beans · 1× serving · 100 kcal"
+
+# --- Delete Corn via the component editor's Delete button ---
+- scrollUntilVisible:
+    element:
+      text: "Corn · 1× serving · 50 kcal"
+    direction: DOWN
+    centerElement: true
+- tapOn: "Edit Corn"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "Save changes"
+    direction: DOWN
+- tapOn: "Delete"
+- assertVisible: "Remove from this meal?"
+- tapOn: "Remove"
+- waitForAnimationToEnd
+
+# --- One component left: section hidden, totals re-aggregated to 400 ---
+- scrollUntilVisible:
+    element:
+      text: "Delete entry"
+    direction: DOWN
+- assertNotVisible: "In this meal"
+- scrollUntilVisible:
+    element:
+      text: "400"
+    direction: UP
+
+# --- Persistence across relaunch (SQLite round-trip) ---
+- stopApp
+- launchApp
+- runFlow: _helpers/reconnect-dev-client.yaml
+- tapOn:
+    id: "tab-journal"
+- waitForAnimationToEnd
+- tapOn:
+    id: "entry-row-rice-2-more"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "400"
+    direction: DOWN
+- scrollUntilVisible:
+    element:
+      text: "Delete entry"
+    direction: DOWN
+- assertNotVisible: "In this meal"
