@@ -1,126 +1,82 @@
-# RESULTS.md — Maestro run 2026-08-21 (test-execute: targeted Goals + smoke, first dev-variant run)
+# RESULTS.md — Maestro run 2026-08-24 (test-execute: c2 authoring + FULL regression, first full run on the dev variant)
 
 ## Summary
 
-- **Flows run: 5. Passed: 5. Failed: 0.** (One flow-bug hit and fixed
-  in-session during individual authoring/verification before the recorded
-  run — see Root causes below. The recorded `flows/results.xml` run is a
-  clean 5/5.)
-- **Scope: targeted** — Goals flows + launch smoke on the newly-split dev
-  variant, per `docs/HANDOFF.md`. Flows: `00-launch`, `goals-tally`,
-  `goal-editor`, `checkin-persistence`, `nav-tabs`. **The full regression
-  (`npm run e2e:ci`) is still owed** — deferred to a later session, after the
-  owner's iOS deployment, per HANDOFF's explicit scope note.
-- **Rungs: green.** `npm run typecheck` ✅ `npm run lint` ✅ `npm test` ✅.
-  No app source was touched this session (test sessions don't change
-  features) — only `flows/*.yaml` and these three docs.
-- **Device + build:** Pixel 5 (`0A131FDD4006VE`), package
-  `com.tummytracker.app.dev` (the `development`-profile dev client,
-  `DEBUGGABLE` confirmed by the plan session). `com.tummytracker.app` (the
-  owner's real journal) was never launched, cleared, or installed over.
-- **Metro:** started fresh for this worktree on **port 8081** (this worktree
-  had no `node_modules` — `npm install` was run first, ~1100 packages, 42s —
-  then `npx expo start --dev-client --port 8081`, `adb reverse tcp:8081
-  tcp:8081`). Left running at the end of this session on port 8081.
-- **`flows/results.xml` written:** 5 testcases, 0 failures, total flow time
-  462s (`maestro test flows/ --include-tags goals,smoke --format junit
-  --output flows/results.xml`).
+- **Flows run: 24. Passed: 24. Failed: 0.** (`flows/results.xml`: `tests="24"
+  failures="0"`, total wall time 40m 21s.) **This is the new clean baseline**,
+  replacing the 23/23 of 2026-08-16/17 — it adds `c2-multi-symptom.yaml` and is
+  the **first full-suite run against the dev variant**
+  (`com.tummytracker.app.dev`), closing the shared-infra debt from the
+  2026-08-21 variant split (appId/scheme had moved under every flow; only 5 had
+  been re-run until now).
+- **Scope: full** — `npm run e2e:ci` over `flows/`, plus individual authoring
+  verification of the new `c2-multi-symptom.yaml` beforehand (also passed,
+  48s in the recorded run).
+- **Rungs: green at HEAD** (63 suites / 551 tests) — unchanged this session;
+  only `flows/` + docs touched (test sessions don't change features).
+- **Device + build:** Pixel 5 (`0A131FDD4006VE`), `com.tummytracker.app.dev`
+  re-verified `DEBUGGABLE` before the run. The owner's real journal app was
+  never launched, cleared, or installed over.
+- **Metro:** cold host (post-reboot; adb daemon started fresh) — Metro started
+  for this worktree with `npx expo start --dev-client --port 8081 --clear`
+  (clean cache → fresh watcher, per the 2026-08-21 watcher finding), `adb
+  reverse tcp:8081 tcp:8081`. Freshness confirmed by a real bundling line
+  (`Android Bundled 8731ms … (2494 modules)`) on the first launch. **Left
+  running on port 8081 at session end.**
 
-## The reconnect helper vs. the dev variant (first-ever run)
+## New flow — `flows/c2-multi-symptom.yaml` (passed first try, no fixes needed)
 
-This was the first Maestro run of any kind against `com.tummytracker.app.dev`
-and its `tummytracker-dev://` deep link. **It worked on the first try, no
-diagnosis steps needed.** `npm run e2e:flow flows/00-launch.yaml` — run
-immediately after editing the helper's hardcoded port (8084 → 8081) and
-before authoring anything else, per HANDOFF §1.1 — passed clean:
-`Development Build` → `openLink tummytracker-dev://expo-development-client/
-?url=http%3A%2F%2Flocalhost%3A8081` → `TummyTracker` home screen, all in one
-shot. Metro's log confirmed freshness with a real bundling line (`Android
-Bundled 9597ms node_modules\expo-router\entry.js (2406 modules)`) on that
-same launch, so this is a genuine fresh-JS run, not a stale-embedded-bundle
-false positive. The variant split (`app.config.ts`'s inlined
-`resolveAppIdentity`, `com.tummytracker.app.dev` appId, `tummytracker-dev://`
-scheme) is confirmed working end-to-end on-device.
+Covers the 2026-08-24 multi-symptom feature end-to-end on a real SQLite
+round-trip: tap **two** symptom chips (Nausea + Bloating) + Severity 3, save
+**once** → Journal shows two distinct rows (`entry-row-nausea`,
+`entry-row-bloating`) → opening the Nausea row reloads its edit screen with
+the shared "Severity 3: Significant". No seeds needed (two entries fit above
+the fold in clearState). The companion single-tap flow
+(`c-symptom-logging.yaml`) also passed unmodified — one tap still selects on
+the multi-select picker, as designed.
 
-`maestro test flows/ --include-tags smoke` was also verified once (HANDOFF
-§1.2) — it correctly scoped to the single `smoke`-tagged flow (`00-launch`,
-1/1 passed in 18s) rather than sweeping the whole untagged `flows/`
-directory, so `--include-tags` works as expected on Maestro 2.6.1 for this
-project's directory layout (including the `_helpers/` subfolder, which holds
-no top-level flow files and caused no issue).
+## Root causes
 
-## Root causes (the point of this file)
-
-### 1. `goals-tally.yaml` drill-to-entry assertion — below-fold. Class: `flow-bug`. FIXED.
-
-The new drill-down coverage's last step (`tapOn: "Open Tally Test Meal"` →
-`assertVisible: "Save changes"`) failed on the first authored attempt. The
-debug screenshot showed the edit-entry screen had opened correctly — header
-"Edit entry", "Tally Test Meal" populated in Name, sentiment emoji row,
-Notes counter all present — but `Save changes` (the `LogEntryForm`
-`submitLabel`, `src/app/entry/[id].tsx:143`) sits inside the same
-`ScrollView` further down the form, off-screen at the point the assertion
-ran. This is the same below-fold shape already documented in `E2E.md`'s
-flow-authoring gotchas (§ "Always scroll to a landmark..."), just at a new
-call site. Read `src/app/entry/[id].tsx` before classifying — confirmed the
-button exists and renders unconditionally once `entry` loads; nothing in the
-component is broken. **Fix:** added `scrollUntilVisible: element: text: "Save
-changes", direction: DOWN` before the assertion. Re-run passed clean.
-
-No other failures occurred — `goal-editor.yaml` and `checkin-persistence.yaml`
-(unmodified this session, aside from the shared reconnect-helper port edit)
-both passed on their first individual run against the new tally
-header/row structure, confirming the Goals-screen "Today" + long-date header
-change (HANDOFF §0) didn't regress goal thresholds, the cap-notice review
-flow, or check-in persistence. `nav-tabs.yaml`'s Goals-tab assertion
-(`"Goals"`, now sourced from `GoalsSection`'s heading rather than the page
-header) also passed first try — comment updated to reflect the new source,
-assertion text unchanged since both the old page header and the new
-`GoalsSection` heading render the literal string `"Goals"`.
+None. **Zero flow-bugs and zero app-bugs this run** — every flow passed on its
+first recorded attempt, including the 19 flows that had never run against the
+dev variant's appId/scheme, and `h-recent-foods.yaml`'s owed re-run on the
+2026-08-21 Home nested-scroll layout.
 
 ## Per-flow
 
-| Flow | Result | Class | Root cause # |
-|------|--------|-------|--------------|
-| `00-launch` | PASS (18s) | — | — |
-| `goals-tally` | PASS (99s) — 1 fix during authoring | flow-bug | 1 |
-| `goal-editor` | PASS (172s) | — | — |
-| `checkin-persistence` | PASS (133s) | — | — |
-| `nav-tabs` | PASS (40s) | — | — |
+All 24 passed — timings from the recorded run: 00-launch 17s ·
+01b-manual-entry 2m4s · 01c-barcode-fallback 34s · 01d-browse-edit 2m4s ·
+01e-reminders 30s · 02-bm-tracking 2m11s · 03-insights 4m5s ·
+ab-satfat-ingredients 2m18s · c-symptom-logging 2m14s · **c2-multi-symptom
+48s (new)** · checkin-persistence 2m7s · d-ingredient-insights 3m7s ·
+e-temporal-insights 1m42s · f-serving-size 1m49s · g-datetime-picker 1m16s ·
+goal-editor 2m46s · goals-tally 1m37s · h-recent-foods 2m4s · i-backup 1m42s ·
+journal-calendar 1m57s · nav-tabs 37s · settings-smoke 31s · ux3-scan-screen
+29s · watchlist 1m32s.
 
 ## Findings for the next planning session
 
-- No app bugs found. The Goals-tab drill-down feature (`src/app/(tabs)/goals.tsx`
-  — expand/collapse per-nutrient rows via `tally-row-<field>`, sub-rows via
-  `tally-item-<entryId>` with `"Open <name>"` labels, "no data" disclosure,
-  tap-through to `/entry/<id>`) behaves exactly as specced against a real
-  device and a real SQLite round-trip.
-- The variant split is now verified on-device, closing the last open risk
-  named in `ACCEPTANCE.md`'s "Build-variant split" section for the automated
-  half of that checklist (see ACCEPTANCE.md changes below). The remaining
-  rows there (`clearState` only wiping `.dev`, full suite, preview-build
-  reclaim) are manual/full-run items already correctly scoped as such.
-- **Full regression is still owed** — targeted scope only ran 5 of ~24 flows.
-  Every other flow file still has appId/scheme baked in from before the
-  variant split and has never been run against `.dev`; per the shared-infra
-  rule (`TEST_STRATEGY.md §6`) this should happen before the next EAS build
-  or as the dedicated full-run session HANDOFF already anticipates.
-- `flows/j-component-drilldown.yaml` (meal-component drill-down) and the
-  Home-layout re-run of `flows/h-recent-foods.yaml` remain unauthored/owed
-  per `ACCEPTANCE.md`'s "Meal-component drill-down" and "Home tab" sections —
-  out of scope for this targeted session, noted here so the next full-run
-  session doesn't lose track.
+- No app bugs found. The multi-symptom fan-out (one save → one row per
+  symptom, shared time/severity/notes) behaves as specced on-device.
+- **`flows/j-component-drilldown.yaml` remains the only unauthored owed flow**
+  (meal-component drill-down + swipe/button delete coverage; spec was in the
+  2026-08-21 HANDOFF §3). Everything else previously owed to "the full-run
+  session" is now closed.
+- Carried from before (unchanged): root-level React error boundary ·
+  "Insights" subtitle heading · the dev-mode "state update on a component that
+  hasn't mounted yet" warning (repro with LogBox open still owed).
+- Remaining manual/owner rows: `clearState` wipes only `.dev` (owner opens the
+  real app after this session and confirms entries intact) · preview-build
+  reclaim of `com.tummytracker.app` · the E2E.md manual list (camera,
+  notification timing, dark-mode visuals, export content, import round-trip).
 
 ## ACCEPTANCE.md changes made
 
-- Flipped, from the green `flows/results.xml` testcases above:
-  - "Post-MVP · 2026-08-21 release" → "Build-variant split" →
-    `_helpers/reconnect-dev-client.yaml` reconnects the dev-variant client...
-    `[ ]` → `[x]`.
-  - "Post-MVP · 2026-08-21 release" → "Goals tab — tally drill-down, 'Today'
-    header, long date" → all 5 rows `[ ]` → `[x]` (header/long-date,
-    expand/collapse, "no data" disclosure, tap-through to edit screen, and
-    goal-editor/check-in/nav-tabs still passing on the new structure).
-- Every other row (full-suite, `clearState` scope, preview-build reclaim,
-  component drill-down, Home layout) left `[ ]` — not covered by this
-  targeted run.
+- "Post-MVP · 2026-08-24 release" → "Multi-symptom logging in one instance" →
+  all 3 rows `[ ]` → `[x]` (c2 flow, c single-tap regression, Jest
+  deselect/empty-selection coverage).
+- "Post-MVP · 2026-08-21 release" → "Build-variant split" → "Full Maestro
+  suite passes against the dev variant" `[ ]` → `[x]`; "Home tab" →
+  `h-recent-foods.yaml` nested-scroll re-run `[ ]` → `[x]`.
+- Left `[ ]`: `clearState`-scope + preview-reclaim (manual/owner),
+  `j-component-drilldown.yaml` (unauthored), Home visual row (manual).

@@ -350,9 +350,9 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
 - [ ] Maestro `clearState` wipes only the `.dev` app — the real app's journal is
       untouched after a run. · manual (owner: open the real app after a test
       session; entries still there)
-- [ ] Full Maestro suite passes against the dev variant (appId/scheme changed
+- [x] Full Maestro suite passes against the dev variant (appId/scheme changed
       under every flow — shared-infra rule). · auto — full `npm run e2e:ci`
-      run, owed after the iOS deployment
+      run 2026-08-24: 24/24 (`flows/results.xml`)
 - [ ] Preview build reclaims `com.tummytracker.app` in place with the journal
       intact. · manual (owner, EAS)
 
@@ -384,19 +384,20 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
 - [ ] Title and the four action buttons stay fixed; only the Recent rows scroll,
       and Recent fills the rest of the viewport (more than 6 rows visible on a
       Pixel 5 when available). · manual (visual)
-- [ ] Recent search + row tap still work inside the nested scroll. · auto
-      `flows/h-recent-foods.yaml` (re-run owed to the full-run session —
-      nested-scroll semantics)
+- [x] Recent search + row tap still work inside the nested scroll. · auto
+      `flows/h-recent-foods.yaml` (re-run 2026-08-24 full suite, passed on the
+      nested-scroll layout)
 
 ## Post-MVP · 2026-08-24 release (multi-symptom logging)
 
 ### Multi-symptom logging in one instance
-- [ ] Tapping two symptom-type chips and saving once creates **two** separate
+- [x] Tapping two symptom-type chips and saving once creates **two** separate
       journal entries (one per symptom), each opening its own edit screen with
-      the shared severity. · auto `flows/c2-multi-symptom.yaml`
-- [ ] The single-tap symptom path (one chip + severity, filters, edit reload)
+      the shared severity. · auto `flows/c2-multi-symptom.yaml` (2026-08-24
+      full run, 24/24)
+- [x] The single-tap symptom path (one chip + severity, filters, edit reload)
       still passes on the multi-select picker. · auto
-      `flows/c-symptom-logging.yaml`
-- [ ] Tapping a selected chip deselects it; empty selection still saves one
+      `flows/c-symptom-logging.yaml` (2026-08-24 full run)
+- [x] Tapping a selected chip deselects it; empty selection still saves one
       generic "Symptom" entry. · Jest
       `src/features/symptoms/__tests__/SymptomForm.test.tsx` — no device item

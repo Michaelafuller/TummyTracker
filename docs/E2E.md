@@ -69,6 +69,10 @@ maestro test flows/ --format junit --output flows/results.xml
 
 ## Coverage
 
+> **2026-08-24 full run: 24/24 flows passed** (`flows/results.xml`) — first
+> full suite on the dev variant (`com.tummytracker.app.dev`), including the new
+> `c2-multi-symptom.yaml`; zero flow-bugs, zero app-bugs. See `docs/RESULTS.md`.
+>
 > **2026-08-16/17 test-execute run (second resume): 23/23 flows passed.** The
 > app-bug that blocked the prior session (expo-router `Slot` dev-mode crash on
 > array-style props) was fixed at `283d147` and is confirmed resolved. This

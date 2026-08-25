@@ -28,11 +28,12 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   calendar, reminders, BM + symptom logging, insights v2, serving-size scaling,
   backup/restore, 5-tab nav (incl. Goals), offline mode, OFF Search-a-licious
   search, trigger watchlist, threshold goals + daily check-in.
-- **Health:** rungs green at HEAD (58 suites / 505 tests) + `bundle:check`.
-  **Maestro full regression 2026-08-16/17: 23/23 — the new clean baseline**
-  (`docs/RESULTS.md`). The dev-client reconnect gap is handled by flow infra
-  (`flows/_helpers/reconnect-dev-client.yaml` — hardcodes Metro port 8084;
-  update per session).
+- **Health:** rungs green at HEAD (63 suites / 551 tests) + `bundle:check`.
+  **Maestro full regression 2026-08-24: 24/24 — the new clean baseline**, and
+  the first full run on the dev variant, closing the variant-split shared-infra
+  debt (`docs/RESULTS.md`). The dev-client reconnect gap is handled by flow
+  infra (`flows/_helpers/reconnect-dev-client.yaml` — hardcodes Metro port
+  8081; update per session).
 - **✅ Shipped this cycle (two cycles, planned + executed + reviewed 2026-08-21):**
   1. **Meal-component drill-down** — tap a saved meal's component row →
      component edit screen (full nutrition visible) → save re-aggregates the
@@ -52,9 +53,9 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
      entry); page header "Goals" → "Today" so GoalsSection owns the one
      Goals heading; date line → "August 21, 2026". No remediations.
   Rungs green at HEAD (60 suites / 538 tests) + `bundle:check`. Maestro:
-  drill-down flows (meal components + tally rows) owed + full re-run owed
-  (appId/scheme moved under every flow), after the owner's device
-  sequencing (HANDOFF §3).
+  tally-row drill-down verified 2026-08-21; **full re-run done 2026-08-24
+  (24/24)**; only `j-component-drilldown.yaml` (meal-component drill-down +
+  delete coverage) remains unauthored.
 - **✅ Fixed 2026-08-21 (on-device verified):** Home Recent list was still
   truncated after the layout change — root cause (painted-box screenshots +
   uiautomator): `BottomTabInset` reserved 80dp of dead bottom padding on
@@ -119,7 +120,7 @@ Completed tiers are collapsed to a single line; their detail lives in git.
 
 | Item | Why it matters | Effort | Notes |
 |------|----------------|:--:|------|
-| **Multi-symptom logging in one instance** | Logging nausea + bloating today means two full passes through the symptom screen; friction here costs outcome data, and outcome data is what correlation runs on | S | **✅ shipped 2026-08-24** (planned by Fable, executed by Sonnet, Fable review: **no remediation needed**) — multi-select picker on `/symptom/new`, save fans out one `logEntry` row per symptom via transactional `createLogEntries` (shared time/severity/notes; no schema change, analysis untouched); edit stays single-select (`single` prop). Rungs green 63 suites / 551 tests. **Owed:** Maestro flow (tap two chips → save once → two journal rows; spec in HANDOFF §4) + device pass next Metro session. Unpin next plan cycle. |
+| **Multi-symptom logging in one instance** | Logging nausea + bloating today means two full passes through the symptom screen; friction here costs outcome data, and outcome data is what correlation runs on | S | **✅ shipped + device-verified 2026-08-24** (planned by Fable, executed by Sonnet, Fable review: **no remediation needed**) — multi-select picker on `/symptom/new`, save fans out one `logEntry` row per symptom via transactional `createLogEntries` (shared time/severity/notes; no schema change, analysis untouched); edit stays single-select (`single` prop). Rungs green 63 suites / 551 tests; `flows/c2-multi-symptom.yaml` authored + passed on the Pixel. Nothing owed. Unpin next plan cycle. |
 
 ## Tier 0 — Foundations · ✅ complete
 Saturated fat, backup/export-import, native date/time picker, serving-size scaling,
