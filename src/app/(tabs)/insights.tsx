@@ -3,6 +3,8 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BarMeter } from '@/components/charts/BarMeter';
+import { BristolHistogram } from '@/components/charts/BristolHistogram';
+import { CountBars } from '@/components/charts/CountBars';
 import { MiniHistogram } from '@/components/charts/MiniHistogram';
 import { TrendBars } from '@/components/charts/TrendBars';
 import { ThemedText } from '@/components/themed-text';
@@ -20,6 +22,7 @@ import { useAllEntries } from '@/features/logging/useEntries';
 import { WatchButton } from '@/features/watchlist/WatchButton';
 import { WatchlistSection } from '@/features/watchlist/WatchlistSection';
 import { useTheme } from '@/hooks/use-theme';
+import { bmRegularity, bristolDistribution, weeklyBmCounts } from '@/lib/bmTrends';
 import { weeklySentiment } from '@/lib/chartData';
 import { NUTRITION_NOUNS } from '@/lib/nutrition';
 import type { ConfidenceTier } from '@/lib/stats';
@@ -120,6 +123,7 @@ export default function InsightsScreen() {
   const [now] = useState(() => Date.now());
   const trendBuckets = weeklySentiment(entries, now);
   const hasTrendData = trendBuckets.some((b) => b.avg != null);
+  const regularity = bmRegularity(entries, now);
   const hasFindings =
     nutrientFindings.length > 0 ||
     foodFindings.length > 0 ||
@@ -150,6 +154,19 @@ export default function InsightsScreen() {
           <View style={styles.section}>
             <ThemedText type="subtitle">Trend</ThemedText>
             <TrendBars buckets={trendBuckets} />
+          </View>
+        ) : null}
+
+        {summary.bmEntries > 0 ? (
+          <View style={styles.section}>
+            <ThemedText type="subtitle">Digestion</ThemedText>
+            {regularity != null ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                {`≈${regularity.perDay} BMs/day over the last 28 days — ${regularity.typical} typical · ${regularity.hard} hard (1–2) · ${regularity.loose} loose (6–7).`}
+              </ThemedText>
+            ) : null}
+            <CountBars buckets={weeklyBmCounts(entries, now)} />
+            <BristolHistogram counts={bristolDistribution(entries, now)} />
           </View>
         ) : null}
 
