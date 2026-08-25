@@ -113,6 +113,7 @@ maestro test flows/ --format junit --output flows/results.xml
 | Watchlist — add term, non-blocking flag on review + entry view | `flows/watchlist.yaml` | ✅ Automated — targets the **Insights** tab, not Settings (`WatchlistSection` renders in `src/app/(tabs)/insights.tsx`) |
 | Goals tab — daily tally, missing-data disclosure, tally-row drill-down (expand/collapse, "no data" sub-rows, tap-through to edit screen), "Today" + long-date header | `flows/goals-tally.yaml` | ✅ Automated (verified 2026-08-21 on the dev variant, `com.tummytracker.app.dev`) |
 | J — meal-component drill-down: servings edit re-aggregates totals, swipe-delete + editor Delete (confirms), section hides at 1 component, relaunch persistence | `flows/j-component-drilldown.yaml` | ✅ Automated (authored 2026-08-24; recorded green + confirmation re-run) |
+| K — BM trends: Insights "Digestion" section (regularity line, weekly count bars, Bristol histogram) with 2 seeded BMs; chart a11y summaries asserted | `flows/k-bm-trends.yaml` | ✅ Automated (authored 2026-08-24; caught the missing-`accessible` a11y bug, gotcha #5) |
 | Goals — floor/cap thresholds, cap notice, removal | `flows/goal-editor.yaml` | ✅ Automated |
 | Check-in persistence + 7-day horizon | `flows/checkin-persistence.yaml` | ✅ Automated |
 
@@ -223,6 +224,15 @@ occurred:**
    long scrollables), and wrap the swipe in a `repeat: times: N / while:
    notVisible: <revealed action>` — a single swipe doesn't always drag far
    enough to latch a friction-2 `ReanimatedSwipeable` open even when centered.
+5. **An `accessibilityLabel` on a plain (non-touchable) `View` is invisible to
+   Maestro — and to TalkBack — unless the View also sets `accessible`**
+   (`k-bm-trends.yaml`, 2026-08-24: both chart-summary assertions failed with
+   the labels nowhere in the hierarchy; this was an app a11y bug, not a flow
+   bug — fixed at `8872c4e` for the BM charts). Touchables (`Pressable` etc.)
+   are accessible by default, which is why every earlier label-based selector
+   worked. When a flow asserts a summary label on a container View, check the
+   component sets `accessible`; the older charts (TrendBars, MiniHistogram,
+   BarMeter) still have this gap — flagged as a follow-up task.
 
 See `docs/RESULTS.md` (2026-08-16/17) for the full diagnosis and the flows each
 fix landed in.

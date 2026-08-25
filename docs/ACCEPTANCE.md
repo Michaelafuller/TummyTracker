@@ -404,3 +404,17 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
 - [x] Tapping a selected chip deselects it; empty selection still saves one
       generic "Symptom" entry. · Jest
       `src/features/symptoms/__tests__/SymptomForm.test.tsx` — no device item
+
+### BM insights / trends — Insights "Digestion" section
+- [x] With BM entries logged, Insights shows "Digestion": regularity line
+      (avg BMs/day, typical/hard/loose split), weekly count bars with the
+      bad-Bristol portion stacked in the danger color, and a 7-bar Bristol
+      histogram; hidden with zero BMs. · auto `flows/k-bm-trends.yaml`
+      (recorded green, `flows/results-k.xml`) + Jest
+      `src/app/(tabs)/__tests__/insights.test.tsx`
+- [x] Chart accessibility summaries are real Android a11y nodes (TalkBack
+      audible) — found broken on-device in the review pass, fixed at
+      `8872c4e`. · auto `flows/k-bm-trends.yaml` asserts both summaries
+- [x] Bucketing/classification math (week tiling, bad-Bristol 1/2/6/7,
+      regularity window, null-bristol handling). · Jest
+      `src/lib/__tests__/bmTrends.test.ts` — no device item

@@ -81,6 +81,31 @@ Two **flow-bugs** found and fixed during authoring (no app bugs):
 ACCEPTANCE flip: "Meal-component drill-down" → drill-down row `[ ]` → `[x]`
 (row text extended to name the delete coverage). **No owed flows remain.**
 
+## Addendum 2 — BM-trends cycle flow (`k-bm-trends.yaml`, 2026-08-24 evening)
+
+**1/1 passed (recorded, `flows/results-k.xml`)** after one review-pass
+remediation. Seeds two BMs (Type 4 typical, Type 6 loose) → Insights
+"Digestion" section: asserts the exact regularity line ("≈0.1 BMs/day … 1
+typical · 0 hard (1–2) · 1 loose (6–7)."), the CountBars a11y summary
+(".*2 BMs \\(1 irregular\\).*"), and the fully deterministic BristolHistogram
+summary. Screenshot confirmed the stacked bad-portion rendering and both
+histogram bars.
+
+**App bug found on-device (class: app-bug, a11y): chart summaries were not
+real accessibility nodes.** Both summary assertions failed with the labels
+absent from the hierarchy — a plain `View`'s `accessibilityLabel` needs
+`accessible` on Android; without it the summaries were inert for TalkBack
+too. Fixed at `8872c4e` (the two new charts); the flow re-run passing is
+itself proof the fix landed (the assertion only passes with the new code).
+The same gap exists in TrendBars/MiniHistogram/BarMeter — spun off as a
+follow-up task. Now E2E.md flow-authoring gotcha #5.
+
+**Infra note:** the session's Metro on 8081 became an unkillable orphan
+(taskkill Access-denied even unsandboxed) after a host-side stop; per
+E2E.md's stale-Metro rule a fresh Metro was started on **8082** and the
+reconnect helper's port updated (its documented per-session procedure).
+Metro left running on 8082 at session end.
+
 ## Findings for the next planning session
 
 - No app bugs found. The multi-symptom fan-out (one save → one row per

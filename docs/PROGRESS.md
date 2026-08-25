@@ -127,7 +127,7 @@ Completed tiers are collapsed to a single line; their detail lives in git.
 
 | Item | Why it matters | Effort | Notes |
 |------|----------------|:--:|------|
-| **BM insights / trends ("Digestion" section)** | The trends story stops at sentiment; BM regularity and Bristol distribution are the outcome half of the correlation the app exists to surface | S–M | Planned 2026-08-24 (`docs/HANDOFF.md`) — Insights "Digestion" section: regularity summary (avg BMs/day, hard/typical/loose split), weekly BM-count bars with the bad-Bristol (1,2,6,7) portion stacked in danger color, 7-bar Bristol histogram. Zero-dep charts mirroring TrendBars/MiniHistogram; pure helpers in `src/lib/bmTrends.ts`; shared `BAD_BRISTOL_VALUES` replaces temporal.ts's private set. Sonnet executes; Fable reviews + authors the flow. Intake charts stay in Tier 2 as follow-on. |
+| **BM insights / trends ("Digestion" section)** | The trends story stops at sentiment; BM regularity and Bristol distribution are the outcome half of the correlation the app exists to surface | S–M | **✅ shipped + device-verified 2026-08-24** (Sonnet executed, Fable review: **one remediation** — chart summary Views needed `accessible` for TalkBack/Maestro, found on-device, fixed `8872c4e`). Regularity line, stacked weekly BM bars, Bristol histogram; pure helpers `src/lib/bmTrends.ts`; shared `BAD_BRISTOL_VALUES`. Rungs 66 suites / 578 tests; `flows/k-bm-trends.yaml` recorded green. Follow-ons: same a11y fix for TrendBars/MiniHistogram/BarMeter (task spun off) · intake charts (Tier 2). Unpin next plan cycle. |
 
 ## Tier 0 — Foundations · ✅ complete
 Saturated fat, backup/export-import, native date/time picker, serving-size scaling,
