@@ -23,6 +23,7 @@ import { SymptomForm } from '@/features/symptoms/SymptomForm';
 import { symptomEntryToFormState, type BuiltSymptomEntry } from '@/features/symptoms/formModel';
 import { useWatchlistStore } from '@/features/watchlist/watchlistStore';
 import { useTheme } from '@/hooks/use-theme';
+import { tapFeedback } from '@/lib/haptics';
 import { describeWatchedMatches, findWatchedTags } from '@/lib/watchlist';
 
 // undefined = still loading, null = not found.
@@ -110,6 +111,7 @@ export default function EditEntryScreen() {
           text: 'Remove',
           style: 'destructive',
           onPress: async () => {
+            void tapFeedback('impact');
             const result = await deleteMealComponentAndReaggregate(component.id);
             if (result === 'last') {
               Alert.alert(
@@ -195,6 +197,7 @@ export default function EditEntryScreen() {
                 key={component.id}
                 overshootRight={false}
                 friction={2}
+                onSwipeableWillOpen={() => void tapFeedback('impact')}
                 renderRightActions={() => (
                   <Pressable
                     accessibilityRole="button"

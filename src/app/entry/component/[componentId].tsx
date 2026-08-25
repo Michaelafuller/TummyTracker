@@ -13,6 +13,7 @@ import {
 } from '@/db/repository';
 import { ComponentForm } from '@/features/logging/ComponentForm';
 import { mealComponentToFormState } from '@/features/logging/componentFormModel';
+import { tapFeedback } from '@/lib/haptics';
 import type { MealComponentDraft } from '@/lib/mealAggregate';
 
 // undefined = still loading, null = not found.
@@ -50,6 +51,7 @@ export default function EditComponentScreen() {
     setSubmitting(true);
     try {
       await updateMealComponentAndReaggregate(component.id, draft);
+      void tapFeedback('success');
       router.back();
     } finally {
       setSubmitting(false);
@@ -69,6 +71,7 @@ export default function EditComponentScreen() {
           style: 'destructive',
           onPress: async () => {
             setSubmitting(true);
+            void tapFeedback('impact');
             try {
               const result = await deleteMealComponentAndReaggregate(target.id);
               if (result === 'last') {
