@@ -1,0 +1,69 @@
+appId: com.tummytracker.app.dev
+# L — Intake charts, Insights "Intake" section (2026-08-24 release):
+#   - Log one meal with Calories 210 and Fiber 7 → deterministic weekly
+#     averages: 210/7 = 30 kcal/day, 7/7 = 1 g/day
+#   - Insights shows "Intake" with Calories + Fiber blocks; the charts'
+#     a11y summaries carry the exact averages (accessible container,
+#     E2E gotcha #5 — the summary phrasing is contract, see IntakeBars.tsx)
+---
+- launchApp:
+    clearState: true
+- runFlow: _helpers/reconnect-dev-client.yaml
+
+# --- Seed one meal with known calories + fiber ---
+- tapOn:
+    text: "Add an entry manually"
+- assertVisible:
+    text: "Component name"
+- tapOn:
+    text: "Component name"
+- inputText: "Toast"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Calories"
+    direction: DOWN
+- tapOn:
+    text: "Calories"
+- inputText: "210"
+- hideKeyboard
+# Gotcha #1: scroll to a landmark BELOW the field about to be filled — the
+# label alone being visible doesn't mean the input box is on-screen.
+- scrollUntilVisible:
+    element:
+      text: "Sugar (g)"
+    direction: DOWN
+- tapOn:
+    text: "Fiber (g)"
+- inputText: "7"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Finish meal"
+    direction: DOWN
+- tapOn:
+    text: "Finish meal"
+- waitForAnimationToEnd
+- assertVisible: "Toast"
+- scrollUntilVisible:
+    element:
+      text: "Save meal"
+    direction: DOWN
+- tapOn:
+    text: "Save meal"
+- waitForAnimationToEnd
+- waitForAnimationToEnd
+
+# --- Insights: Intake section with both nutrient blocks ---
+- tapOn:
+    id: "tab-insights"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "Intake"
+    direction: DOWN
+- assertVisible: "Calories"
+- assertVisible: "Fiber"
+# Chart a11y summaries — week label is date-dependent, averages are not.
+- assertVisible: ".*about 30 kcal per day.*"
+- assertVisible: ".*about 1 g per day.*"
