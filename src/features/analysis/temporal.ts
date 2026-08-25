@@ -4,7 +4,7 @@
 
 import type { LogEntry } from '@/db/schema';
 import { FOOD_TYPES } from '@/db/schema';
-import { isBristolValue } from '@/features/bm/bristol';
+import { isBadBristol } from '@/features/bm/bristol';
 import { isSentimentValue } from '@/features/sentiment/scale';
 import { isSeverityValue } from '@/features/symptoms/severity';
 import { parseTagsJson } from '@/lib/ingredients';
@@ -20,7 +20,6 @@ export const MEDIUM_HIT_RATE_MARGIN = 0.15;
 export const MAX_LOW_CONFIDENCE_FINDINGS = 3;
 
 const FOOD_TYPES_SET = new Set(FOOD_TYPES as readonly string[]);
-const BAD_BRISTOL_TYPES = new Set([1, 2, 6, 7]);
 
 /**
  * An outcome is something that represents a poor gut experience:
@@ -29,7 +28,7 @@ const BAD_BRISTOL_TYPES = new Set([1, 2, 6, 7]);
  */
 export function isOutcome(entry: LogEntry): boolean {
   if (entry.type === 'bowel_movement') {
-    return isBristolValue(entry.bristolScale) && BAD_BRISTOL_TYPES.has(entry.bristolScale as number);
+    return isBadBristol(entry.bristolScale);
   }
   if (entry.type === 'symptom') {
     return isSeverityValue(entry.severity) && (entry.severity as number) >= 3;

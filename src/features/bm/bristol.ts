@@ -34,3 +34,11 @@ export function isBristolValue(n: unknown): n is BristolValue {
 export function bristolLabel(value: BristolValue): string {
   return BY_VALUE[value].label;
 }
+
+/** "Bad" Bristol readings (Decision 4): hard (1, 2) or loose/watery (6, 7). */
+export const BAD_BRISTOL_VALUES = [1, 2, 6, 7] as const;
+const BAD_BRISTOL_SET = new Set<BristolValue>(BAD_BRISTOL_VALUES);
+
+export function isBadBristol(n: unknown): boolean {
+  return isBristolValue(n) && BAD_BRISTOL_SET.has(n);
+}

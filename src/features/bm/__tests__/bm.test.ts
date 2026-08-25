@@ -1,5 +1,5 @@
 import type { LogEntry } from '@/db/schema';
-import { BRISTOL_SCALE, BRISTOL_VALUES, bristolLabel, isBristolValue } from '../bristol';
+import { BAD_BRISTOL_VALUES, BRISTOL_SCALE, BRISTOL_VALUES, bristolLabel, isBadBristol, isBristolValue } from '../bristol';
 import { BM_ENTRY_NAME, bmEntryToFormState, buildBmEntry, type BmFormState } from '../formModel';
 
 describe('bristol scale', () => {
@@ -17,6 +17,25 @@ describe('bristol scale', () => {
     expect(isBristolValue(0)).toBe(false);
     expect(isBristolValue(8)).toBe(false);
     expect(isBristolValue('4')).toBe(false);
+  });
+});
+
+describe('BAD_BRISTOL_VALUES / isBadBristol', () => {
+  it('marks hard (1, 2) and loose (6, 7) readings as bad', () => {
+    expect(BAD_BRISTOL_VALUES).toEqual([1, 2, 6, 7]);
+    expect(isBadBristol(1)).toBe(true);
+    expect(isBadBristol(7)).toBe(true);
+  });
+
+  it('does not mark typical readings as bad', () => {
+    expect(isBadBristol(3)).toBe(false);
+    expect(isBadBristol(4)).toBe(false);
+    expect(isBadBristol(5)).toBe(false);
+  });
+
+  it('guards null and non-numeric input', () => {
+    expect(isBadBristol(null)).toBe(false);
+    expect(isBadBristol('2')).toBe(false);
   });
 });
 
