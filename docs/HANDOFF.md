@@ -1,138 +1,126 @@
-# HANDOFF.md — Execute session: BM insights / trends (Digestion section)
+# HANDOFF.md — Execute session: intake charts (Insights "Intake" section)
 
 > **Read first:** this file only. `CLAUDE.md` is auto-loaded (§4 rungs, §8
-> conventions, §9 guardrails). This cycle touches `src/features/bm/bristol.ts`,
-> `src/features/analysis/temporal.ts` (one constant swap), new
-> `src/lib/bmTrends.ts`, new `src/components/charts/CountBars.tsx` +
-> `BristolHistogram.tsx`, `src/app/(tabs)/insights.tsx`, and tests. **No new
-> dependency, no schema change, no network.** Zero-dep plain-View charts only
-> (Decision 2: no charting libraries).
+> conventions, §9 guardrails). This cycle touches `src/lib/chartData.ts`, new
+> `src/components/charts/IntakeBars.tsx`, `src/app/(tabs)/insights.tsx`, and
+> tests. **No new dependency, no schema change, no network.** Zero-dep
+> plain-View charts only (Decision 2).
 
-**Planned 2026-08-24 (Fable plan session), owner-requested and pinned:** BM
-insights / trends — complete the trends story beyond sentiment. Scope is the
-**BM half only** of the old "BM-regularity + intake charts" row; intake charts
-stay in Tier 2 as a follow-on.
+**Planned 2026-08-24 (Fable plan session), owner-requested and pinned:**
+intake charts — the follow-on half of the old "BM-regularity + intake charts"
+row, right after the Digestion section shipped.
 
 ---
 
 ## 0. Context (verified — do not re-derive)
 
-- Charts precedent: `TrendBars` (weekly sentiment bars, rolling 7-day buckets
-  from `weeklySentiment` in `src/lib/chartData.ts`) and `MiniHistogram`
-  (5-bar sentiment distribution). Mirror their structure, styling constants,
-  empty-slot handling, and accessibility-summary pattern exactly.
-- BM entries: `type === 'bowel_movement'`, `bristolScale` int 1–7 (nullable),
-  validated by `isBristolValue` (`src/features/bm/bristol.ts`).
-- "Bad" BM = Bristol 1, 2, 6, 7 (Decision 4) — currently a **private**
-  `BAD_BRISTOL_TYPES` set in `src/features/analysis/temporal.ts:23`.
-- Insights screen (`src/app/(tabs)/insights.tsx`): sections render inside one
-  ScrollView; `entries = useAllEntries()`; `now` is lazy-init `useState(() =>
-  Date.now())`. The "Trend" section renders `TrendBars` behind a
-  `hasTrendData` gate.
+- `src/lib/chartData.ts` holds `weeklySentiment` with the canonical rolling
+  7-day bucketing (`startOfDay`, exclusive `end`, oldest-first, `MONTH_ABBR`
+  labels) and a private `isFood` (FOOD_TYPES allowlist). Extend this file —
+  don't duplicate the helpers elsewhere.
+- Nutrition fields: `NUTRITION_FIELDS` / `NutritionField`
+  (`src/lib/validation.ts`); display nouns: `NUTRITION_NOUNS`
+  (`src/lib/nutrition.ts`, e.g. `calories` → "calories", `fiberG` → "fiber").
+  Entry nutrition columns are nullable reals.
+- Chart precedents: `TrendBars` (weekly bars, empty-slot-for-null tracks,
+  CHART_HEIGHT 64) and the just-shipped `CountBars`/`BristolHistogram`.
+- **Gotcha #5 (found on-device this same day, `docs/E2E.md`): a chart
+  container View's `accessibilityLabel` MUST be paired with `accessible`** or
+  it never becomes an Android a11y node (inert for TalkBack and Maestro).
+  Copy the two-line comment from `CountBars.tsx`. This is non-negotiable —
+  the Maestro flow asserts these summaries.
+- Insights screen: sections in one ScrollView; the "Digestion" section
+  (gated on `summary.bmEntries > 0`) sits after "Trend", before
+  `WatchlistSection`.
 
 ## 1. Changes
 
-### 1.1 `src/features/bm/bristol.ts` — shared bad-Bristol source of truth
-
-Export `BAD_BRISTOL_VALUES = [1, 2, 6, 7] as const` and
-`isBadBristol(n: unknown): boolean` (true iff `isBristolValue(n)` and in the
-set). Update `src/features/analysis/temporal.ts` to import and use it —
-delete the private `BAD_BRISTOL_TYPES` set (behavior identical; its existing
-tests must stay green unchanged).
-
-### 1.2 New `src/lib/bmTrends.ts` — pure helpers (no React, `now` passed in)
-
-Follow `chartData.ts`'s header/style. All windows anchored on `startOfDay(now)`
-like `weeklySentiment` (copy the local-midnight bucketing exactly so week
-labels line up with the sentiment chart).
-
-- `interface BmWeekBucket { label: string; count: number; badCount: number }`
-- `weeklyBmCounts(entries, now, weeks = 8): BmWeekBucket[]` — rolling 7-day
-  buckets, oldest-first, counting `type === 'bowel_movement'` entries by
-  `loggedAt`; `badCount` counts those with `isBadBristol(bristolScale)`.
-  Entries with null/invalid `bristolScale` count in `count` but never in
-  `badCount`.
-- `bristolDistribution(entries, now, weeks = 8): number[]` — length-7 counts
-  for Bristol 1..7 over the same total window (`weeks × 7` days ending
-  today); entries with null/invalid `bristolScale` are excluded.
-- `bmRegularity(entries, now, days = 28): { total: number; perDay: number;
-  hard: number; typical: number; loose: number } | null` — over the last
-  `days` calendar days (inclusive of today): `total` BM entries, `perDay` =
-  round1(total / days), `hard` = Bristol 1–2, `loose` = 6–7, `typical` = 3–5
-  (unrated BMs are in `total` only). Return `null` when `total === 0`.
-
-### 1.3 New `src/components/charts/CountBars.tsx`
-
-Zero-dep weekly count bars, mirroring `TrendBars`' layout (CHART_HEIGHT 64,
-track + labels rows, flex slots). Props: `buckets: readonly BmWeekBucket[]`.
-Height ∝ `count / max(count)` across buckets (min bar height 4 when count >
-0; empty track when 0 — zero BMs is real data, but render no fill). Each bar
-stacks two segments bottom-up: bad portion (`badCount`, `theme.danger`) under
-the remainder (`theme.primary`). Container `accessibilityLabel` summary like
-TrendBars': "Weekly BM count: week of <label>, <n> BMs (<b> irregular); …" or
-"no BMs logged yet" when all zero.
-
-### 1.4 New `src/components/charts/BristolHistogram.tsx`
-
-Mirror `MiniHistogram` (BAR_HEIGHT 32, share-of-max heights, hairline
-baseline): 7 thin bars for Bristol 1..7, `counts: readonly number[]` (length
-7). Color: bad values (1, 2, 6, 7) → `theme.danger`, typical (3–5) →
-`theme.primary` — derive from `BAD_BRISTOL_VALUES`, don't hardcode indexes.
-Value labels 1–7 under the bars (MiniHistogram's label row pattern).
-Accessibility summary: "Bristol distribution: <n> at 1, …, out of <total>."
-
-### 1.5 `src/app/(tabs)/insights.tsx` — "Digestion" section
-
-After the "Trend" section (before `WatchlistSection`), gated on
-`summary.bmEntries > 0` (the computed summary already counts BMs):
+### 1.1 `src/lib/chartData.ts` — `weeklyIntake`
 
 ```
-<ThemedText type="subtitle">Digestion</ThemedText>
-<regularity line>       — "≈{perDay} BMs/day over the last 28 days —
-                           {typical} typical · {hard} hard (1–2) ·
-                           {loose} loose (6–7)." (ThemedText small,
-                           textSecondary; render only when bmRegularity
-                           returns non-null)
-<CountBars buckets={weeklyBmCounts(entries, now)} />
-<BristolHistogram counts={bristolDistribution(entries, now)} />
+export interface IntakeWeekBucket { label: string; avg: number | null }
+export function weeklyIntake(
+  entries, now, field: NutritionField, weeks = 8,
+): IntakeWeekBucket[]
 ```
 
-Keep the existing observation-framing disclaimer untouched; no new wording
-beyond the section itself. Reuse the existing `styles.section` gap.
+Same bucketing loop as `weeklySentiment` (identical labels so all three
+weekly charts line up). Per bucket: take **food** entries (`isFood`) whose
+`entry[field]` is a non-null finite number; `avg` = `round1(sum / 7)` —
+average per calendar day across the full 7-day bucket, comparable to the
+Goals tab's daily framing. `avg: null` when the bucket has **no** food entry
+with a value for `field` (no data ≠ zero intake — same principle as
+`weeklySentiment`). A bucket where values exist but sum to 0 yields `0`
+(real data). Keep it field-generic; no per-nutrient special cases.
+
+### 1.2 New `src/components/charts/IntakeBars.tsx`
+
+Mirror `TrendBars`' structure/styles (CHART_HEIGHT 64, flex bar slots,
+bordered tracks, label row). Props:
+
+```
+{ buckets: readonly IntakeWeekBucket[]; noun: string; unit: string }
+```
+
+- Height ∝ `avg / max(avg across buckets)` (min 4 when avg > 0; a 0 avg
+  renders the min-height bar — zero intake is data; null renders an empty
+  track). Single fill color `theme.primary`.
+- Container: `accessible` + `accessibilityLabel` (gotcha #5), summary format
+  **exactly**:
+  - with data: `Weekly ${noun} intake: ${withData.map((b) => `week of
+    ${b.label}, about ${b.avg} ${unit} per day`).join('; ')}.`
+  - no data: `Weekly ${noun} intake: not enough nutrition data yet.`
+  (The Maestro flow asserts `.*about 30 kcal per day.*` — keep the phrase
+  "about {avg} {unit} per day" verbatim.)
+
+### 1.3 `src/app/(tabs)/insights.tsx` — "Intake" section
+
+Directly after the Digestion section, before `WatchlistSection`:
+
+- Compute `caloriesBuckets = weeklyIntake(entries, now, 'calories')` and
+  `fiberBuckets = weeklyIntake(entries, now, 'fiberG')`.
+- Gate: render the section only when either has a non-null bucket.
+- Contents:
+  - `<ThemedText type="subtitle">Intake</ThemedText>`
+  - caveat line (small, textSecondary): `Counts only entries with logged
+    nutrition — sparse logging reads low.`
+  - `<ThemedText type="smallBold">Calories</ThemedText>` +
+    `<IntakeBars buckets={caloriesBuckets} noun="calories" unit="kcal" />`
+  - `<ThemedText type="smallBold">Fiber</ThemedText>` +
+    `<IntakeBars buckets={fiberBuckets} noun="fiber" unit="g" />`
+  - Render each nutrient block only when that nutrient has a non-null
+    bucket (e.g. calories logged but never fiber → only Calories shows).
+- Reuse `styles.section`; no other screen changes.
 
 ## 2. Tests (same change, CLAUDE.md §4)
 
-- **New `src/lib/__tests__/bmTrends.test.ts`** (fixture style of
-  `chartData.test.ts`): bucket boundaries (entry at today counts in the last
-  bucket; 8 weeks tile back with no gaps), badCount classification (1,2,6,7
-  bad; 3–5 not; null bristol in count but not badCount), distribution
-  excludes null/invalid bristol, `bmRegularity` math incl. the `null`
-  empty case and non-BM entries being ignored everywhere.
-- **`src/features/bm/__tests__/bm.test.ts`** — add `BAD_BRISTOL_VALUES` /
-  `isBadBristol` coverage (guards: 1 and 7 true, 3 false, null/'2' false).
-- **New chart component tests** (async RNTL v14 — `await render`, destructure
-  queries): `CountBars` renders one slot per bucket and the summary label;
-  `BristolHistogram` renders 7 labels and its summary.
-- **`src/app/(tabs)/__tests__/insights.test.tsx`** — extend: with a BM entry
-  in the fixture, "Digestion" renders; with none, it doesn't.
-- `src/features/analysis/__tests__/temporal.test.ts` must pass **unchanged**.
+- **`src/lib/__tests__/chartData.test.ts`** — extend with `weeklyIntake`:
+  sum÷7 math + round1; null bucket when no entries carry the field; explicit
+  0 values yield `avg: 0` (not null); non-food entries (BM/symptom) ignored;
+  bucket boundaries consistent with `weeklySentiment` (same labels for the
+  same `now`); field-genericity via a second field (e.g. `fiberG`).
+- **New `src/components/charts/__tests__/IntakeBars.test.tsx`** (async RNTL
+  v14 — `await render`, destructure queries): renders one slot per bucket,
+  the exact with-data summary label, and the no-data summary.
+- **`src/app/(tabs)/__tests__/insights.test.tsx`** — extend: entries with
+  calories → "Intake" + "Calories" render; calories but no fiber → no
+  "Fiber" heading; no nutrition data at all → no "Intake" section.
 
 ## 3. Definition of done
 
 - `npm run typecheck` && `npm run lint` && `npm test` green — run them.
 - No `// @ts-ignore`, no lint disables, no new dependency, no schema change.
 - Commits (imperative, scoped), suggested split:
-  `feat(analysis): shared bad-Bristol constant + BM trend helpers` ·
-  `feat(insights): Digestion section — BM regularity, weekly counts, Bristol
-  histogram` · `test(insights): BM trends coverage`.
+  `feat(insights): Intake section — weekly calories + fiber charts` ·
+  `test(insights): intake chart coverage`. (One feat commit is fine — the
+  lib helper and component ship together.)
 - Execute summary: files, commits, rung counts, deviations with reasons.
 
 ## 4. After this (review pass + test session)
 
-Fable reviews the diff for remediation, then authors + runs the Maestro
-coverage on the Pixel: extend `flows/02-bm-tracking.yaml` (it already logs a
-Bristol-rated BM) with an Insights-tab visit asserting the "Digestion"
-heading and the regularity line (remember the full-regex gotcha — wrap
-fragments in `.*`), or a new `k-bm-trends.yaml` seeding 2 BMs (one bad, one
-typical) if extending muddies the existing flow. Metro for this worktree is
-already on port 8081.
+Fable reviews the diff, then authors + runs `flows/l-intake-charts.yaml` on
+the Pixel: log one meal through the builder with Calories 210 and Fiber 7
+(→ deterministic weekly averages 30 kcal/day and 1 g/day) → Insights →
+scroll to "Intake" → assert the headings and the summaries
+(`.*about 30 kcal per day.*`, `.*about 1 g per day.*`). **Metro for this
+worktree is on port 8082** (helper already updated).
