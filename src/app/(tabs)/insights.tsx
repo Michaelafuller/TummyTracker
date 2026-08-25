@@ -1,5 +1,6 @@
+import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BarMeter } from '@/components/charts/BarMeter';
@@ -82,6 +83,8 @@ function Card({
   n,
   histogram,
   children,
+  onPress,
+  pressLabel,
 }: {
   title: string;
   body: string;
@@ -90,10 +93,12 @@ function Card({
   n?: number;
   histogram?: readonly [number, number, number, number, number];
   children?: React.ReactNode;
+  onPress?: () => void;
+  pressLabel?: string;
 }) {
   const theme = useTheme();
-  return (
-    <View style={[styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+  const content = (
+    <>
       <ThemedText type="smallBold">{title}</ThemedText>
       <ThemedText type="small">{body}</ThemedText>
       {sample ? (
@@ -104,11 +109,30 @@ function Card({
       {confidence != null && n != null ? <ConfidenceChip confidence={confidence} n={n} /> : null}
       {histogram ? <MiniHistogram counts={histogram} /> : null}
       {children}
+    </>
+  );
+
+  if (onPress) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={pressLabel}
+        onPress={onPress}
+        style={[styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+        {content}
+      </Pressable>
+    );
+  }
+
+  return (
+    <View style={[styles.card, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+      {content}
     </View>
   );
 }
 
 export default function InsightsScreen() {
+  const router = useRouter();
   const entries = useAllEntries();
   const insets = useSafeAreaInsets();
   const {
@@ -208,7 +232,11 @@ export default function InsightsScreen() {
                 body={ingredientSentence(finding)}
                 confidence={finding.confidence}
                 n={finding.occurrences}
-                histogram={finding.sentimentCounts}>
+                histogram={finding.sentimentCounts}
+                onPress={() =>
+                  router.push({ pathname: '/insight/detail', params: { kind: 'tag', value: finding.tag } })
+                }
+                pressLabel={`See all logs: ${finding.tag}`}>
                 <WatchButton tag={finding.tag} />
               </Card>
             ))}
@@ -243,6 +271,10 @@ export default function InsightsScreen() {
                 confidence={finding.confidence}
                 n={finding.occurrences}
                 histogram={finding.sentimentCounts}
+                onPress={() =>
+                  router.push({ pathname: '/insight/detail', params: { kind: 'food', value: finding.name } })
+                }
+                pressLabel={`See all logs: ${finding.name}`}
               />
             ))}
           </View>
@@ -261,7 +293,11 @@ export default function InsightsScreen() {
                 title={finding.tag}
                 body={temporalSentence(finding)}
                 confidence={finding.confidence}
-                n={finding.meals}>
+                n={finding.meals}
+                onPress={() =>
+                  router.push({ pathname: '/insight/detail', params: { kind: 'tag', value: finding.tag } })
+                }
+                pressLabel={`See all logs: ${finding.tag}`}>
                 <BarMeter label={finding.tag} rate={finding.hitRate} baseRate={finding.baseRate} />
               </Card>
             ))}
