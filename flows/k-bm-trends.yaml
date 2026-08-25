@@ -1,0 +1,46 @@
+appId: com.tummytracker.app.dev
+# K — BM insights / trends, Insights "Digestion" section (2026-08-24 release):
+#   - Seed two BMs: one typical (Type 4), one loose/bad (Type 6)
+#   - Insights shows the Digestion section: regularity line with the
+#     typical/hard/loose split, weekly count bars (bad portion stacked),
+#     Bristol distribution histogram
+# The charts are plain Views whose container accessibilityLabel is a full
+# text summary (TrendBars precedent) — asserted here as Maestro text.
+# Separate from 02-bm-tracking.yaml so its entry-count assertions stay put.
+---
+- launchApp:
+    clearState: true
+- runFlow: _helpers/reconnect-dev-client.yaml
+
+# --- Seed BM 1: typical (Bristol 4) ---
+- tapOn: "Log a bowel movement"
+- waitForAnimationToEnd
+- tapOn: "Type 4: Smooth, soft sausage"
+- tapOn: "Save"
+- waitForAnimationToEnd
+- assertVisible: "TummyTracker"
+
+# --- Seed BM 2: loose/bad (Bristol 6) ---
+- tapOn: "Log a bowel movement"
+- waitForAnimationToEnd
+- tapOn: "Type 6: Mushy, ragged edges"
+- tapOn: "Save"
+- waitForAnimationToEnd
+- assertVisible: "TummyTracker"
+
+# --- Insights: Digestion section renders with both BMs aggregated ---
+- tapOn:
+    id: "tab-insights"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "Digestion"
+    direction: DOWN
+# Regularity line: 2 BMs / 28 days rounds to 0.1/day; split 1 typical, 1 loose.
+# One text node — full match (the ≈, —, and · glyphs are literal text).
+- assertVisible: "≈0.1 BMs/day over the last 28 days — 1 typical · 0 hard (1–2) · 1 loose (6–7)."
+# CountBars a11y summary — week label depends on the run date, so wildcard
+# around the stable core; ( ) are regex metachars and must be escaped.
+- assertVisible: ".*2 BMs \\(1 irregular\\).*"
+# BristolHistogram a11y summary — fully deterministic for this seed.
+- assertVisible: "Bristol distribution: 0 at 1, 0 at 2, 0 at 3, 1 at 4, 0 at 5, 1 at 6, 0 at 7, out of 2."
