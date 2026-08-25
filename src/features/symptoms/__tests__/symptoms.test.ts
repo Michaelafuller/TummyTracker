@@ -12,7 +12,7 @@ import {
   symptomTypeLabel,
 } from '../symptomTypes';
 import {
-  buildSymptomEntry,
+  buildSymptomEntries,
   symptomEntryName,
   symptomEntryToFormState,
   type SymptomFormState,
@@ -75,18 +75,19 @@ function baseState(overrides: Partial<SymptomFormState> = {}): SymptomFormState 
   return {
     dateInput: '2026-06-27',
     timeInput: '08:30',
-    symptomType: 'bloating',
+    symptomTypes: ['bloating'],
     severity: 2,
     notes: '',
     ...overrides,
   };
 }
 
-describe('buildSymptomEntry', () => {
-  it('builds a symptom entry with no food fields', () => {
-    const result = buildSymptomEntry(baseState());
+describe('buildSymptomEntries', () => {
+  it('builds a single symptom entry with no food fields', () => {
+    const result = buildSymptomEntries(baseState());
     expect(result.valid).toBe(true);
-    expect(result.entry).toMatchObject({
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries?.[0]).toMatchObject({
       type: 'symptom',
       name: 'Bloating',
       mealSlot: null,
@@ -98,23 +99,49 @@ describe('buildSymptomEntry', () => {
     });
   });
 
-  it('allows null symptom type and severity (optional)', () => {
-    const result = buildSymptomEntry(baseState({ symptomType: null, severity: null }));
+  it('fans out one entry per selected type, sharing loggedAt/severity/notes', () => {
+    const result = buildSymptomEntries(
+      baseState({ symptomTypes: ['nausea', 'bloating'], notes: 'after lunch' }),
+    );
     expect(result.valid).toBe(true);
-    expect(result.entry?.symptomType).toBeNull();
-    expect(result.entry?.severity).toBeNull();
-    expect(result.entry?.name).toBe('Symptom');
+    expect(result.entries).toHaveLength(2);
+
+    const [first, second] = result.entries!;
+    expect(first).toMatchObject({ type: 'symptom', name: 'Nausea', symptomType: 'nausea' });
+    expect(second).toMatchObject({ type: 'symptom', name: 'Bloating', symptomType: 'bloating' });
+    for (const entry of result.entries!) {
+      expect(entry.type).toBe('symptom');
+      expect(entry.mealSlot).toBeNull();
+      expect(entry.barcode).toBeNull();
+      expect(entry.loggedAt).toBe(new Date(2026, 5, 27, 8, 30).getTime());
+      expect(entry.severity).toBe(2);
+      expect(entry.notes).toBe('after lunch');
+    }
+  });
+
+  it('allows an empty selection (optional) — exactly one generic "Symptom" entry', () => {
+    const result = buildSymptomEntries(baseState({ symptomTypes: [], severity: null }));
+    expect(result.valid).toBe(true);
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries?.[0]).toMatchObject({ symptomType: null, severity: null, name: 'Symptom' });
   });
 
   it('preserves non-empty notes', () => {
-    const result = buildSymptomEntry(baseState({ notes: 'after lunch' }));
+    const result = buildSymptomEntries(baseState({ notes: 'after lunch' }));
     expect(result.valid).toBe(true);
-    expect(result.entry?.notes).toBe('after lunch');
+    expect(result.entries?.[0].notes).toBe('after lunch');
   });
 
-  it('reports invalid date and over-long notes', () => {
-    expect(buildSymptomEntry(baseState({ dateInput: '2026-02-30' })).errors.loggedAt).toBeDefined();
-    expect(buildSymptomEntry(baseState({ notes: 'x'.repeat(501) })).errors.notes).toBeDefined();
+  it('reports invalid date and over-long notes, with no entries', () => {
+    const invalidDate = buildSymptomEntries(baseState({ dateInput: '2026-02-30' }));
+    expect(invalidDate.valid).toBe(false);
+    expect(invalidDate.errors.loggedAt).toBeDefined();
+    expect(invalidDate.entries).toBeUndefined();
+
+    const longNotes = buildSymptomEntries(baseState({ notes: 'x'.repeat(501) }));
+    expect(longNotes.valid).toBe(false);
+    expect(longNotes.errors.notes).toBeDefined();
+    expect(longNotes.entries).toBeUndefined();
   });
 
   it('round-trips through symptomEntryToFormState', () => {
@@ -146,12 +173,14 @@ describe('buildSymptomEntry', () => {
 
     const state = symptomEntryToFormState(entry);
     expect(state).toMatchObject({
-      symptomType: 'bloating',
+      symptomTypes: ['bloating'],
       severity: 3,
       notes: 'after lunch',
       timeInput: '08:30',
     });
-    expect(buildSymptomEntry(state).entry).toMatchObject({
+    const rebuilt = buildSymptomEntries(state);
+    expect(rebuilt.entries).toHaveLength(1);
+    expect(rebuilt.entries?.[0]).toMatchObject({
       symptomType: 'bloating',
       severity: 3,
       notes: 'after lunch',
