@@ -144,6 +144,31 @@ finding's occurrences. Rungs after: 69 suites / 612 tests.
 updated; 8081–8083 all held until a host reboot). Left running at session
 end.
 
+## Addendum 5 — doctor-PDF-report cycle review (2026-08-24, final)
+
+**Fable review of Sonnet's execution: no code remediation.** All four rungs
+re-verified independently (typecheck ✅ lint ✅ jest ✅ 72 suites / 630 tests ·
+`bundle:check` ✅) and the static-import discipline confirmed
+(`grep "from 'expo-print'\|from 'expo-haptics'" src` → empty). Accepted
+deviations: (1) a **Jest-only Babel plugin** in `babel.config.js` rewriting
+`import(x)` → `Promise.resolve().then(() => require(x))`, gated on
+`JEST_WORKER_ID` — needed because jest-expo hardcodes the Babel caller to
+Metro, so real dynamic `import()` throws at the VM level under Node 25 Jest
+and mocks never engage; verified inert for real bundles via `bundle:check`.
+(2) separate `reportWorking` state; (3) one-line invalid-params fallback.
+npm audit: 22 pre-existing toolchain advisories; both new packages are leaf
+deps adding zero transitive dependencies.
+
+**Device checks NOT run — the Pixel dropped off adb mid-session** (empty
+`adb devices` after daemon restart; physical reconnect needed). Owed to the
+next device session, in order: (a) old-client safety spot-check — Settings
+renders the "Doctor report" section and "Create PDF report" shows the
+Update-required alert (scratch flow spec preserved in this addendum's
+history); re-run `settings-smoke` + `i-backup`; (b) after the owner's EAS
+`development` build: real PDF share sheet, haptics feel, and an
+`n-doctor-report.yaml` flow. Metro left running on **8085** (helper updated;
+8081–8084 held by unkillable orphans until reboot).
+
 ## Findings for the next planning session
 
 - No app bugs found. The multi-symptom fan-out (one save → one row per

@@ -443,3 +443,22 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
       review-pass remediation `9478e90`), case-insensitive food names, exact
       tag tokens, outcome-window edges. · Jest
       `src/features/analysis/__tests__/drilldown.test.ts` — no device item
+
+### Doctor PDF report + haptics (needs the next EAS development build on-device)
+- [x] Report builder: range windowing, finding sentences, day-grouped journal
+      table, disclaimer, and HTML-escaping of hostile names/notes. · Jest
+      `src/lib/__tests__/report.test.ts`
+- [x] Settings section wiring: range chips (default 30 days), Create PDF
+      report → printToFileAsync → shareAsync; failure path shows the
+      Update-required alert. · Jest
+      `src/app/(tabs)/__tests__/settings.test.tsx`
+- [x] No static imports of `expo-print`/`expo-haptics` anywhere in `src/`
+      (grep-verified) — the old dev client must keep working on fresh JS. ·
+      review 2026-08-24 + `bundle:check` green
+- [ ] Old-client safety on-device: Settings renders the section; the button
+      shows the Update-required alert (not a crash); `settings-smoke` +
+      `i-backup` still pass. · auto — owed (Pixel disconnected mid-session)
+- [ ] Real PDF: share sheet opens with a well-formed report on the new dev
+      build; `n-doctor-report.yaml` flow. · owed after owner's EAS
+      `development` build
+- [ ] Haptics feel on delete/save on the new build. · manual (owner)
