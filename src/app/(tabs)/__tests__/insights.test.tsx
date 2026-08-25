@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { render } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
 import { SafeAreaProvider, type Metrics } from 'react-native-safe-area-context';
 
 import type {
@@ -22,6 +22,11 @@ jest.mock('@/features/logging/useEntries', () => ({
   useAllEntries: () => mockEntries,
 }));
 
+const mockPush = jest.fn();
+jest.mock('expo-router', () => ({
+  useRouter: () => ({ push: mockPush }),
+}));
+
 // The Watchlist section/finding-card Watch button pull from db/repository via
 // the watchlist store — mock it so this screen test never touches the real
 // (native-only) expo-sqlite client.
@@ -39,6 +44,10 @@ const TEST_INSETS: Metrics = {
 function renderScreen(ui: ReactElement) {
   return render(<SafeAreaProvider initialMetrics={TEST_INSETS}>{ui}</SafeAreaProvider>);
 }
+
+beforeEach(() => {
+  mockPush.mockClear();
+});
 
 describe('sentence helpers', () => {
   it('nutrientSentence describes the high/low split', () => {
@@ -247,5 +256,95 @@ describe('InsightsScreen', () => {
     mockEntries = [];
     const { queryByText } = await renderScreen(<InsightsScreen />);
     expect(queryByText('Intake')).toBeNull();
+  });
+});
+
+describe('InsightsScreen finding drill-down (HANDOFF.md finding drill-down)', () => {
+  const baseEntry = {
+    mealSlot: null,
+    barcode: null,
+    bristolScale: null,
+    symptomType: null,
+    severity: null,
+    notes: null,
+    calories: null,
+    saturatedFatG: null,
+    carbsG: null,
+    proteinG: null,
+    fiberG: null,
+    sugarG: null,
+    sodiumMg: null,
+    servingG: null,
+    ingredientsText: null,
+    tagsJson: null,
+    componentCount: null,
+    createdAt: 0,
+    updatedAt: 0,
+  };
+
+  function entries() {
+    let seq = 0;
+    // Chicken Salad: a recurring low-sentiment food (3 occurrences, sentiment 1)
+    // — surfaces as a foodFinding against the baseline set by the fatG entries below.
+    const chickenSalad = [1, 1, 1].map((sentiment) => ({
+      ...baseEntry,
+      id: `cs${seq++}`,
+      type: 'meal',
+      name: 'Chicken Salad',
+      loggedAt: 0,
+      sentiment,
+      fatG: null,
+    }));
+    // A fatG median split (12 samples, 6/6) whose high-fat group averages a
+    // meaningfully lower sentiment — surfaces as a NutrientFinding (fixture
+    // verified in analysis/__tests__/insights.test.ts: medium confidence).
+    const lowFat = [5, 8, 10, 12, 14, 16];
+    const lowSentiments = [5, 5, 4, 4, 5, 4];
+    const highFat = [40, 42, 45, 48, 50, 55];
+    const highSentiments = [2, 1, 2, 1, 2, 1];
+    const nutrientEntries = [
+      ...lowFat.map((fatG, i) => ({
+        ...baseEntry,
+        id: `low${seq++}`,
+        type: 'meal',
+        name: `low${i}`,
+        loggedAt: 0,
+        fatG,
+        sentiment: lowSentiments[i],
+      })),
+      ...highFat.map((fatG, i) => ({
+        ...baseEntry,
+        id: `high${seq++}`,
+        type: 'meal',
+        name: `high${i}`,
+        loggedAt: 0,
+        fatG,
+        sentiment: highSentiments[i],
+      })),
+    ];
+    return [...chickenSalad, ...nutrientEntries];
+  }
+
+  it('a food-finding card exposes the "See all logs: …" label and pressing it pushes /insight/detail', async () => {
+    mockEntries = entries();
+    const { getByText, getByLabelText } = await renderScreen(<InsightsScreen />);
+
+    expect(getByText('Foods you rate poorly')).toBeTruthy();
+    expect(getByText('Chicken Salad')).toBeTruthy();
+    const card = getByLabelText('See all logs: Chicken Salad');
+    await fireEvent.press(card);
+
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/insight/detail',
+      params: { kind: 'food', value: 'Chicken Salad' },
+    });
+  });
+
+  it('a nutrient card has no "See all logs: …" label', async () => {
+    mockEntries = entries();
+    const { getByText, queryByLabelText } = await renderScreen(<InsightsScreen />);
+
+    expect(getByText('Nutrients')).toBeTruthy();
+    expect(queryByLabelText('See all logs: Higher fat')).toBeNull();
   });
 });
