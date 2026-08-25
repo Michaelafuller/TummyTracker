@@ -25,8 +25,11 @@ const FOOD_TYPES_SET = new Set(FOOD_TYPES as readonly string[]);
  * normalized tag token (no prefix bleed).
  */
 function matchesFinding(entry: LogEntry, kind: DrilldownKind, value: string): boolean {
+  // Both kinds count food entries only — tag findings (insights.ts) and
+  // temporal "meals" are computed over food entries, so the drill-down list
+  // must agree with the finding's own occurrence count.
+  if (!FOOD_TYPES_SET.has(entry.type)) return false;
   if (kind === 'food') {
-    if (!FOOD_TYPES_SET.has(entry.type)) return false;
     return entry.name.trim().toLowerCase() === value.trim().toLowerCase();
   }
   return parseTagsJson(entry.tagsJson).includes(value);

@@ -56,6 +56,15 @@ describe('findingInstances — food matching', () => {
 
     expect(instances.map((i) => i.entry.id)).toEqual([food.id]);
   });
+
+  it('tag matching is also food-entries-only — a non-food entry carrying tags never matches', () => {
+    const food = makeEntry({ type: 'meal', name: 'Onion Dish', tagsJson: '["onion"]', loggedAt: T });
+    const tagged = makeEntry({ type: 'symptom', name: 'Bloating', tagsJson: '["onion"]', loggedAt: T + HOUR });
+
+    const instances = findingInstances([food, tagged], 'tag', 'onion');
+
+    expect(instances.map((i) => i.entry.id)).toEqual([food.id]);
+  });
 });
 
 describe('findingInstances — tag matching', () => {
