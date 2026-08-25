@@ -80,6 +80,13 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   the next native-build cycle** — not in the installed dev build.
   **Infra finding:** Metro's watcher missed a committed edit — restart Metro
   after source changes before trusting device runs (`docs/E2E.md`).
+- **✅ Shipped + device-verified 2026-08-24 (multi-symptom cycle + test-execute):**
+  multi-symptom logging in one pass (multi-select picker, one `logEntry` row per
+  symptom via transactional `createLogEntries`; edit stays single-select; Fable
+  review of Sonnet's execution: no remediation). `flows/c2-multi-symptom.yaml` +
+  `flows/j-component-drilldown.yaml` authored and verified — **flow backlog
+  clear, suite = 25**; full regression 24/24 = new baseline (`docs/RESULTS.md`).
+  New E2E gotcha #4: center rows before `swipe:`/tap (gesture-nav dead zone).
 - **Still owed (test sessions):** manual-only items per `docs/E2E.md` (camera
   loop, notification timing, dictation double-text check on both platforms,
   light/dark visual walkthrough, import round-trip content, migration
@@ -116,11 +123,11 @@ Ranked by value-add to the north star. **Effort:** S (hours) · M (a session) ·
 **⚠ = new dependency** — allowed, but CVE-inventory it and justify the value first.
 Completed tiers are collapsed to a single line; their detail lives in git.
 
-## 📌 Pinned — next up (owner-directed 2026-08-24)
+## 📌 Pinned — next up (owner-directed 2026-08-24, second pin)
 
 | Item | Why it matters | Effort | Notes |
 |------|----------------|:--:|------|
-| **Multi-symptom logging in one instance** | Logging nausea + bloating today means two full passes through the symptom screen; friction here costs outcome data, and outcome data is what correlation runs on | S | **✅ shipped + device-verified 2026-08-24** (planned by Fable, executed by Sonnet, Fable review: **no remediation needed**) — multi-select picker on `/symptom/new`, save fans out one `logEntry` row per symptom via transactional `createLogEntries` (shared time/severity/notes; no schema change, analysis untouched); edit stays single-select (`single` prop). Rungs green 63 suites / 551 tests; `flows/c2-multi-symptom.yaml` authored + passed on the Pixel. Nothing owed. Unpin next plan cycle. |
+| **BM insights / trends ("Digestion" section)** | The trends story stops at sentiment; BM regularity and Bristol distribution are the outcome half of the correlation the app exists to surface | S–M | Planned 2026-08-24 (`docs/HANDOFF.md`) — Insights "Digestion" section: regularity summary (avg BMs/day, hard/typical/loose split), weekly BM-count bars with the bad-Bristol (1,2,6,7) portion stacked in danger color, 7-bar Bristol histogram. Zero-dep charts mirroring TrendBars/MiniHistogram; pure helpers in `src/lib/bmTrends.ts`; shared `BAD_BRISTOL_VALUES` replaces temporal.ts's private set. Sonnet executes; Fable reviews + authors the flow. Intake charts stay in Tier 2 as follow-on. |
 
 ## Tier 0 — Foundations · ✅ complete
 Saturated fat, backup/export-import, native date/time picker, serving-size scaling,
@@ -147,7 +154,8 @@ Sentiment trend chart, confidence labeling, and ingredient-pair analysis **✅ s
 | **Goals tab: daily nutrition tally** | 5th nav tab aggregating today's nutrients | S–M | **✅ shipped 2026-08-15** — missing-data caveats included; follow-on: 7-day mini-trend (see intake-charts row) |
 | **Nutrient threshold goals + daily check-in** | Floors (≥) and caps (≤) per nutrient, one daily check-in | M | **✅ shipped 2026-08-15** (migration 0008) — floors notify / caps alert at save; **persistence bug found 2026-08-16, fix planned (see Status)**; follow-on: cap alert on the entry-**edit** path |
 | **Per-food / ingredient drill-down** | Tap a finding → every instance + outcomes | S–M | no dep; natural follow-on to insights v2 |
-| **BM-regularity + intake charts** | Complete the trends story beyond sentiment | S–M | reuse the zero-dep chart components |
+| **BM-regularity charts** | Complete the trends story beyond sentiment | S–M | **📌 pinned 2026-08-24** — see the pinned section above |
+| **Intake charts (nutrient trends)** | The other half of the old combined row — weekly intake bars (fiber/calories) reusing the same chart components | S | follow-on once the Digestion section ships |
 | **Meal-component editing after save** | v1 meal builder saves components immutably; edit/remove with re-aggregation is the obvious next ask | S–M | **✅ shipped 2026-08-21** (edit + re-aggregate; removal + single-component-meal drill-down deferred) — Maestro flow owed |
 | **Doctor / dietitian PDF report** | Share a date range + insights with a pro | M | ⚠ `expo-print` |
 

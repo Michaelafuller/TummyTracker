@@ -1,129 +1,138 @@
-# HANDOFF.md — Execute session: multi-symptom logging in one instance
+# HANDOFF.md — Execute session: BM insights / trends (Digestion section)
 
 > **Read first:** this file only. `CLAUDE.md` is auto-loaded (§4 rungs, §8
-> conventions, §9 guardrails). This cycle touches
-> `src/features/symptoms/formModel.ts`, `SymptomTypePicker.tsx`,
-> `SymptomForm.tsx`, `src/app/symptom/new.tsx`, `src/db/repository.ts`,
-> `src/app/entry/[id].tsx` (one-line wrapper only), and tests. **No new
-> dependency. No schema change, no migration** — the design deliberately
-> fans out to existing single-symptom rows.
+> conventions, §9 guardrails). This cycle touches `src/features/bm/bristol.ts`,
+> `src/features/analysis/temporal.ts` (one constant swap), new
+> `src/lib/bmTrends.ts`, new `src/components/charts/CountBars.tsx` +
+> `BristolHistogram.tsx`, `src/app/(tabs)/insights.tsx`, and tests. **No new
+> dependency, no schema change, no network.** Zero-dep plain-View charts only
+> (Decision 2: no charting libraries).
 
-**Planned 2026-08-24 (Fable plan session), owner-requested and pinned to the
-top of the backlog:** log multiple symptoms in a single pass (e.g. nausea AND
-bloating) instead of opening the symptom screen once per symptom.
+**Planned 2026-08-24 (Fable plan session), owner-requested and pinned:** BM
+insights / trends — complete the trends story beyond sentiment. Scope is the
+**BM half only** of the old "BM-regularity + intake charts" row; intake charts
+stay in Tier 2 as a follow-on.
 
 ---
 
-## 0. Design decision (context — do not re-litigate)
+## 0. Context (verified — do not re-derive)
 
-**Multi-select picker on the *new symptom* screen; save creates one `logEntry`
-row per selected symptom.** All rows share the same `loggedAt`, `severity`,
-and `notes`; each row keeps its own `symptomType` and per-type `name`
-("Nausea", "Bloating") exactly as today.
-
-Why fan-out instead of a multi-type column:
-- **Zero schema change** — no migration, no §9 guardrail conversation.
-- **Per-symptom granularity is the product.** `isOutcome` (severity ≥ 3),
-  temporal correlation, insights, journal rows, daily tally, and backup all
-  consume one-symptom-per-row and keep working untouched.
-- Each symptom stays individually editable/deletable afterward (the edit
-  screen stays single-select — one row is one symptom).
-
-Accepted trade-offs (by design, don't "fix"): shared severity/notes across the
-batch (the user can fine-tune an individual entry afterward); notes text is
-duplicated per row.
+- Charts precedent: `TrendBars` (weekly sentiment bars, rolling 7-day buckets
+  from `weeklySentiment` in `src/lib/chartData.ts`) and `MiniHistogram`
+  (5-bar sentiment distribution). Mirror their structure, styling constants,
+  empty-slot handling, and accessibility-summary pattern exactly.
+- BM entries: `type === 'bowel_movement'`, `bristolScale` int 1–7 (nullable),
+  validated by `isBristolValue` (`src/features/bm/bristol.ts`).
+- "Bad" BM = Bristol 1, 2, 6, 7 (Decision 4) — currently a **private**
+  `BAD_BRISTOL_TYPES` set in `src/features/analysis/temporal.ts:23`.
+- Insights screen (`src/app/(tabs)/insights.tsx`): sections render inside one
+  ScrollView; `entries = useAllEntries()`; `now` is lazy-init `useState(() =>
+  Date.now())`. The "Trend" section renders `TrendBars` behind a
+  `hasTrendData` gate.
 
 ## 1. Changes
 
-### 1.1 `src/features/symptoms/formModel.ts`
+### 1.1 `src/features/bm/bristol.ts` — shared bad-Bristol source of truth
 
-- `SymptomFormState.symptomType: SymptomTypeValue | null` →
-  **`symptomTypes: SymptomTypeValue[]`** (order = tap order; empty = none).
-- Replace `buildSymptomEntry` with **`buildSymptomEntries(state)`** returning
-  `{ valid: boolean; entries?: BuiltSymptomEntry[]; errors: SymptomFormErrors }`:
-  - Validate date/time + notes once (unchanged rules).
-  - `symptomTypes.length === 0` → **one** entry with `symptomType: null`,
-    name `"Symptom"` (preserves today's optional-type behavior).
-  - Otherwise one entry per selected type, `name: symptomTypeLabel(type)`,
-    all sharing `loggedAt` / `severity` / trimmed `notes`.
-  - `BuiltSymptomEntry` shape is unchanged.
-- `symptomEntryToFormState`: `symptomTypes: isSymptomTypeValue(entry.symptomType)
-  ? [entry.symptomType] : []`.
-- Keep `symptomEntryName` as-is (still used for per-entry names).
+Export `BAD_BRISTOL_VALUES = [1, 2, 6, 7] as const` and
+`isBadBristol(n: unknown): boolean` (true iff `isBristolValue(n)` and in the
+set). Update `src/features/analysis/temporal.ts` to import and use it —
+delete the private `BAD_BRISTOL_TYPES` set (behavior identical; its existing
+tests must stay green unchanged).
 
-### 1.2 `src/features/symptoms/SymptomTypePicker.tsx`
+### 1.2 New `src/lib/bmTrends.ts` — pure helpers (no React, `now` passed in)
 
-Props → `values: readonly SymptomTypeValue[]`, `onToggle: (value) => void`,
-`onClear?: () => void`. A chip is selected iff `values.includes(option.value)`;
-keep each chip's `accessibilityLabel={option.label}` **exactly** (Maestro
-`c-symptom-logging.yaml` taps `"Bloating"` — a single tap must still select).
-"Clear" link shows when `values.length > 0`, label stays
-`"Clear symptom type"`.
+Follow `chartData.ts`'s header/style. All windows anchored on `startOfDay(now)`
+like `weeklySentiment` (copy the local-midnight bucketing exactly so week
+labels line up with the sentiment chart).
 
-### 1.3 `src/features/symptoms/SymptomForm.tsx`
+- `interface BmWeekBucket { label: string; count: number; badCount: number }`
+- `weeklyBmCounts(entries, now, weeks = 8): BmWeekBucket[]` — rolling 7-day
+  buckets, oldest-first, counting `type === 'bowel_movement'` entries by
+  `loggedAt`; `badCount` counts those with `isBadBristol(bristolScale)`.
+  Entries with null/invalid `bristolScale` count in `count` but never in
+  `badCount`.
+- `bristolDistribution(entries, now, weeks = 8): number[]` — length-7 counts
+  for Bristol 1..7 over the same total window (`weeks × 7` days ending
+  today); entries with null/invalid `bristolScale` are excluded.
+- `bmRegularity(entries, now, days = 28): { total: number; perDay: number;
+  hard: number; typical: number; loose: number } | null` — over the last
+  `days` calendar days (inclusive of today): `total` BM entries, `perDay` =
+  round1(total / days), `hard` = Bristol 1–2, `loose` = 6–7, `typical` = 3–5
+  (unrated BMs are in `total` only). Return `null` when `total === 0`.
 
-- State uses `symptomTypes: []`; add prop **`single?: boolean`** (default
-  false).
-- Toggle handler: multi mode → add/remove membership; `single` mode → replace
-  the selection with `[value]` (tap = pick, matching today's edit behavior).
-- Field label: multi mode `"Symptom types (optional)"` with hint
-  `"Select all that apply"`; single mode keeps `"Symptom type (optional)"`.
-- `onSubmit` signature becomes **`(entries: BuiltSymptomEntry[])`** — submit
-  runs `buildSymptomEntries` and passes `result.entries` (always length ≥ 1
-  when valid).
+### 1.3 New `src/components/charts/CountBars.tsx`
 
-### 1.4 `src/db/repository.ts` — `createLogEntries(inputs: CreateLogEntryInput[]): Promise<LogEntry[]>`
+Zero-dep weekly count bars, mirroring `TrendBars`' layout (CHART_HEIGHT 64,
+track + labels rows, flex slots). Props: `buckets: readonly BmWeekBucket[]`.
+Height ∝ `count / max(count)` across buckets (min bar height 4 when count >
+0; empty track when 0 — zero BMs is real data, but render no fill). Each bar
+stacks two segments bottom-up: bad portion (`badCount`, `theme.danger`) under
+the remainder (`theme.primary`). Container `accessibilityLabel` summary like
+TrendBars': "Weekly BM count: week of <label>, <n> BMs (<b> irregular); …" or
+"no BMs logged yet" when all zero.
 
-One transaction (mirror `deleteMealComponentAndReaggregate`'s transaction
-style): for each input, same id/timestamp stamping as `createLogEntry`;
-insert all rows; return them. Keep `createLogEntry` unchanged (other callers).
+### 1.4 New `src/components/charts/BristolHistogram.tsx`
 
-### 1.5 Screens
+Mirror `MiniHistogram` (BAR_HEIGHT 32, share-of-max heights, hairline
+baseline): 7 thin bars for Bristol 1..7, `counts: readonly number[]` (length
+7). Color: bad values (1, 2, 6, 7) → `theme.danger`, typical (3–5) →
+`theme.primary` — derive from `BAD_BRISTOL_VALUES`, don't hardcode indexes.
+Value labels 1–7 under the bars (MiniHistogram's label row pattern).
+Accessibility summary: "Bristol distribution: <n> at 1, …, out of <total>."
 
-- `src/app/symptom/new.tsx`: `handleSubmit(entries: BuiltSymptomEntry[])` →
-  `await createLogEntries(entries)` → `router.back()` (submitting guard
-  unchanged).
-- `src/app/entry/[id].tsx`: symptom branch passes `single` to `SymptomForm`
-  and adapts the callback: `onSubmit={(entries) => handleSubmit(entries[0])}`.
-  Nothing else on the edit path changes.
+### 1.5 `src/app/(tabs)/insights.tsx` — "Digestion" section
 
-## 2. Tests (same change, per CLAUDE.md §4)
+After the "Trend" section (before `WatchlistSection`), gated on
+`summary.bmEntries > 0` (the computed summary already counts BMs):
 
-- **`src/features/symptoms/__tests__/symptoms.test.ts`** — rework the
-  `buildSymptomEntry` block for `buildSymptomEntries`:
-  - two types → two entries; shared `loggedAt`/`severity`/`notes`; names
-    `"Nausea"` / `"Bloating"`; both `type: 'symptom'`, food fields null.
-  - empty selection → exactly one generic `"Symptom"` entry (type null).
-  - invalid date / over-long notes → `valid: false`, no entries.
-  - round-trip: `symptomEntryToFormState` yields `symptomTypes: ['bloating']`
-    and rebuilds a single matching entry.
-- **New `src/features/symptoms/__tests__/SymptomForm.test.tsx`** (async RNTL
-  v14 — `await render(...)`, `await fireEvent(...)`, destructure queries from
-  the awaited result; the global `screen` proxy is unreliable):
-  - multi mode: tap `"Nausea"` + `"Bloating"`, press Save → `onSubmit` gets 2
-    entries; tapping `"Nausea"` again before save deselects → 1 entry.
-  - `single` mode: tap `"Nausea"` then `"Bloating"` → save yields 1 entry
-    with `symptomType: 'bloating'`.
-- **New `src/app/symptom/__tests__/new.test.tsx`** (mock `expo-router`'s
-  `useRouter` and `@/db/repository`, following `src/app/entry/__tests__/
-  [id].test.tsx` patterns): select two chips, Save → `createLogEntries`
-  called once with 2 inputs → `router.back()`.
-- **`src/app/entry/__tests__/[id].test.tsx`** — keep green; the symptom-edit
-  case must still save a single updated entry through the adapted callback.
+```
+<ThemedText type="subtitle">Digestion</ThemedText>
+<regularity line>       — "≈{perDay} BMs/day over the last 28 days —
+                           {typical} typical · {hard} hard (1–2) ·
+                           {loose} loose (6–7)." (ThemedText small,
+                           textSecondary; render only when bmRegularity
+                           returns non-null)
+<CountBars buckets={weeklyBmCounts(entries, now)} />
+<BristolHistogram counts={bristolDistribution(entries, now)} />
+```
+
+Keep the existing observation-framing disclaimer untouched; no new wording
+beyond the section itself. Reuse the existing `styles.section` gap.
+
+## 2. Tests (same change, CLAUDE.md §4)
+
+- **New `src/lib/__tests__/bmTrends.test.ts`** (fixture style of
+  `chartData.test.ts`): bucket boundaries (entry at today counts in the last
+  bucket; 8 weeks tile back with no gaps), badCount classification (1,2,6,7
+  bad; 3–5 not; null bristol in count but not badCount), distribution
+  excludes null/invalid bristol, `bmRegularity` math incl. the `null`
+  empty case and non-BM entries being ignored everywhere.
+- **`src/features/bm/__tests__/bm.test.ts`** — add `BAD_BRISTOL_VALUES` /
+  `isBadBristol` coverage (guards: 1 and 7 true, 3 false, null/'2' false).
+- **New chart component tests** (async RNTL v14 — `await render`, destructure
+  queries): `CountBars` renders one slot per bucket and the summary label;
+  `BristolHistogram` renders 7 labels and its summary.
+- **`src/app/(tabs)/__tests__/insights.test.tsx`** — extend: with a BM entry
+  in the fixture, "Digestion" renders; with none, it doesn't.
+- `src/features/analysis/__tests__/temporal.test.ts` must pass **unchanged**.
 
 ## 3. Definition of done
 
 - `npm run typecheck` && `npm run lint` && `npm test` green — run them.
 - No `// @ts-ignore`, no lint disables, no new dependency, no schema change.
 - Commits (imperative, scoped), suggested split:
-  `feat(symptoms): multi-select symptom types — fan out one entry per symptom
-  on save` · `test(symptoms): form + screen coverage for multi-symptom save`.
-- Execute summary: file list, rung counts, any deviations from this spec.
+  `feat(analysis): shared bad-Bristol constant + BM trend helpers` ·
+  `feat(insights): Digestion section — BM regularity, weekly counts, Bristol
+  histogram` · `test(insights): BM trends coverage`.
+- Execute summary: files, commits, rung counts, deviations with reasons.
 
-## 4. After this (review pass + test sessions)
+## 4. After this (review pass + test session)
 
-Fable reviews the diff for remediation before anything ships. Test session
-owed: extend `flows/c-symptom-logging.yaml` (or a new `c2-multi-symptom.yaml`)
-— tap two chips, save once, assert **two** journal rows at the same time;
-existing single-tap flow must keep passing. Device pass rides the next
-Metro-connected session; no build needed (pure JS/TS).
+Fable reviews the diff for remediation, then authors + runs the Maestro
+coverage on the Pixel: extend `flows/02-bm-tracking.yaml` (it already logs a
+Bristol-rated BM) with an Insights-tab visit asserting the "Digestion"
+heading and the regularity line (remember the full-regex gotcha — wrap
+fragments in `.*`), or a new `k-bm-trends.yaml` seeding 2 BMs (one bad, one
+typical) if extending muddies the existing flow. Metro for this worktree is
+already on port 8081.
