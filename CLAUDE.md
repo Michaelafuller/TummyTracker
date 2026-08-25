@@ -126,6 +126,8 @@ to learn **autonomous, agentic coding workflows** with Claude Code. Therefore:
 | Calendar UI    | `react-native-calendars` for day/week/month picker   |
 | Date/time pick | `@react-native-community/datetimepicker` (native OS picker) |
 | File export    | `expo-file-system` (SDK 56 `File`/`Paths` API) + `expo-sharing` |
+| PDF report     | `expo-print` (owner-approved 2026-08-24; **dynamic import only** until the next dev build ships it) |
+| Haptics        | `expo-haptics` (owner-approved 2026-08-21; **dynamic import only**, graceful no-op wrapper `src/lib/haptics.ts`) |
 | Tests          | Jest (`jest-expo`) + `@testing-library/react-native` |
 | Lint/format    | `expo lint` (ESLint) + Prettier                      |
 | Builds         | EAS Build (dev/preview/production)                   |

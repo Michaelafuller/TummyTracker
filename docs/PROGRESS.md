@@ -127,12 +127,13 @@ Completed tiers are collapsed to a single line; their detail lives in git.
 
 | Item | Why it matters | Effort | Notes |
 |------|----------------|:--:|------|
-| **Per-food / ingredient drill-down** | A finding you can't inspect is a finding you can't trust — tap any food/ingredient finding to see every log behind it, with outcomes | S–M | **✅ shipped + device-verified 2026-08-24** (Sonnet executed, Fable review: **one remediation** — tag matching gated to food entries for occurrence-count parity, `9478e90`). Tappable food/ingredient/timing cards → `/insight/detail` (summary line, per-log rows with outcome markers, tap-through to entry). Rungs 69 suites / 612 tests; `flows/m-finding-drilldown.yaml` recorded green (new gotcha #6: minute-granularity `loggedAt` vs order-dependent asserts). Follow-on: pair-finding drill-down (two-tag target). Unpin next plan cycle. |
+| **Doctor / dietitian PDF report (+ haptics rider)** | Turns the journal into something a professional can act on — a shareable, printable range summary with the insights attached | M | Planned 2026-08-24 (`docs/HANDOFF.md`) — ⚠ `expo-print` **owner-approved**; Settings "Doctor report" section (range chips 14/30/90d) → pure `buildReportHtml` (escaped, print-styled) → printToFileAsync → share sheet. **Dynamic imports only** — the installed dev client predates the native modules; on it the button shows an Update-required alert by design. Rider: `expo-haptics` wiring (delete/save) via a no-op-safe wrapper, per the 2026-08-21 deferral. `bundle:check` is a mandatory 4th rung. **Owner action owed after: EAS `development` build + install** — that build lights up both PDF and haptics; flow `n-doctor-report.yaml` owed after that. Sonnet executes; Fable reviews + regression-checks old-client safety on device. |
 
 **Recently shipped pins (2026-08-24):** multi-symptom logging ✅ · BM
-"Digestion" section ✅ (one review remediation: chart `accessible` fix
-`8872c4e`; follow-up task spun off for the older charts) · intake charts ✅
-(no remediation) — detail in Status.
+"Digestion" section ✅ (remediation: chart `accessible` fix `8872c4e`) ·
+intake charts ✅ · per-food/ingredient drill-down ✅ (remediation: tag
+matching food-gated `9478e90`; new gotcha #6 minute-granularity `loggedAt`;
+follow-on: pair-finding drill-down) — detail in Status.
 
 ## Tier 0 — Foundations · ✅ complete
 Saturated fat, backup/export-import, native date/time picker, serving-size scaling,
@@ -158,11 +159,11 @@ Sentiment trend chart, confidence labeling, and ingredient-pair analysis **✅ s
 |------|-----|:--:|------|
 | **Goals tab: daily nutrition tally** | 5th nav tab aggregating today's nutrients | S–M | **✅ shipped 2026-08-15** — missing-data caveats included; follow-on: 7-day mini-trend (see intake-charts row) |
 | **Nutrient threshold goals + daily check-in** | Floors (≥) and caps (≤) per nutrient, one daily check-in | M | **✅ shipped 2026-08-15** (migration 0008) — floors notify / caps alert at save; **persistence bug found 2026-08-16, fix planned (see Status)**; follow-on: cap alert on the entry-**edit** path |
-| **Per-food / ingredient drill-down** | Tap a finding → every instance + outcomes | S–M | **📌 pinned 2026-08-24** — see the pinned section above |
+| **Per-food / ingredient drill-down** | Tap a finding → every instance + outcomes | S–M | **✅ shipped + device-verified 2026-08-24** — see Status; pair-finding drill-down deferred |
 | **BM-regularity charts** | Complete the trends story beyond sentiment | S–M | **📌 pinned 2026-08-24** — see the pinned section above |
 | **Intake charts (nutrient trends)** | The other half of the old combined row — weekly intake bars (fiber/calories) reusing the same chart components | S | **📌 pinned 2026-08-24** — see the pinned section above |
 | **Meal-component editing after save** | v1 meal builder saves components immutably; edit/remove with re-aggregation is the obvious next ask | S–M | **✅ shipped 2026-08-21** (edit + re-aggregate; removal + single-component-meal drill-down deferred) — Maestro flow owed |
-| **Doctor / dietitian PDF report** | Share a date range + insights with a pro | M | ⚠ `expo-print` |
+| **Doctor / dietitian PDF report** | Share a date range + insights with a pro | M | **📌 pinned 2026-08-24** (⚠ `expo-print` owner-approved) — see the pinned section above |
 
 ## Tier 3 — Quality of life
 
