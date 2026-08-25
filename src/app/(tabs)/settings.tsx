@@ -26,6 +26,13 @@ import { disableReminder, enableReminder, getReminders } from '@/features/notifi
 import { usePrefsStore } from '@/features/prefs/prefsStore';
 import { entriesToJson, parseBackupJson } from '@/lib/backup';
 import { useTheme } from '@/hooks/use-theme';
+import { buildReportHtml, REPORT_RANGES, type ReportRangeDays } from '@/lib/report';
+
+const REPORT_RANGE_LABELS: Record<ReportRangeDays, string> = {
+  14: '2 weeks',
+  30: '30 days',
+  90: '90 days',
+};
 
 export default function SettingsScreen() {
   const theme = useTheme();
@@ -35,6 +42,8 @@ export default function SettingsScreen() {
   const [reminders, setReminders] = useState<RemindersState>(DEFAULT_REMINDERS);
   const [loading, setLoading] = useState(true);
   const [dataWorking, setDataWorking] = useState(false);
+  const [reportRange, setReportRange] = useState<ReportRangeDays>(30);
+  const [reportWorking, setReportWorking] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -131,6 +140,28 @@ export default function SettingsScreen() {
     }
   }
 
+  async function handleCreateReport() {
+    setReportWorking(true);
+    try {
+      const entries = await listLogEntries();
+      const html = buildReportHtml(entries, Date.now(), reportRange);
+      // Dynamic import only — the installed dev client on the owner's Pixel
+      // predates expo-print; a static import would crash Metro (CLAUDE.md §0
+      // in docs/HANDOFF.md). Any failure here (module missing, print/share
+      // failure) falls through to the catch below.
+      const Print = await import('expo-print');
+      const { uri } = await Print.printToFileAsync({ html });
+      await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Share report' });
+    } catch {
+      Alert.alert(
+        'Update required',
+        'Creating a PDF needs the app build that includes printing — install the next dev build, then try again.',
+      );
+    } finally {
+      setReportWorking(false);
+    }
+  }
+
   if (loading) {
     return (
       <ThemedView style={styles.centered}>
@@ -171,6 +202,49 @@ export default function SettingsScreen() {
             <ThemedText type="smallBold">Import data</ThemedText>
           </Pressable>
         </View>
+
+        <View style={styles.divider} />
+
+        {/* Doctor report section */}
+        <ThemedText type="smallBold">Doctor report</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">
+          A printable summary of your logs and patterns to share with a professional.
+        </ThemedText>
+        <View style={styles.chipRow}>
+          {REPORT_RANGES.map((days) => {
+            const selected = days === reportRange;
+            return (
+              <Pressable
+                key={days}
+                accessibilityRole="button"
+                accessibilityLabel={REPORT_RANGE_LABELS[days]}
+                accessibilityState={{ selected }}
+                onPress={() => setReportRange(days)}
+                style={[
+                  styles.chip,
+                  {
+                    backgroundColor: selected ? theme.accent : theme.backgroundElement,
+                    borderColor: selected ? theme.accent : theme.border,
+                  },
+                ]}>
+                <ThemedText
+                  type={selected ? 'smallBold' : 'small'}
+                  themeColor={selected ? undefined : 'textSecondary'}
+                  style={selected ? { color: theme.accentText } : undefined}>
+                  {REPORT_RANGE_LABELS[days]}
+                </ThemedText>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Create PDF report"
+          disabled={reportWorking}
+          onPress={handleCreateReport}
+          style={[styles.dataButton, { backgroundColor: theme.backgroundElement, borderColor: theme.border, opacity: reportWorking ? 0.5 : 1 }]}>
+          <ThemedText type="smallBold">Create PDF report</ThemedText>
+        </Pressable>
 
         <View style={styles.divider} />
 
@@ -268,5 +342,16 @@ const styles = StyleSheet.create({
     borderRadius: Spacing.two,
     paddingVertical: Spacing.two,
     alignItems: 'center',
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.two,
+  },
+  chip: {
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    borderRadius: Spacing.four,
+    borderWidth: StyleSheet.hairlineWidth,
   },
 });
