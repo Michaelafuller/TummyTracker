@@ -1,182 +1,129 @@
-# HANDOFF.md — Execute session: Home fits 5 Recent rows · meal-component delete (swipe + button)
+# HANDOFF.md — Execute session: multi-symptom logging in one instance
 
 > **Read first:** this file only. `CLAUDE.md` is auto-loaded (§4 rungs, §8
-> conventions, §9 guardrails). Part A touches `src/app/(tabs)/index.tsx` (+
-> `flows/00-launch.yaml` labels). Part B touches `src/app/_layout.tsx`,
-> `src/app/entry/[id].tsx`, `src/app/entry/component/[componentId].tsx`,
-> `src/features/logging/ComponentForm.tsx`, `src/db/repository.ts`,
-> `jest.config.js`, and tests. **No new dependency** — `react-native-gesture-handler`
-> (~2.31) and `react-native-reanimated` (4.3) are already direct deps and are in
-> the installed dev build. **`expo-haptics` is NOT installed and must NOT be
-> added this cycle** (a native module absent from the dev build crashes the
-> Metro-loaded client); haptics are scheduled for the next native-build cycle.
-> A Metro server on port 8081 serves this worktree to the owner's Pixel — do
-> not start/stop it or run Maestro; the review pass verifies on device.
+> conventions, §9 guardrails). This cycle touches
+> `src/features/symptoms/formModel.ts`, `SymptomTypePicker.tsx`,
+> `SymptomForm.tsx`, `src/app/symptom/new.tsx`, `src/db/repository.ts`,
+> `src/app/entry/[id].tsx` (one-line wrapper only), and tests. **No new
+> dependency. No schema change, no migration** — the design deliberately
+> fans out to existing single-symptom rows.
 
-**Planned 2026-08-21 (Fable plan session), owner-requested.** Two independent
-parts — commit separately (A, then B in 2–3 commits).
+**Planned 2026-08-24 (Fable plan session), owner-requested and pinned to the
+top of the backlog:** log multiple symptoms in a single pass (e.g. nausea AND
+bloating) instead of opening the symptom screen once per symptom.
 
 ---
 
-## Part A — Home: fit ≥4 Recent rows, target 5 (Pixel 5)
+## 0. Design decision (context — do not re-litigate)
 
-### A.0 Measured budget (uiautomator, real px at 2.75 px/dp, post-`63a7336`)
+**Multi-select picker on the *new symptom* screen; save creates one `logEntry`
+row per selected symptom.** All rows share the same `loggedAt`, `severity`,
+and `notes`; each row keeps its own `symptomType` and per-type `name`
+("Nausea", "Bloating") exactly as today.
 
-Rows `ScrollView` = **385px**; a row is 107px + 22px gap → 3 rows. Need **494px
-for 4**, **623px for 5**. Hero = title 158 + gap 44 + 2-line subtitle 122;
-buttons 161px each with 44px gaps; section gap 66.
+Why fan-out instead of a multi-type column:
+- **Zero schema change** — no migration, no §9 guardrail conversation.
+- **Per-symptom granularity is the product.** `isOutcome` (severity ≥ 3),
+  temporal correlation, insights, journal rows, daily tally, and backup all
+  consume one-symptom-per-row and keep working untouched.
+- Each symptom stays individually editable/deletable afterward (the edit
+  screen stays single-select — one row is one symptom).
 
-### A.1 Changes (`src/app/(tabs)/index.tsx`) — all four, they add up to ≈ +376px
+Accepted trade-offs (by design, don't "fix"): shared severity/notes across the
+batch (the user can fine-tune an individual entry afterward); notes text is
+duplicated per row.
 
-1. **"Log bowel movement" + "Log symptom" side by side** in one row
-   (`flexDirection: 'row', gap: Spacing.three`, each `flex: 1`). Visible
-   labels shorten so they don't wrap at half width: `💩 Bowel movement` and
-   `🤢 Symptom`. **Keep the `accessibilityLabel`s exactly** `"Log a bowel
-   movement"` / `"Log a symptom"` — three Maestro flows tap by those. Keep
-   `StyleSheet.flatten` on `<Link asChild>` children (dev-mode array-style
-   crash, see the existing comment). (+205px)
-2. **Subtitle to one line**: `Log what you eat and spot the patterns.` (39
-   chars fits one line at `small`; the current 68-char line wraps to two).
-   Keep `textAlign: 'center'`. (+61px)
-3. **Buttons slightly shorter**: `paddingVertical` `Spacing.three` →
-   `Spacing.two + Spacing.one` (12dp) on both `cta` and `secondaryCta`. (+66px)
-4. **Section gap**: `content.gap` `Spacing.four` → `Spacing.three` (16dp).
-   (+44px)
+## 1. Changes
 
-Don't touch `RecentFoodPicker`, the frozen layout, `limit={50}`, or the
-bottom inset (fixed in `63a7336`).
+### 1.1 `src/features/symptoms/formModel.ts`
 
-### A.2 Flow label follow-through (mechanical)
+- `SymptomFormState.symptomType: SymptomTypeValue | null` →
+  **`symptomTypes: SymptomTypeValue[]`** (order = tap order; empty = none).
+- Replace `buildSymptomEntry` with **`buildSymptomEntries(state)`** returning
+  `{ valid: boolean; entries?: BuiltSymptomEntry[]; errors: SymptomFormErrors }`:
+  - Validate date/time + notes once (unchanged rules).
+  - `symptomTypes.length === 0` → **one** entry with `symptomType: null`,
+    name `"Symptom"` (preserves today's optional-type behavior).
+  - Otherwise one entry per selected type, `name: symptomTypeLabel(type)`,
+    all sharing `loggedAt` / `severity` / trimmed `notes`.
+  - `BuiltSymptomEntry` shape is unchanged.
+- `symptomEntryToFormState`: `symptomTypes: isSymptomTypeValue(entry.symptomType)
+  ? [entry.symptomType] : []`.
+- Keep `symptomEntryName` as-is (still used for per-entry names).
 
-`flows/00-launch.yaml:11-12` assert the full visible button texts
-(`"💩 Log bowel movement"`, `"🤢 Log symptom"`, full-regex match) — update those
-two lines to the new visible labels. Nothing else in `flows/` references the
-visible text (the other flows use the accessibility labels, unchanged).
+### 1.2 `src/features/symptoms/SymptomTypePicker.tsx`
 
-### A.3 Test
+Props → `values: readonly SymptomTypeValue[]`, `onToggle: (value) => void`,
+`onClear?: () => void`. A chip is selected iff `values.includes(option.value)`;
+keep each chip's `accessibilityLabel={option.label}` **exactly** (Maestro
+`c-symptom-logging.yaml` taps `"Bloating"` — a single tap must still select).
+"Clear" link shows when `values.length > 0`, label stays
+`"Clear symptom type"`.
 
-Existing `RecentFoodPicker.test.tsx` is untouched. Add no Home test unless one
-exists (there is none).
+### 1.3 `src/features/symptoms/SymptomForm.tsx`
 
-## Part B — Meal-component delete (swipe on the list + Delete button on the edit screen)
+- State uses `symptomTypes: []`; add prop **`single?: boolean`** (default
+  false).
+- Toggle handler: multi mode → add/remove membership; `single` mode → replace
+  the selection with `[value]` (tap = pick, matching today's edit behavior).
+- Field label: multi mode `"Symptom types (optional)"` with hint
+  `"Select all that apply"`; single mode keeps `"Symptom type (optional)"`.
+- `onSubmit` signature becomes **`(entries: BuiltSymptomEntry[])`** — submit
+  runs `buildSymptomEntries` and passes `result.entries` (always length ≥ 1
+  when valid).
 
-### B.0 Context (verified)
+### 1.4 `src/db/repository.ts` — `createLogEntries(inputs: CreateLogEntryInput[]): Promise<LogEntry[]>`
 
-- `src/app/entry/[id].tsx` lists a grouped meal's components (gate
-  `componentCount > 1`) as `Pressable` rows → `/entry/component/<id>`; it
-  re-fetches on focus (`useFocusEffect`) and remounts its form on
-  `entry.updatedAt`.
-- `src/app/entry/component/[componentId].tsx` renders `ComponentForm`
-  (`submitLabel="Save changes"`) and calls `updateMealComponentAndReaggregate`.
-- `ComponentForm`'s actions block (~line 250) renders an optional secondary
-  `Pressable` + `PrimaryButton`. `reaggregateEntryPatch` (pure,
-  `src/lib/mealAggregate.ts`) is the re-aggregation contract: nutrition
-  recomputed fresh, tags merged additively.
-- `react-native-reanimated` is already used (`animated-icon.tsx`,
-  `collapsible.tsx`) and its tests pass under `jest-expo`; RNGH is not yet
-  used anywhere and `expo-router` does **not** wrap the root in
-  `GestureHandlerRootView` (only its stack's own gesture view).
-- `jest.config.js` has no `setupFiles`; `react-native-gesture-handler/jestSetup.js`
-  exists.
+One transaction (mirror `deleteMealComponentAndReaggregate`'s transaction
+style): for each input, same id/timestamp stamping as `createLogEntry`;
+insert all rows; return them. Keep `createLogEntry` unchanged (other callers).
 
-### B.1 Repository — `deleteMealComponentAndReaggregate(componentId): Promise<'deleted' | 'last' | 'missing'>`
+### 1.5 Screens
 
-One transaction: read the component (→ `'missing'` if absent); read its
-siblings; if it is the **only** component of the entry return `'last'` and
-change nothing (a meal must keep ≥1 component — the user deletes the whole
-entry instead); otherwise delete the row, re-read the remaining components,
-apply `reaggregateEntryPatch(remaining, entry.tagsJson)` to the parent
-(nutrition fresh; tags stay additive — a deleted component's tags remain on
-the entry by the project's additive-only policy, document this in the
-docstring), set `componentCount = remaining.length`, bump `updatedAt`, return
-`'deleted'`. Entry `name`/`ingredientsText` untouched (user-owned). Note in
-the docstring: when `remaining.length === 1` the entry screen's `> 1` gate
-hides the list — the entry then behaves as a single-item entry editable at
-entry level (deliberate; the single-component wrinkle is a known follow-up).
+- `src/app/symptom/new.tsx`: `handleSubmit(entries: BuiltSymptomEntry[])` →
+  `await createLogEntries(entries)` → `router.back()` (submitting guard
+  unchanged).
+- `src/app/entry/[id].tsx`: symptom branch passes `single` to `SymptomForm`
+  and adapts the callback: `onSubmit={(entries) => handleSubmit(entries[0])}`.
+  Nothing else on the edit path changes.
 
-### B.2 Root wrapper — `src/app/_layout.tsx`
+## 2. Tests (same change, per CLAUDE.md §4)
 
-Wrap the rendered tree in `<GestureHandlerRootView style={{ flex: 1 }}>`
-(outermost, around `ThemeProvider`). Required for RNGH gestures anywhere.
+- **`src/features/symptoms/__tests__/symptoms.test.ts`** — rework the
+  `buildSymptomEntry` block for `buildSymptomEntries`:
+  - two types → two entries; shared `loggedAt`/`severity`/`notes`; names
+    `"Nausea"` / `"Bloating"`; both `type: 'symptom'`, food fields null.
+  - empty selection → exactly one generic `"Symptom"` entry (type null).
+  - invalid date / over-long notes → `valid: false`, no entries.
+  - round-trip: `symptomEntryToFormState` yields `symptomTypes: ['bloating']`
+    and rebuilds a single matching entry.
+- **New `src/features/symptoms/__tests__/SymptomForm.test.tsx`** (async RNTL
+  v14 — `await render(...)`, `await fireEvent(...)`, destructure queries from
+  the awaited result; the global `screen` proxy is unreliable):
+  - multi mode: tap `"Nausea"` + `"Bloating"`, press Save → `onSubmit` gets 2
+    entries; tapping `"Nausea"` again before save deselects → 1 entry.
+  - `single` mode: tap `"Nausea"` then `"Bloating"` → save yields 1 entry
+    with `symptomType: 'bloating'`.
+- **New `src/app/symptom/__tests__/new.test.tsx`** (mock `expo-router`'s
+  `useRouter` and `@/db/repository`, following `src/app/entry/__tests__/
+  [id].test.tsx` patterns): select two chips, Save → `createLogEntries`
+  called once with 2 inputs → `router.back()`.
+- **`src/app/entry/__tests__/[id].test.tsx`** — keep green; the symptom-edit
+  case must still save a single updated entry through the adapted callback.
 
-### B.3 Swipe-to-delete on the entry screen — `src/app/entry/[id].tsx`
-
-- Wrap each component row in `ReanimatedSwipeable` (import from
-  `react-native-gesture-handler/ReanimatedSwipeable`), `renderRightActions`
-  → a danger-colored action (`Pressable`, `accessibilityRole="button"`,
-  `accessibilityLabel={`Delete ${component.name}`}`,
-  `testID={`component-delete-${component.id}`}`, label "Delete", background
-  `theme.danger`, full row height, ~88dp wide, `overshootRight={false}`,
-  `friction={2}`). The row itself stays a `Pressable` that navigates.
-- On press: `Alert.alert('Remove from this meal?', `${name} will be removed
-  and the meal's totals recalculated.`, [Cancel, Remove(destructive)])`. On
-  confirm: `await deleteMealComponentAndReaggregate(id)`; if `'last'` →
-  `Alert.alert('Keep at least one item', 'A meal needs one item — delete the
-  whole entry instead.')`; on `'deleted'` → re-run the same loader the focus
-  effect uses (extract `loadEntry()` into a `useCallback` used by both the
-  focus effect and the post-delete refresh) so the row disappears and the
-  re-aggregated totals show (the `updatedAt` key remount already handles the
-  form).
-- Theme: `theme.danger` exists (used for the watch banner).
-
-### B.4 Delete button on the component edit screen
-
-- `ComponentForm` gains `onDelete?: () => void | Promise<void>` and
-  `deleteLabel?: string` (default `'Delete'`). When `onDelete` is provided,
-  the actions block renders a **row** `[Delete] [Save changes]` with
-  `justifyContent: 'space-between'`, both buttons `flex: 1`, `gap:
-  Spacing.three`: Delete is an outline button with `borderColor:
-  theme.danger` and danger-colored label, `accessibilityRole="button"`,
-  `accessibilityLabel={deleteLabel}`, `testID="component-delete"`; Save stays
-  the `PrimaryButton`. Without `onDelete` the block renders exactly as today
-  (the builder's "Add & scan next" / "Finish meal" path must not change).
-- `src/app/entry/component/[componentId].tsx`: pass `onDelete` → same
-  confirm `Alert` → `deleteMealComponentAndReaggregate(component.id)` →
-  `'deleted'` → `router.back()`; `'last'` → the keep-one alert. Guard with the
-  existing `submitting` state.
-
-### B.5 Tests
-
-- `jest.config.js`: add `setupFiles: ['./node_modules/react-native-gesture-handler/jestSetup.js']`
-  (keep the existing preset/mappers). If `ReanimatedSwipeable` still fails to
-  render under Jest after that, mock `react-native-gesture-handler/ReanimatedSwipeable`
-  **in the affected test file** with a component that renders `children` and
-  `renderRightActions()` side by side — never disable a rule or skip a test.
-- `[id].test.tsx`: pressing `component-delete-<id>` → `Alert.alert` (mock
-  `Alert.alert` to invoke the destructive button) → repository called with
-  the id → entry + components re-fetched. A `'last'` result shows the keep-one
-  alert and does not refetch.
-- `[componentId].test.tsx`: Delete button present only on the edit screen,
-  confirm → repository → `router.back()`; `'last'` → alert, no back.
-- `ComponentForm.test.tsx`: no Delete button without `onDelete`; with it,
-  both buttons render and Delete calls the handler.
-- A pure test is owed if you add any pure helper; `reaggregateEntryPatch` is
-  already covered.
-
-### B.6 Not this cycle (owner-approved dependency, needs a native build)
-
-`expo-haptics` — `Haptics.impactAsync(ImpactFeedbackStyle.Medium)` when the
-swipe action reveals / on delete, `notificationAsync(Success)` on save. Add it
-in the next native-build cycle (together with the pending iOS build), then
-wire it here. Do not import it now.
-
-## 2. Definition of done
+## 3. Definition of done
 
 - `npm run typecheck` && `npm run lint` && `npm test` green — run them.
-- No `// @ts-ignore`, no lint disables, **no new dependency**.
-- Commits (imperative, scoped): `feat(home): fit five Recent rows — side-by-side
-  log buttons, one-line tagline, tighter spacing` · `feat(logging): delete a
-  saved meal component with re-aggregation (repository + root gesture view)` ·
-  `feat(logging): swipe-to-delete on the entry screen + Delete next to Save on
-  the component editor`.
-- Execute summary: per-commit contents, file list, rung counts, any Jest
-  mocking needed for the swipeable, deviations.
+- No `// @ts-ignore`, no lint disables, no new dependency, no schema change.
+- Commits (imperative, scoped), suggested split:
+  `feat(symptoms): multi-select symptom types — fan out one entry per symptom
+  on save` · `test(symptoms): form + screen coverage for multi-symptom save`.
+- Execute summary: file list, rung counts, any deviations from this spec.
 
-## 3. After this (review pass + test sessions)
+## 4. After this (review pass + test sessions)
 
-Fable re-measures Home on the Pixel (target: rows `ScrollView` ≥ 623px) and
-exercises a swipe-delete on a seeded 2-component meal. Test session: extend
-`flows/01d-browse-edit.yaml` or the planned `j-component-drilldown.yaml` with
-`swipe` on `component-row-<id>` → tap `"Delete <name>"` → confirm → row gone
-and totals updated; plus the component-screen Delete path; `00-launch.yaml`
-labels re-verified.
+Fable reviews the diff for remediation before anything ships. Test session
+owed: extend `flows/c-symptom-logging.yaml` (or a new `c2-multi-symptom.yaml`)
+— tap two chips, save once, assert **two** journal rows at the same time;
+existing single-tap flow must keep passing. Device pass rides the next
+Metro-connected session; no build needed (pure JS/TS).

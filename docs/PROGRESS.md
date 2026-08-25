@@ -115,6 +115,12 @@ Ranked by value-add to the north star. **Effort:** S (hours) · M (a session) ·
 **⚠ = new dependency** — allowed, but CVE-inventory it and justify the value first.
 Completed tiers are collapsed to a single line; their detail lives in git.
 
+## 📌 Pinned — next up (owner-directed 2026-08-24)
+
+| Item | Why it matters | Effort | Notes |
+|------|----------------|:--:|------|
+| **Multi-symptom logging in one instance** | Logging nausea + bloating today means two full passes through the symptom screen; friction here costs outcome data, and outcome data is what correlation runs on | S | Planned 2026-08-24 (`docs/HANDOFF.md`) — multi-select type picker on `/symptom/new`, save fans out one `logEntry` row per symptom (shared time/severity/notes; no schema change, analysis untouched); edit stays single-select. Sonnet executes; Fable reviews for remediation. Maestro flow owed after ship. |
+
 ## Tier 0 — Foundations · ✅ complete
 Saturated fat, backup/export-import, native date/time picker, serving-size scaling,
 recent quick-add — all shipped.
