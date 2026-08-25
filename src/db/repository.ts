@@ -49,6 +49,32 @@ export async function createLogEntry(input: CreateLogEntryInput): Promise<LogEnt
 }
 
 /**
+ * Persists multiple logEntry rows in one transaction (HANDOFF multi-symptom
+ * logging) — e.g. one new-symptom save fanning out to one row per selected
+ * symptom type, all sharing loggedAt/severity/notes. Each input is stamped
+ * with its own id + createdAt/updatedAt exactly as `createLogEntry` does.
+ * Single transaction so a partial write never leaves some symptoms saved and
+ * others missing.
+ */
+export async function createLogEntries(inputs: CreateLogEntryInput[]): Promise<LogEntry[]> {
+  const now = Date.now();
+  const rows: NewLogEntry[] = inputs.map((input) => ({
+    ...input,
+    id: createId(),
+    createdAt: now,
+    updatedAt: now,
+  }));
+
+  await db.transaction(async (tx) => {
+    if (rows.length > 0) {
+      await tx.insert(logEntry).values(rows);
+    }
+  });
+
+  return rows as LogEntry[];
+}
+
+/**
  * Persists a multi-scan grouped meal (HANDOFF Phase 2.4): one logEntry row whose
  * nutrition columns hold the aggregate (sum of value × servings across
  * components) and whose tagsJson holds the union of component tags, plus one

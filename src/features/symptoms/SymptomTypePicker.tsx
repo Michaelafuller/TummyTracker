@@ -6,27 +6,27 @@ import { useTheme } from '@/hooks/use-theme';
 import { SYMPTOM_TYPES, type SymptomTypeValue } from './symptomTypes';
 
 export interface SymptomTypePickerProps {
-  value: SymptomTypeValue | null;
-  onChange: (value: SymptomTypeValue) => void;
+  values: readonly SymptomTypeValue[];
+  onToggle: (value: SymptomTypeValue) => void;
   onClear?: () => void;
 }
 
 /** Grid picker for the nine symptom types, mirroring BristolSelector's chip layout. */
-export function SymptomTypePicker({ value, onChange, onClear }: SymptomTypePickerProps) {
+export function SymptomTypePicker({ values, onToggle, onClear }: SymptomTypePickerProps) {
   const theme = useTheme();
 
   return (
     <View style={styles.container}>
       <View style={styles.grid}>
         {SYMPTOM_TYPES.map((option) => {
-          const selected = option.value === value;
+          const selected = values.includes(option.value);
           return (
             <Pressable
               key={option.value}
               accessibilityRole="button"
               accessibilityLabel={option.label}
               accessibilityState={{ selected }}
-              onPress={() => onChange(option.value)}
+              onPress={() => onToggle(option.value)}
               style={[
                 styles.chip,
                 { backgroundColor: selected ? theme.backgroundSelected : theme.backgroundElement },
@@ -36,7 +36,7 @@ export function SymptomTypePicker({ value, onChange, onClear }: SymptomTypePicke
           );
         })}
       </View>
-      {onClear && value != null ? (
+      {onClear && values.length > 0 ? (
         <Pressable onPress={onClear} accessibilityRole="button" accessibilityLabel="Clear symptom type">
           <ThemedText type="link" themeColor="textSecondary">
             Clear

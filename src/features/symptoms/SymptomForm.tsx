@@ -8,7 +8,8 @@ import { Spacing } from '@/constants/theme';
 import { formatDateInput, formatTimeInput } from '@/lib/datetime';
 import { MAX_NOTES_LENGTH } from '@/lib/validation';
 import { SeveritySelector } from './SeveritySelector';
-import { buildSymptomEntry, type BuiltSymptomEntry, type SymptomFormErrors, type SymptomFormState } from './formModel';
+import { buildSymptomEntries, type BuiltSymptomEntry, type SymptomFormErrors, type SymptomFormState } from './formModel';
+import type { SymptomTypeValue } from './symptomTypes';
 import { SymptomTypePicker } from './SymptomTypePicker';
 
 function defaultState(initial?: Partial<SymptomFormState>): SymptomFormState {
@@ -16,7 +17,7 @@ function defaultState(initial?: Partial<SymptomFormState>): SymptomFormState {
   return {
     dateInput: formatDateInput(now),
     timeInput: formatTimeInput(now),
-    symptomType: null,
+    symptomTypes: [],
     severity: null,
     notes: '',
     ...initial,
@@ -25,9 +26,11 @@ function defaultState(initial?: Partial<SymptomFormState>): SymptomFormState {
 
 export interface SymptomFormProps {
   initial?: Partial<SymptomFormState>;
-  onSubmit: (entry: BuiltSymptomEntry) => void | Promise<void>;
+  onSubmit: (entries: BuiltSymptomEntry[]) => void | Promise<void>;
   submitLabel?: string;
   submitting?: boolean;
+  /** Edit-screen mode: tapping a chip replaces the selection instead of toggling membership. */
+  single?: boolean;
 }
 
 export function SymptomForm({
@@ -35,6 +38,7 @@ export function SymptomForm({
   onSubmit,
   submitLabel = 'Save',
   submitting = false,
+  single = false,
 }: SymptomFormProps) {
   const [state, setState] = useState<SymptomFormState>(() => defaultState(initial));
   const [errors, setErrors] = useState<SymptomFormErrors>({});
@@ -43,11 +47,26 @@ export function SymptomForm({
     setState((prev) => ({ ...prev, [key]: value }));
   }
 
+  function handleToggleType(value: SymptomTypeValue) {
+    setState((prev) => {
+      if (single) {
+        return { ...prev, symptomTypes: [value] };
+      }
+      const isSelected = prev.symptomTypes.includes(value);
+      return {
+        ...prev,
+        symptomTypes: isSelected
+          ? prev.symptomTypes.filter((v) => v !== value)
+          : [...prev.symptomTypes, value],
+      };
+    });
+  }
+
   async function handleSubmit() {
-    const result = buildSymptomEntry(state);
+    const result = buildSymptomEntries(state);
     setErrors(result.errors);
-    if (result.valid && result.entry) {
-      await onSubmit(result.entry);
+    if (result.valid && result.entries) {
+      await onSubmit(result.entries);
     }
   }
 
@@ -61,11 +80,13 @@ export function SymptomForm({
         error={errors.loggedAt}
       />
 
-      <FormField label="Symptom type (optional)">
+      <FormField
+        label={single ? 'Symptom type (optional)' : 'Symptom types (optional)'}
+        hint={single ? undefined : 'Select all that apply'}>
         <SymptomTypePicker
-          value={state.symptomType}
-          onChange={(value) => set('symptomType', value)}
-          onClear={() => set('symptomType', null)}
+          values={state.symptomTypes}
+          onToggle={handleToggleType}
+          onClear={() => set('symptomTypes', [])}
         />
       </FormField>
 

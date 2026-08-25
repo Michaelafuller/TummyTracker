@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from 'react-native';
 
 import { Spacing } from '@/constants/theme';
-import { createLogEntry } from '@/db/repository';
+import { createLogEntries } from '@/db/repository';
 import { SymptomForm } from '@/features/symptoms/SymptomForm';
 import type { BuiltSymptomEntry } from '@/features/symptoms/formModel';
 
@@ -11,10 +11,10 @@ export default function NewSymptomScreen() {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
 
-  async function handleSubmit(entry: BuiltSymptomEntry) {
+  async function handleSubmit(entries: BuiltSymptomEntry[]) {
     setSubmitting(true);
     try {
-      await createLogEntry(entry);
+      await createLogEntries(entries);
       router.back();
     } finally {
       setSubmitting(false);

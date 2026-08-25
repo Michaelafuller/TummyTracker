@@ -10,7 +10,8 @@ import { isSymptomTypeValue, symptomTypeLabel, type SymptomTypeValue } from './s
 export interface SymptomFormState {
   dateInput: string;
   timeInput: string;
-  symptomType: SymptomTypeValue | null;
+  /** Tap order; empty = none (falls back to one generic "Symptom" entry). */
+  symptomTypes: SymptomTypeValue[];
   severity: SeverityValue | null;
   notes: string;
 }
@@ -33,7 +34,7 @@ export interface SymptomFormErrors {
 
 export interface SymptomBuildResult {
   valid: boolean;
-  entry?: BuiltSymptomEntry;
+  entries?: BuiltSymptomEntry[];
   errors: SymptomFormErrors;
 }
 
@@ -42,7 +43,13 @@ export function symptomEntryName(symptomType: SymptomTypeValue | null): string {
   return symptomType != null ? symptomTypeLabel(symptomType) : 'Symptom';
 }
 
-export function buildSymptomEntry(state: SymptomFormState): SymptomBuildResult {
+/**
+ * Fans out one BuiltSymptomEntry per selected symptom type (HANDOFF
+ * multi-symptom logging) — all sharing loggedAt/severity/notes, each keeping
+ * its own symptomType and per-type name. An empty selection preserves today's
+ * optional-type behavior: one generic entry with symptomType null.
+ */
+export function buildSymptomEntries(state: SymptomFormState): SymptomBuildResult {
   const errors: SymptomFormErrors = {};
 
   const parsedDate = parseDateTime(state.dateInput, state.timeInput);
@@ -59,28 +66,31 @@ export function buildSymptomEntry(state: SymptomFormState): SymptomBuildResult {
     return { valid: false, errors };
   }
 
+  const loggedAt = parsedDate.ms as number;
   const trimmedNotes = state.notes.trim();
-  return {
-    valid: true,
-    errors,
-    entry: {
-      type: 'symptom',
-      name: symptomEntryName(state.symptomType),
-      mealSlot: null,
-      barcode: null,
-      loggedAt: parsedDate.ms as number,
-      symptomType: state.symptomType,
-      severity: state.severity,
-      notes: trimmedNotes.length > 0 ? trimmedNotes : null,
-    },
-  };
+  const notes = trimmedNotes.length > 0 ? trimmedNotes : null;
+  const types: (SymptomTypeValue | null)[] =
+    state.symptomTypes.length > 0 ? state.symptomTypes : [null];
+
+  const entries: BuiltSymptomEntry[] = types.map((symptomType) => ({
+    type: 'symptom',
+    name: symptomEntryName(symptomType),
+    mealSlot: null,
+    barcode: null,
+    loggedAt,
+    symptomType,
+    severity: state.severity,
+    notes,
+  }));
+
+  return { valid: true, errors, entries };
 }
 
 export function symptomEntryToFormState(entry: LogEntry): SymptomFormState {
   return {
     dateInput: formatDateInput(entry.loggedAt),
     timeInput: formatTimeInput(entry.loggedAt),
-    symptomType: isSymptomTypeValue(entry.symptomType) ? entry.symptomType : null,
+    symptomTypes: isSymptomTypeValue(entry.symptomType) ? [entry.symptomType] : [],
     severity: isSeverityValue(entry.severity) ? entry.severity : null,
     notes: entry.notes ?? '',
   };

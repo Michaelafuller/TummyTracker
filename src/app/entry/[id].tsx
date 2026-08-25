@@ -172,9 +172,10 @@ export default function EditEntryScreen() {
         <SymptomForm
           key={String(entry.updatedAt)}
           initial={symptomEntryToFormState(entry)}
-          onSubmit={handleSubmit}
+          onSubmit={(entries) => handleSubmit(entries[0])}
           submitLabel="Save changes"
           submitting={submitting}
+          single
         />
       ) : (
         <LogEntryForm
