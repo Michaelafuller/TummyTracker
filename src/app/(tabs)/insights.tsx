@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BarMeter } from '@/components/charts/BarMeter';
 import { BristolHistogram } from '@/components/charts/BristolHistogram';
 import { CountBars } from '@/components/charts/CountBars';
+import { IntakeBars } from '@/components/charts/IntakeBars';
 import { MiniHistogram } from '@/components/charts/MiniHistogram';
 import { TrendBars } from '@/components/charts/TrendBars';
 import { ThemedText } from '@/components/themed-text';
@@ -23,7 +24,7 @@ import { WatchButton } from '@/features/watchlist/WatchButton';
 import { WatchlistSection } from '@/features/watchlist/WatchlistSection';
 import { useTheme } from '@/hooks/use-theme';
 import { bmRegularity, bristolDistribution, weeklyBmCounts } from '@/lib/bmTrends';
-import { weeklySentiment } from '@/lib/chartData';
+import { weeklyIntake, weeklySentiment } from '@/lib/chartData';
 import { NUTRITION_NOUNS } from '@/lib/nutrition';
 import type { ConfidenceTier } from '@/lib/stats';
 
@@ -124,6 +125,10 @@ export default function InsightsScreen() {
   const trendBuckets = weeklySentiment(entries, now);
   const hasTrendData = trendBuckets.some((b) => b.avg != null);
   const regularity = bmRegularity(entries, now);
+  const caloriesBuckets = weeklyIntake(entries, now, 'calories');
+  const fiberBuckets = weeklyIntake(entries, now, 'fiberG');
+  const hasCaloriesData = caloriesBuckets.some((b) => b.avg != null);
+  const hasFiberData = fiberBuckets.some((b) => b.avg != null);
   const hasFindings =
     nutrientFindings.length > 0 ||
     foodFindings.length > 0 ||
@@ -167,6 +172,27 @@ export default function InsightsScreen() {
             ) : null}
             <CountBars buckets={weeklyBmCounts(entries, now)} />
             <BristolHistogram counts={bristolDistribution(entries, now)} />
+          </View>
+        ) : null}
+
+        {hasCaloriesData || hasFiberData ? (
+          <View style={styles.section}>
+            <ThemedText type="subtitle">Intake</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              Counts only entries with logged nutrition — sparse logging reads low.
+            </ThemedText>
+            {hasCaloriesData ? (
+              <>
+                <ThemedText type="smallBold">Calories</ThemedText>
+                <IntakeBars buckets={caloriesBuckets} noun="calories" unit="kcal" />
+              </>
+            ) : null}
+            {hasFiberData ? (
+              <>
+                <ThemedText type="smallBold">Fiber</ThemedText>
+                <IntakeBars buckets={fiberBuckets} noun="fiber" unit="g" />
+              </>
+            ) : null}
           </View>
         ) : null}
 
