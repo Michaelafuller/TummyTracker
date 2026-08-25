@@ -123,15 +123,16 @@ Ranked by value-add to the north star. **Effort:** S (hours) · M (a session) ·
 **⚠ = new dependency** — allowed, but CVE-inventory it and justify the value first.
 Completed tiers are collapsed to a single line; their detail lives in git.
 
-## 📌 Pinned — next up (owner-directed 2026-08-24, third pin)
+## 📌 Pinned — next up (owner-directed 2026-08-24, fourth pin)
 
 | Item | Why it matters | Effort | Notes |
 |------|----------------|:--:|------|
-| **Intake charts (weekly calories + fiber)** | Completes the trends trio (sentiment → digestion → intake) so cause and outcome trend side by side | S | **✅ shipped + device-verified 2026-08-24** (Sonnet executed, Fable review: **no remediation** — the gotcha #5 `accessible` requirement was specced up front and honored). `weeklyIntake` in chartData.ts, generic `IntakeBars`, per-nutrient gating + caveat line. Rungs 67 suites / 590 tests; `flows/l-intake-charts.yaml` recorded green first try. Unpin next plan cycle. |
+| **Per-food / ingredient drill-down** | A finding you can't inspect is a finding you can't trust — tap any food/ingredient finding to see every log behind it, with outcomes | S–M | Planned 2026-08-24 (`docs/HANDOFF.md`) — tappable finding cards (food, ingredient, timing) → `/insight/detail` listing every matching log (date, sentiment, rough-outcome-within-24h marker), rows open the entry; pure logic `features/analysis/drilldown.ts` reusing `isOutcome`. Pairs/nutrients deferred (no single target). Sonnet executes; Fable reviews + authors `m-finding-drilldown.yaml`. |
 
 **Recently shipped pins (2026-08-24):** multi-symptom logging ✅ · BM
 "Digestion" section ✅ (one review remediation: chart `accessible` fix
-`8872c4e`; follow-up task spun off for the older charts) — detail in Status.
+`8872c4e`; follow-up task spun off for the older charts) · intake charts ✅
+(no remediation) — detail in Status.
 
 ## Tier 0 — Foundations · ✅ complete
 Saturated fat, backup/export-import, native date/time picker, serving-size scaling,
@@ -157,7 +158,7 @@ Sentiment trend chart, confidence labeling, and ingredient-pair analysis **✅ s
 |------|-----|:--:|------|
 | **Goals tab: daily nutrition tally** | 5th nav tab aggregating today's nutrients | S–M | **✅ shipped 2026-08-15** — missing-data caveats included; follow-on: 7-day mini-trend (see intake-charts row) |
 | **Nutrient threshold goals + daily check-in** | Floors (≥) and caps (≤) per nutrient, one daily check-in | M | **✅ shipped 2026-08-15** (migration 0008) — floors notify / caps alert at save; **persistence bug found 2026-08-16, fix planned (see Status)**; follow-on: cap alert on the entry-**edit** path |
-| **Per-food / ingredient drill-down** | Tap a finding → every instance + outcomes | S–M | no dep; natural follow-on to insights v2 |
+| **Per-food / ingredient drill-down** | Tap a finding → every instance + outcomes | S–M | **📌 pinned 2026-08-24** — see the pinned section above |
 | **BM-regularity charts** | Complete the trends story beyond sentiment | S–M | **📌 pinned 2026-08-24** — see the pinned section above |
 | **Intake charts (nutrient trends)** | The other half of the old combined row — weekly intake bars (fiber/calories) reusing the same chart components | S | **📌 pinned 2026-08-24** — see the pinned section above |
 | **Meal-component editing after save** | v1 meal builder saves components immutably; edit/remove with re-aggregation is the obvious next ask | S–M | **✅ shipped 2026-08-21** (edit + re-aggregate; removal + single-component-meal drill-down deferred) — Maestro flow owed |
