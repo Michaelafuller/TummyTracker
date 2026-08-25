@@ -106,6 +106,22 @@ E2E.md's stale-Metro rule a fresh Metro was started on **8082** and the
 reconnect helper's port updated (its documented per-session procedure).
 Metro left running on 8082 at session end.
 
+## Addendum 3 — intake-charts cycle flow (`l-intake-charts.yaml`, 2026-08-24 night)
+
+**1/1 passed first try (recorded, `flows/results-l.xml`), fresh-bundle
+verified.** Seeds one meal (Toast, Calories 210, Fiber 7) → Insights "Intake"
+section: asserts the Calories/Fiber headings and both chart a11y summaries
+with deterministic averages ("about 30 kcal per day", "about 1 g per day").
+No flow-bugs, no app bugs — the gotcha #4 (scroll landmark below nutrition
+fields) and gotcha #5 (`accessible` on chart containers) lessons were baked
+into the flow and the HANDOFF respectively, and both paid off.
+
+**Infra:** the unkillable-orphan Metro pattern repeated on 8082 (taskkill
+Access-denied even unsandboxed) — this host does not release Metro child
+processes; each restart takes the next port (8081, 8082 now both stuck until
+a reboot). Fresh Metro on **8083**, helper port updated. Metro left running
+on 8083 at session end.
+
 ## Findings for the next planning session
 
 - No app bugs found. The multi-symptom fan-out (one save → one row per

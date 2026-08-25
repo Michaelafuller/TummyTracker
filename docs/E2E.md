@@ -114,6 +114,7 @@ maestro test flows/ --format junit --output flows/results.xml
 | Goals tab — daily tally, missing-data disclosure, tally-row drill-down (expand/collapse, "no data" sub-rows, tap-through to edit screen), "Today" + long-date header | `flows/goals-tally.yaml` | ✅ Automated (verified 2026-08-21 on the dev variant, `com.tummytracker.app.dev`) |
 | J — meal-component drill-down: servings edit re-aggregates totals, swipe-delete + editor Delete (confirms), section hides at 1 component, relaunch persistence | `flows/j-component-drilldown.yaml` | ✅ Automated (authored 2026-08-24; recorded green + confirmation re-run) |
 | K — BM trends: Insights "Digestion" section (regularity line, weekly count bars, Bristol histogram) with 2 seeded BMs; chart a11y summaries asserted | `flows/k-bm-trends.yaml` | ✅ Automated (authored 2026-08-24; caught the missing-`accessible` a11y bug, gotcha #5) |
+| L — intake charts: Insights "Intake" section (Calories + Fiber weekly avg/day) from one 210 kcal / 7 g-fiber meal; summaries asserted | `flows/l-intake-charts.yaml` | ✅ Automated (authored 2026-08-24; passed first try) |
 | Goals — floor/cap thresholds, cap notice, removal | `flows/goal-editor.yaml` | ✅ Automated |
 | Check-in persistence + 7-day horizon | `flows/checkin-persistence.yaml` | ✅ Automated |
 

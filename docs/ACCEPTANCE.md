@@ -418,3 +418,15 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
 - [x] Bucketing/classification math (week tiling, bad-Bristol 1/2/6/7,
       regularity window, null-bristol handling). · Jest
       `src/lib/__tests__/bmTrends.test.ts` — no device item
+
+### Intake charts — Insights "Intake" section
+- [x] With nutrition-bearing food entries, Insights shows "Intake": caveat
+      line + per-nutrient weekly average-per-day charts (Calories, Fiber),
+      each block gated on its own data; hidden entirely with none. · auto
+      `flows/l-intake-charts.yaml` (recorded green, `flows/results-l.xml`:
+      210 kcal + 7 g fiber meal → "about 30 kcal per day" / "about 1 g per
+      day" summaries asserted) + Jest
+      `src/app/(tabs)/__tests__/insights.test.tsx`
+- [x] `weeklyIntake` math (sum÷7, null = no data ≠ 0, non-food excluded,
+      label parity with `weeklySentiment`). · Jest
+      `src/lib/__tests__/chartData.test.ts` — no device item

@@ -127,7 +127,7 @@ Completed tiers are collapsed to a single line; their detail lives in git.
 
 | Item | Why it matters | Effort | Notes |
 |------|----------------|:--:|------|
-| **Intake charts (weekly calories + fiber)** | Completes the trends trio (sentiment → digestion → intake) so cause and outcome trend side by side | S | Planned 2026-08-24 (`docs/HANDOFF.md`) — Insights "Intake" section after Digestion: `weeklyIntake` in chartData.ts (avg/day per rolling week, null = no data ≠ zero), generic `IntakeBars` chart (accessible summaries per gotcha #5), per-nutrient gating (Calories, Fiber). Sonnet executes; Fable reviews + authors `l-intake-charts.yaml`. |
+| **Intake charts (weekly calories + fiber)** | Completes the trends trio (sentiment → digestion → intake) so cause and outcome trend side by side | S | **✅ shipped + device-verified 2026-08-24** (Sonnet executed, Fable review: **no remediation** — the gotcha #5 `accessible` requirement was specced up front and honored). `weeklyIntake` in chartData.ts, generic `IntakeBars`, per-nutrient gating + caveat line. Rungs 67 suites / 590 tests; `flows/l-intake-charts.yaml` recorded green first try. Unpin next plan cycle. |
 
 **Recently shipped pins (2026-08-24):** multi-symptom logging ✅ · BM
 "Digestion" section ✅ (one review remediation: chart `accessible` fix
