@@ -36,7 +36,9 @@ export function CountBars({ buckets }: CountBarsProps) {
       : 'Weekly BM count: no BMs logged yet.';
 
   return (
-    <View style={styles.container} accessibilityLabel={summary}>
+    // `accessible` is required for the label to become a real a11y node on
+    // Android — without it the summary is invisible to TalkBack (and Maestro).
+    <View style={styles.container} accessible accessibilityLabel={summary}>
       <View style={styles.chart}>
         {buckets.map((bucket) => {
           const height = bucket.count > 0 ? Math.max(4, (bucket.count / max) * CHART_HEIGHT) : 0;

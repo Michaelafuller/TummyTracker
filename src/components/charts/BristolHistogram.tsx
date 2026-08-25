@@ -39,7 +39,9 @@ export function BristolHistogram({ counts }: BristolHistogramProps) {
       : 'Bristol distribution: no BMs logged yet.';
 
   return (
-    <View style={styles.container} accessibilityLabel={summary}>
+    // `accessible` is required for the label to become a real a11y node on
+    // Android — without it the summary is invisible to TalkBack (and Maestro).
+    <View style={styles.container} accessible accessibilityLabel={summary}>
       <View style={styles.row}>
         {BRISTOL_VALUES.map((value, i) => {
           const count = counts[i];
