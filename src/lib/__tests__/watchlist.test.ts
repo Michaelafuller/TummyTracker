@@ -186,45 +186,69 @@ describe('computeWatchStats', () => {
     expect(stats.cleanDays).toBe(0);
   });
 
-  it('avgSentiment/ratedCount exclude unrated matching entries', () => {
+  it('matchCount counts all matching food entries, all-time', () => {
     const item = watchItem('soy', 0);
     const entries = [
-      entry({ tagsJson: '["soybeans"]', loggedAt: 1, sentiment: 2 }),
-      entry({ tagsJson: '["soybeans"]', loggedAt: 2, sentiment: null }),
-      entry({ tagsJson: '["soybeans"]', loggedAt: 3, sentiment: 4 }),
+      entry({ tagsJson: '["soybeans"]', loggedAt: 1 }),
+      entry({ tagsJson: '["soybeans"]', loggedAt: 2 }),
+      entry({ tagsJson: '["soybeans"]', loggedAt: 3 }),
     ];
     const stats = computeWatchStats(item, entries, 100);
-    expect(stats.ratedCount).toBe(2);
-    expect(stats.avgSentiment).toBe(3);
-  });
-
-  it('avgSentiment is null when no matching entries are rated', () => {
-    const item = watchItem('soy', 0);
-    const entries = [entry({ tagsJson: '["soybeans"]', loggedAt: 1, sentiment: null })];
-    const stats = computeWatchStats(item, entries, 100);
-    expect(stats.avgSentiment).toBeNull();
-    expect(stats.ratedCount).toBe(0);
+    expect(stats.matchCount).toBe(3);
   });
 
   it('ignores non-food (bowel_movement/symptom) rows even if tags match', () => {
     const item = watchItem('soy', 0);
     const entries = [
-      entry({ type: 'bowel_movement', tagsJson: '["soybeans"]', loggedAt: 1, sentiment: 5 }),
-      entry({ type: 'symptom', tagsJson: '["soybeans"]', loggedAt: 2, sentiment: 5 }),
+      entry({ type: 'bowel_movement', tagsJson: '["soybeans"]', loggedAt: 1 }),
+      entry({ type: 'symptom', tagsJson: '["soybeans"]', loggedAt: 2 }),
     ];
     const stats = computeWatchStats(item, entries, 100);
     expect(stats.timesSinceWatch).toBe(0);
     expect(stats.lastEatenAt).toBeNull();
-    expect(stats.ratedCount).toBe(0);
+    expect(stats.matchCount).toBe(0);
+    expect(stats.outcomeFollowedCount).toBe(0);
   });
 
-  it('avgSentiment is all-time, not limited to entries since watching began', () => {
+  it('matchCount is all-time, not limited to entries since watching began', () => {
     const item = watchItem('soy', 5);
-    const entries = [entry({ tagsJson: '["soybeans"]', loggedAt: 1, sentiment: 1 })]; // before watch start
+    const entries = [entry({ tagsJson: '["soybeans"]', loggedAt: 1 })]; // before watch start
     const stats = computeWatchStats(item, entries, 100);
     expect(stats.timesSinceWatch).toBe(0);
-    expect(stats.ratedCount).toBe(1);
-    expect(stats.avgSentiment).toBe(1);
+    expect(stats.matchCount).toBe(1);
+  });
+
+  describe('outcomeFollowedCount', () => {
+    it('counts a matching food entry followed by a bad-BM outcome within the window', () => {
+      const item = watchItem('soy', 0);
+      const meal = entry({ id: 'meal1', tagsJson: '["soybeans"]', loggedAt: 10 });
+      const outcome = entry({ id: 'bm1', type: 'bowel_movement', bristolScale: 1, loggedAt: 10 + DAY - 1 });
+      const stats = computeWatchStats(item, [meal, outcome], 10 + DAY);
+      expect(stats.outcomeFollowedCount).toBe(1);
+    });
+
+    it('does not count an outcome beyond the 24h window', () => {
+      const item = watchItem('soy', 0);
+      const meal = entry({ id: 'meal1', tagsJson: '["soybeans"]', loggedAt: 10 });
+      const outcome = entry({ id: 'bm1', type: 'bowel_movement', bristolScale: 1, loggedAt: 10 + DAY + 1 });
+      const stats = computeWatchStats(item, [meal, outcome], 10 + DAY + 1);
+      expect(stats.outcomeFollowedCount).toBe(0);
+    });
+
+    it('counts an outcome exactly at the 24h boundary', () => {
+      const item = watchItem('soy', 0);
+      const meal = entry({ id: 'meal1', tagsJson: '["soybeans"]', loggedAt: 10 });
+      const outcome = entry({ id: 'bm1', type: 'bowel_movement', bristolScale: 1, loggedAt: 10 + DAY });
+      const stats = computeWatchStats(item, [meal, outcome], 10 + DAY);
+      expect(stats.outcomeFollowedCount).toBe(1);
+    });
+
+    it('is 0 when no matching entries are followed by an outcome', () => {
+      const item = watchItem('soy', 0);
+      const meal = entry({ id: 'meal1', tagsJson: '["soybeans"]', loggedAt: 10 });
+      const stats = computeWatchStats(item, [meal], 100);
+      expect(stats.outcomeFollowedCount).toBe(0);
+    });
   });
 });
 

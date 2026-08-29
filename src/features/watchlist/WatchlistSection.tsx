@@ -5,17 +5,11 @@ import { ThemedTextInput } from '@/components/form-fields';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import type { LogEntry, WatchlistItem } from '@/db/schema';
-import { sentimentEmoji, type SentimentValue } from '@/features/sentiment/scale';
 import { useTheme } from '@/hooks/use-theme';
 import { computeWatchStats, normalizeWatchTerm, type WatchStats } from '@/lib/watchlist';
 import { useWatchlistStore } from './watchlistStore';
 
-/** Rounds an average sentiment to the nearest displayable 1-5 scale value. */
-function nearestSentimentValue(avg: number): SentimentValue {
-  return Math.min(5, Math.max(1, Math.round(avg))) as SentimentValue;
-}
-
-/** Per-item summary line: times eaten since watching, clean-day streak, avg sentiment. */
+/** Per-item summary line: times eaten since watching, clean-day streak, outcome rate. */
 export function watchStatsSentence(item: WatchlistItem, stats: WatchStats): string {
   const timesLabel = stats.timesSinceWatch === 1 ? '1 time since watching' : `${stats.timesSinceWatch} times since watching`;
 
@@ -24,9 +18,10 @@ export function watchStatsSentence(item: WatchlistItem, stats: WatchStats): stri
     ? `clean since watching (${stats.cleanDays} day${stats.cleanDays === 1 ? '' : 's'})`
     : `${stats.cleanDays} clean day${stats.cleanDays === 1 ? '' : 's'}`;
 
-  const sentimentLabel = stats.avgSentiment != null ? `avg sentiment ${stats.avgSentiment.toFixed(1)}` : null;
+  const outcomeLabel =
+    stats.matchCount > 0 ? `${stats.outcomeFollowedCount} of ${stats.matchCount} followed by a rough outcome` : null;
 
-  return [timesLabel, cleanLabel, sentimentLabel].filter((part): part is string => part != null).join(' · ');
+  return [timesLabel, cleanLabel, outcomeLabel].filter((part): part is string => part != null).join(' · ');
 }
 
 /**
@@ -76,10 +71,7 @@ export function WatchlistSection({ entries, now }: { entries: readonly LogEntry[
                 key={item.id}
                 style={[styles.itemCard, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
                 <View style={styles.itemHeader}>
-                  <ThemedText type="smallBold">
-                    {item.term}
-                    {stats.avgSentiment != null ? ` ${sentimentEmoji(nearestSentimentValue(stats.avgSentiment))}` : ''}
-                  </ThemedText>
+                  <ThemedText type="smallBold">{item.term}</ThemedText>
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`Stop watching ${item.term}`}

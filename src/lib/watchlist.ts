@@ -2,9 +2,8 @@
 // (HANDOFF.md). No React, no I/O — this is where the test leverage lives.
 
 import { FOOD_TYPES, type LogEntry, type WatchlistItem } from '@/db/schema';
-import { isSentimentValue } from '@/features/sentiment/scale';
+import { DEFAULT_WINDOW_MS, isOutcome } from '@/features/analysis/temporal';
 import { normalizeToken, parseTagsJson } from '@/lib/ingredients';
-import { mean } from '@/lib/stats';
 
 const MIN_TERM_LENGTH = 2;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -121,9 +120,14 @@ export interface WatchStats {
   lastEatenAt: number | null;
   /** Full days from max(lastEatenAt, item.createdAt) to `now`; never negative. */
   cleanDays: number;
-  /** Average sentiment over matching RATED food entries, all-time; null if none rated. */
-  avgSentiment: number | null;
-  ratedCount: number;
+  /** Count of ALL matching food entries (all-time) — the denominator for outcomeFollowedCount. */
+  matchCount: number;
+  /**
+   * Among ALL matching food entries (all-time), how many were followed by a
+   * rough outcome (temporal's `isOutcome`) within `DEFAULT_WINDOW_MS`,
+   * strictly after — mirrors drilldown.ts's join rule.
+   */
+  outcomeFollowedCount: number;
 }
 
 /**
@@ -148,15 +152,20 @@ export function computeWatchStats(
   const cleanSinceMs = Math.max(lastEatenAt ?? item.createdAt, item.createdAt);
   const cleanDays = Math.max(0, Math.floor((now - cleanSinceMs) / DAY_MS));
 
-  const ratedSentiments = matchingFood
-    .map((entry) => entry.sentiment)
-    .filter((sentiment): sentiment is number => isSentimentValue(sentiment));
+  const outcomes = entries.filter(isOutcome);
+  const outcomeFollowedCount = matchingFood.filter((meal) =>
+    outcomes.some((outcome) => {
+      if (outcome.id === meal.id) return false;
+      const delta = outcome.loggedAt - meal.loggedAt;
+      return delta > 0 && delta <= DEFAULT_WINDOW_MS;
+    }),
+  ).length;
 
   return {
     timesSinceWatch,
     lastEatenAt,
     cleanDays,
-    avgSentiment: ratedSentiments.length > 0 ? mean(ratedSentiments) : null,
-    ratedCount: ratedSentiments.length,
+    matchCount: matchingFood.length,
+    outcomeFollowedCount,
   };
 }

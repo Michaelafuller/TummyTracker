@@ -39,17 +39,18 @@ function subtitle(entry: LogEntry): string {
 
 export function EntryRow({ entry }: { entry: LogEntry }) {
   const theme = useTheme();
-  const sentiment = isSentimentValue(entry.sentiment) ? entry.sentiment : null;
+  const showsRating = entry.type === 'bowel_movement';
+  const sentiment = showsRating && isSentimentValue(entry.sentiment) ? entry.sentiment : null;
   const emoji = TYPE_EMOJI[entry.type];
+
+  const ratingClause = showsRating ? (sentiment ? `, rated ${sentimentLabel(sentiment)}` : ', not rated') : '';
 
   return (
     <Link href={`/entry/${entry.id}`} asChild>
       <Pressable
         testID={`entry-row-${(entry.name || 'untitled').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
         accessibilityRole="button"
-        accessibilityLabel={`${entry.name}, ${subtitle(entry)}, ${
-          sentiment ? `rated ${sentimentLabel(sentiment)}` : 'not rated'
-        }`}
+        accessibilityLabel={`${entry.name}, ${subtitle(entry)}${ratingClause}`}
         // expo-router's <Link asChild> rejects array styles on its direct child
         // in dev mode — keep this flattened.
         style={StyleSheet.flatten([

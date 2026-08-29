@@ -6,7 +6,6 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { drilldownSummary, findingInstances, type DrilldownKind } from '@/features/analysis/drilldown';
 import { useAllEntries } from '@/features/logging/useEntries';
-import { isSentimentValue, sentimentEmoji, sentimentLabel } from '@/features/sentiment/scale';
 import { useTheme } from '@/hooks/use-theme';
 import { formatLongDate, formatTime12h } from '@/lib/datetime';
 
@@ -41,9 +40,7 @@ export default function InsightDetailScreen() {
       <Stack.Screen options={{ title: value }} />
       <ScrollView contentContainerStyle={styles.content}>
         <ThemedText type="small" themeColor="textSecondary">
-          {`${summary.count} logs · ${summary.rated} rated${
-            summary.avgSentiment != null ? ` · avg sentiment ${summary.avgSentiment}` : ''
-          } · ${summary.outcomes} followed by a rough outcome`}
+          {`${summary.count} logs · ${summary.outcomes} followed by a rough outcome within 24 h`}
         </ThemedText>
 
         {instances.length === 0 ? (
@@ -54,36 +51,29 @@ export default function InsightDetailScreen() {
           </View>
         ) : (
           <View style={styles.list}>
-            {instances.map(({ entry, followedByOutcome }) => {
-              const sentiment = isSentimentValue(entry.sentiment) ? entry.sentiment : null;
-              return (
-                <Pressable
-                  key={entry.id}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Open ${entry.name}, ${formatLongDate(entry.loggedAt)}`}
-                  onPress={() => router.push(`/entry/${entry.id}`)}
-                  style={[styles.row, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
-                  <View style={styles.rowBody}>
-                    <ThemedText type="smallBold">
-                      {`${formatLongDate(entry.loggedAt)} · ${formatTime12h(entry.loggedAt)}`}
-                    </ThemedText>
-                    <ThemedText type="small">
-                      {`${entry.name} · ${
-                        sentiment != null ? `${sentimentEmoji(sentiment)} ${sentimentLabel(sentiment)}` : 'Not rated'
-                      }`}
-                    </ThemedText>
-                    {followedByOutcome ? (
-                      <ThemedText type="small" themeColor="danger">
-                        Rough outcome within 24 h
-                      </ThemedText>
-                    ) : null}
-                  </View>
-                  <ThemedText type="small" themeColor="textSecondary">
-                    ›
+            {instances.map(({ entry, followedByOutcome }) => (
+              <Pressable
+                key={entry.id}
+                accessibilityRole="button"
+                accessibilityLabel={`Open ${entry.name}, ${formatLongDate(entry.loggedAt)}`}
+                onPress={() => router.push(`/entry/${entry.id}`)}
+                style={[styles.row, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+                <View style={styles.rowBody}>
+                  <ThemedText type="smallBold">
+                    {`${formatLongDate(entry.loggedAt)} · ${formatTime12h(entry.loggedAt)}`}
                   </ThemedText>
-                </Pressable>
-              );
-            })}
+                  <ThemedText type="small">{entry.name}</ThemedText>
+                  {followedByOutcome ? (
+                    <ThemedText type="small" themeColor="danger">
+                      Rough outcome within 24 h
+                    </ThemedText>
+                  ) : null}
+                </View>
+                <ThemedText type="small" themeColor="textSecondary">
+                  ›
+                </ThemedText>
+              </Pressable>
+            ))}
           </View>
         )}
       </ScrollView>

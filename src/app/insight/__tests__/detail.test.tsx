@@ -61,25 +61,25 @@ beforeEach(() => {
 describe('InsightDetailScreen', () => {
   it('renders the summary line and a row for each matching instance', async () => {
     mockEntries = [
-      makeEntry({ id: 'a', name: 'Chicken Salad', loggedAt: T, sentiment: 4 }),
-      makeEntry({ id: 'b', name: 'Chicken Salad', loggedAt: T + HOUR, sentiment: null }),
+      makeEntry({ id: 'a', name: 'Chicken Salad', loggedAt: T }),
+      makeEntry({ id: 'b', name: 'Chicken Salad', loggedAt: T + HOUR }),
     ];
 
-    const { getByText } = await render(<InsightDetailScreen />);
+    const { getByText, getAllByText } = await render(<InsightDetailScreen />);
 
-    expect(getByText('2 logs · 1 rated · avg sentiment 4 · 0 followed by a rough outcome')).toBeTruthy();
-    expect(getByText(/Chicken Salad · 🙂 satisfied/)).toBeTruthy();
-    expect(getByText(/Chicken Salad · Not rated/)).toBeTruthy();
+    expect(getByText('2 logs · 0 followed by a rough outcome within 24 h')).toBeTruthy();
+    expect(getAllByText('Chicken Salad')).toHaveLength(2);
   });
 
   it('shows the outcome line only on flagged rows', async () => {
     mockEntries = [
-      makeEntry({ id: 'a', name: 'Chicken Salad', loggedAt: T, sentiment: null }),
+      makeEntry({ id: 'a', name: 'Chicken Salad', loggedAt: T }),
       makeEntry({ id: 'b', type: 'symptom', name: 'Cramps', severity: 4, loggedAt: T + HOUR }),
     ];
 
     const { getByText, queryAllByText } = await render(<InsightDetailScreen />);
 
+    expect(getByText('1 logs · 1 followed by a rough outcome within 24 h')).toBeTruthy();
     expect(getByText('Rough outcome within 24 h')).toBeTruthy();
     expect(queryAllByText('Rough outcome within 24 h')).toHaveLength(1);
   });

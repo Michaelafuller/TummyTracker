@@ -64,3 +64,52 @@ describe('EntryRow subtitle', () => {
     expect(getByText('Meal · lunch · 2 items')).toBeTruthy();
   });
 });
+
+describe('EntryRow sentiment display gating', () => {
+  it('does not show a rating emoji or "rated"/"not rated" a11y clause for a food entry', async () => {
+    const entry = { ...BASE_ENTRY, type: 'meal' as const, sentiment: 4 };
+    const { getByText, getByLabelText } = await render(<EntryRow entry={entry} />);
+
+    expect(getByText('·')).toBeTruthy();
+    expect(getByLabelText(/Lunch, Meal · lunch · 640 kcal$/)).toBeTruthy();
+  });
+
+  it('does not show a rating for an unrated food entry either (no "not rated" clause)', async () => {
+    const entry = { ...BASE_ENTRY, type: 'snack' as const, sentiment: null };
+    const { getByLabelText } = await render(<EntryRow entry={entry} />);
+
+    expect(getByLabelText(/^Lunch, Snack · lunch · 640 kcal$/)).toBeTruthy();
+  });
+
+  it('shows the rating emoji and "rated" a11y clause for a rated bowel movement entry', async () => {
+    const entry = {
+      ...BASE_ENTRY,
+      type: 'bowel_movement' as const,
+      name: 'BM',
+      mealSlot: null,
+      calories: null,
+      bristolScale: 4,
+      sentiment: 4,
+    };
+    const { getByText, getByLabelText } = await render(<EntryRow entry={entry} />);
+
+    expect(getByText('🙂')).toBeTruthy();
+    expect(getByLabelText(/rated satisfied$/)).toBeTruthy();
+  });
+
+  it('shows the "not rated" a11y clause and placeholder for an unrated bowel movement entry', async () => {
+    const entry = {
+      ...BASE_ENTRY,
+      type: 'bowel_movement' as const,
+      name: 'BM',
+      mealSlot: null,
+      calories: null,
+      bristolScale: 4,
+      sentiment: null,
+    };
+    const { getByText, getByLabelText } = await render(<EntryRow entry={entry} />);
+
+    expect(getByText('·')).toBeTruthy();
+    expect(getByLabelText(/not rated$/)).toBeTruthy();
+  });
+});

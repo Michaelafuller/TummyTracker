@@ -145,50 +145,31 @@ describe('findingInstances — ordering', () => {
 });
 
 describe('drilldownSummary', () => {
-  it('computes count/rated/avgSentiment/outcomes', () => {
+  it('computes count/outcomes', () => {
     const instances = [
-      { entry: makeEntry({ sentiment: 2, loggedAt: T }), followedByOutcome: true },
-      { entry: makeEntry({ sentiment: 4, loggedAt: T + HOUR }), followedByOutcome: false },
-      { entry: makeEntry({ sentiment: null, loggedAt: T + 2 * HOUR }), followedByOutcome: false },
+      { entry: makeEntry({ loggedAt: T }), followedByOutcome: true },
+      { entry: makeEntry({ loggedAt: T + HOUR }), followedByOutcome: false },
+      { entry: makeEntry({ loggedAt: T + 2 * HOUR }), followedByOutcome: false },
     ];
 
     expect(drilldownSummary(instances)).toEqual({
       count: 3,
-      rated: 2,
-      avgSentiment: 3,
       outcomes: 1,
     });
   });
 
-  it('rounds avgSentiment to 1 decimal', () => {
+  it('counts every flagged instance, not just the first', () => {
     const instances = [
-      { entry: makeEntry({ sentiment: 1, loggedAt: T }), followedByOutcome: false },
-      { entry: makeEntry({ sentiment: 2, loggedAt: T }), followedByOutcome: false },
-      { entry: makeEntry({ sentiment: 2, loggedAt: T }), followedByOutcome: false },
+      { entry: makeEntry({ loggedAt: T }), followedByOutcome: true },
+      { entry: makeEntry({ loggedAt: T + HOUR }), followedByOutcome: true },
     ];
 
-    expect(drilldownSummary(instances).avgSentiment).toBe(1.7);
+    expect(drilldownSummary(instances).outcomes).toBe(2);
   });
 
-  it('reports null avgSentiment and zero rated when nothing is rated', () => {
-    const instances = [
-      { entry: makeEntry({ sentiment: null, loggedAt: T }), followedByOutcome: false },
-      { entry: makeEntry({ sentiment: null, loggedAt: T + HOUR }), followedByOutcome: true },
-    ];
-
-    expect(drilldownSummary(instances)).toEqual({
-      count: 2,
-      rated: 0,
-      avgSentiment: null,
-      outcomes: 1,
-    });
-  });
-
-  it('returns all zeros/null for an empty instance list', () => {
+  it('returns all zeros for an empty instance list', () => {
     expect(drilldownSummary([])).toEqual({
       count: 0,
-      rated: 0,
-      avgSentiment: null,
       outcomes: 0,
     });
   });

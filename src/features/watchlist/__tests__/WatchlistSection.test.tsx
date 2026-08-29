@@ -59,13 +59,20 @@ describe('WatchlistSection', () => {
     const soy: WatchlistItem = { id: 'w1', term: 'soy', createdAt: 0 };
     useWatchlistStore.setState({ items: [soy], loaded: true });
     const entries = [
-      entry({ id: 'e1', tagsJson: '["soybeans"]', loggedAt: 1 * DAY, sentiment: 4 }),
-      entry({ id: 'e2', tagsJson: '["soybeans"]', loggedAt: 2 * DAY, sentiment: 2 }),
+      entry({ id: 'e1', tagsJson: '["soybeans"]', loggedAt: 1 * DAY }),
+      entry({
+        id: 'bm1',
+        type: 'bowel_movement',
+        tagsJson: null,
+        bristolScale: 1,
+        loggedAt: 1 * DAY + 1,
+      }),
+      entry({ id: 'e2', tagsJson: '["soybeans"]', loggedAt: 2 * DAY }),
     ];
     const { getByText } = await render(<WatchlistSection entries={entries} now={5 * DAY} />);
     expect(getByText(/soy/)).toBeTruthy();
     expect(getByText(/2 times since watching/)).toBeTruthy();
-    expect(getByText(/avg sentiment 3\.0/)).toBeTruthy();
+    expect(getByText(/1 of 2 followed by a rough outcome/)).toBeTruthy();
   });
 
   it('normalizes and persists a manually added term', async () => {

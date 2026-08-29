@@ -5,7 +5,6 @@
 
 import type { LogEntry } from '@/db/schema';
 import { FOOD_TYPES } from '@/db/schema';
-import { isSentimentValue } from '@/features/sentiment/scale';
 import { parseTagsJson } from '@/lib/ingredients';
 import { DEFAULT_WINDOW_MS, isOutcome } from './temporal';
 
@@ -64,26 +63,13 @@ export function findingInstances(
 
 export interface DrilldownSummary {
   count: number;
-  rated: number;
-  avgSentiment: number | null;
   outcomes: number;
 }
 
 /** Aggregate stats over a set of drill-down instances for the summary line. */
 export function drilldownSummary(instances: readonly DrilldownInstance[]): DrilldownSummary {
-  const ratedSentiments = instances
-    .map((instance) => instance.entry.sentiment)
-    .filter((sentiment): sentiment is number => isSentimentValue(sentiment));
-
-  const avgSentiment =
-    ratedSentiments.length > 0
-      ? Math.round((ratedSentiments.reduce((sum, s) => sum + s, 0) / ratedSentiments.length) * 10) / 10
-      : null;
-
   return {
     count: instances.length,
-    rated: ratedSentiments.length,
-    avgSentiment,
     outcomes: instances.filter((instance) => instance.followedByOutcome).length,
   };
 }
