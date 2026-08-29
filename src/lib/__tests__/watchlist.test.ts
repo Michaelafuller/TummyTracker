@@ -2,6 +2,7 @@ import type { LogEntry, WatchlistItem } from '@/db/schema';
 import {
   computeWatchStats,
   describeWatchedMatches,
+  entryWatchedMatches,
   findWatchedTags,
   findWatchedTagsInTags,
   matchesWatchTerm,
@@ -271,6 +272,36 @@ describe('findWatchedTagsInTags', () => {
   it('agrees with findWatchedTags for the same tags via tagsJson', () => {
     const tags = ['soybeans', 'non-dairy'];
     expect(findWatchedTagsInTags(tags, items)).toEqual(findWatchedTags(JSON.stringify(tags), items));
+  });
+});
+
+describe('entryWatchedMatches', () => {
+  const items = [watchItem('soy'), watchItem('dairy')];
+
+  it('matches a food entry via tag prefix-at-word-boundary', () => {
+    const meal = entry({ type: 'meal', tagsJson: JSON.stringify(['soybeans', 'onion']) });
+    const result = entryWatchedMatches(meal, items);
+    expect(result).toEqual([{ item: items[0], matchedTags: ['soybeans'] }]);
+  });
+
+  it('returns empty array for a bowel_movement entry with the same matching tags', () => {
+    const bm = entry({ type: 'bowel_movement', tagsJson: JSON.stringify(['soybeans', 'onion']) });
+    expect(entryWatchedMatches(bm, items)).toEqual([]);
+  });
+
+  it('returns empty array for a symptom entry with the same matching tags', () => {
+    const symptom = entry({ type: 'symptom', tagsJson: JSON.stringify(['soybeans', 'onion']) });
+    expect(entryWatchedMatches(symptom, items)).toEqual([]);
+  });
+
+  it('returns empty array when there are no watchlist items', () => {
+    const meal = entry({ type: 'meal', tagsJson: JSON.stringify(['soybeans']) });
+    expect(entryWatchedMatches(meal, [])).toEqual([]);
+  });
+
+  it('agrees with findWatchedTags on a food entry', () => {
+    const meal = entry({ type: 'snack', tagsJson: JSON.stringify(['non-dairy', 'onion']) });
+    expect(entryWatchedMatches(meal, items)).toEqual(findWatchedTags(meal.tagsJson, items));
   });
 });
 

@@ -113,6 +113,20 @@ function entryMatchesTerm(entry: LogEntry, term: string): boolean {
   return parseTagsJson(entry.tagsJson).some((tag) => matchesWatchTerm(tag, term));
 }
 
+/**
+ * Watched items whose term matches this entry's tags — food entries only
+ * (BM/symptom rows never badge). Same prefix-at-word-boundary contract as
+ * `matchesWatchTerm`; see that function's comment. Empty array for a
+ * non-food entry, an entry with no tags, or when no watched item matches.
+ */
+export function entryWatchedMatches(
+  entry: LogEntry,
+  items: readonly WatchlistItem[],
+): WatchedTagMatch[] {
+  if (!isFoodEntry(entry)) return [];
+  return findWatchedTags(entry.tagsJson, items);
+}
+
 export interface WatchStats {
   /** Matching food entries logged since watching started (loggedAt >= item.createdAt). */
   timesSinceWatch: number;

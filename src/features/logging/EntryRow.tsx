@@ -8,8 +8,10 @@ import { isBristolValue } from '@/features/bm/bristol';
 import { isSentimentValue, sentimentEmoji, sentimentLabel } from '@/features/sentiment/scale';
 import { isSeverityValue } from '@/features/symptoms/severity';
 import { isSymptomTypeValue, symptomTypeLabel } from '@/features/symptoms/symptomTypes';
+import { useWatchlistStore } from '@/features/watchlist/watchlistStore';
 import { useTheme } from '@/hooks/use-theme';
 import { formatTime12h } from '@/lib/datetime';
+import { describeWatchedMatches, entryWatchedMatches } from '@/lib/watchlist';
 
 const TYPE_EMOJI: Partial<Record<string, string>> = {
   bowel_movement: '💩',
@@ -39,18 +41,24 @@ function subtitle(entry: LogEntry): string {
 
 export function EntryRow({ entry }: { entry: LogEntry }) {
   const theme = useTheme();
+  const watchlistItems = useWatchlistStore((s) => s.items);
   const showsRating = entry.type === 'bowel_movement';
   const sentiment = showsRating && isSentimentValue(entry.sentiment) ? entry.sentiment : null;
   const emoji = TYPE_EMOJI[entry.type];
 
   const ratingClause = showsRating ? (sentiment ? `, rated ${sentimentLabel(sentiment)}` : ', not rated') : '';
 
+  const watched = entryWatchedMatches(entry, watchlistItems);
+  const watchedClause = watched.length > 0 ? `, contains watched ingredient: ${describeWatchedMatches(watched)}` : '';
+
+  const rowTestId = `entry-row-${(entry.name || 'untitled').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+
   return (
     <Link href={`/entry/${entry.id}`} asChild>
       <Pressable
-        testID={`entry-row-${(entry.name || 'untitled').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+        testID={rowTestId}
         accessibilityRole="button"
-        accessibilityLabel={`${entry.name}, ${subtitle(entry)}${ratingClause}`}
+        accessibilityLabel={`${entry.name}, ${subtitle(entry)}${ratingClause}${watchedClause}`}
         // expo-router's <Link asChild> rejects array styles on its direct child
         // in dev mode — keep this flattened.
         style={StyleSheet.flatten([
@@ -68,6 +76,23 @@ export function EntryRow({ entry }: { entry: LogEntry }) {
             {subtitle(entry)}
           </ThemedText>
         </View>
+        {/* No separate accessibility node here: the Pressable above already
+            declares accessibilityRole="button" + an explicit accessibilityLabel
+            (which includes the watched clause below), so native screen readers
+            treat the whole row as one accessible unit and never surface this
+            pill's Text as its own stop. */}
+        {watched.length > 0 ? (
+          <View
+            testID={`${rowTestId}-watched`}
+            style={StyleSheet.flatten([
+              styles.watchedPill,
+              { borderColor: theme.danger, backgroundColor: theme.backgroundSelected },
+            ])}>
+            <ThemedText type="small" themeColor="danger">
+              watch
+            </ThemedText>
+          </View>
+        ) : null}
         <ThemedText style={styles.emoji}>{sentiment ? sentimentEmoji(sentiment) : '·'}</ThemedText>
       </Pressable>
     </Link>
@@ -93,5 +118,10 @@ const styles = StyleSheet.create({
   emoji: {
     fontSize: 24,
     lineHeight: 30,
+  },
+  watchedPill: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: Spacing.two,
+    paddingHorizontal: Spacing.two,
   },
 });

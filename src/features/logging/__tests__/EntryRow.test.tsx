@@ -2,6 +2,7 @@ import { render } from '@testing-library/react-native';
 import React from 'react';
 
 import type { LogEntry } from '@/db/schema';
+import { useWatchlistStore } from '@/features/watchlist/watchlistStore';
 import { EntryRow } from '../EntryRow';
 
 // EntryRow wraps its Pressable in expo-router's <Link>; stub it to a passthrough
@@ -9,6 +10,17 @@ import { EntryRow } from '../EntryRow';
 // for the same pattern used elsewhere in this codebase).
 jest.mock('expo-router', () => ({
   Link: ({ children }: { children: React.ReactNode }) => children,
+}));
+
+// useWatchlistStore pulls in src/db/repository, which opens the real
+// expo-sqlite native module at import time — not available under Jest (see
+// watchlistStore.test.ts for the same mock). EntryRow only ever reads
+// `items` from the store, never calls load/add/remove, so stubbed repository
+// functions are never invoked.
+jest.mock('@/db/repository', () => ({
+  listWatchlistItems: jest.fn(),
+  addWatchlistItem: jest.fn(),
+  removeWatchlistItem: jest.fn(),
 }));
 
 const BASE_ENTRY: LogEntry = {
@@ -111,5 +123,47 @@ describe('EntryRow sentiment display gating', () => {
 
     expect(getByText('·')).toBeTruthy();
     expect(getByLabelText(/not rated$/)).toBeTruthy();
+  });
+});
+
+describe('EntryRow watchlist badge', () => {
+  afterEach(() => {
+    useWatchlistStore.setState({ items: [] });
+  });
+
+  it('shows the watched pill and extends the a11y label for a matching food entry', async () => {
+    useWatchlistStore.setState({ items: [{ id: 'w1', term: 'soy', createdAt: 1 }] });
+    const entry = { ...BASE_ENTRY, type: 'meal' as const, tagsJson: JSON.stringify(['soybeans']) };
+    const { getByTestId, getByLabelText } = await render(<EntryRow entry={entry} />);
+
+    expect(getByTestId('entry-row-lunch-watched')).toBeTruthy();
+    expect(
+      getByLabelText(/Lunch, Meal · lunch · 640 kcal, contains watched ingredient: soy — matched: soybeans$/),
+    ).toBeTruthy();
+  });
+
+  it('does not show the pill for a bowel_movement entry with the same matching tags', async () => {
+    useWatchlistStore.setState({ items: [{ id: 'w1', term: 'soy', createdAt: 1 }] });
+    const entry = {
+      ...BASE_ENTRY,
+      type: 'bowel_movement' as const,
+      name: 'BM',
+      mealSlot: null,
+      calories: null,
+      bristolScale: 4,
+      tagsJson: JSON.stringify(['soybeans']),
+    };
+    const { queryByTestId } = await render(<EntryRow entry={entry} />);
+
+    expect(queryByTestId('entry-row-bm-watched')).toBeNull();
+  });
+
+  it('leaves a non-matching food entry unchanged (no pill, anchored a11y regex still passes)', async () => {
+    useWatchlistStore.setState({ items: [{ id: 'w1', term: 'soy', createdAt: 1 }] });
+    const entry = { ...BASE_ENTRY, type: 'meal' as const, tagsJson: JSON.stringify(['onion']) };
+    const { queryByTestId, getByLabelText } = await render(<EntryRow entry={entry} />);
+
+    expect(queryByTestId('entry-row-lunch-watched')).toBeNull();
+    expect(getByLabelText(/Lunch, Meal · lunch · 640 kcal$/)).toBeTruthy();
   });
 });
