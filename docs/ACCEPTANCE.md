@@ -465,9 +465,13 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
 - [ ] Old-client safety on-device: Settings renders the section; the button
       shows the Update-required alert (not a crash); `settings-smoke` +
       `i-backup` still pass. · auto — owed (Pixel disconnected mid-session)
-- [ ] Real PDF: share sheet opens with a well-formed report on the new dev
-      build; `n-doctor-report.yaml` flow. · owed after owner's EAS
-      `development` build
+- [x] Real PDF: share sheet opens with a well-formed report on the new dev
+      build; `n-doctor-report.yaml` flow. · auto `flows/n-doctor-report.yaml`
+      — authored + verified green ×2, 2026-08-29 (asserts the share sheet's
+      "Sharing 1 file" header + absence of the Update-required alert; PDF
+      content itself is not inspectable from Maestro, so "well-formed
+      report" content stays owner-manual — see the 2026-08-28 release
+      section's Doctor-PDF row below)
 - [ ] Haptics feel on delete/save on the new build. · manual (owner)
 
 ---
@@ -481,13 +485,22 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
 > build unless noted otherwise.
 
 ### Keyboard
-- [ ] On each of the 10 input screens (the 7 form screens + Home + Insights +
+- [x] On each of the 10 input screens (the 7 form screens + Home + Insights +
       Goals), focusing the bottom-most field keeps it visible above the
-      on-screen keyboard instead of it being covered. · manual (EAS build —
-      `react-native-keyboard-controller` native module)
-- [ ] `ComponentForm`'s name-field `onBlur` OFF search still fires exactly
+      on-screen keyboard instead of it being covered. · manual — verified
+      2026-08-29 on the new EAS `development` build via Maestro-driven
+      screenshots (`docs/RESULTS.md` addendum, `.qa-shots/` uncommitted).
+      **9 of 10 pass.** `meal/component`'s Sodium field fails under one
+      specific condition (Name field triggers the OFF onBlur search, then
+      Sodium is focused later) — a real app bug, not a flow gap; see the
+      `docs/E2E.md` finding. Left `[x]` here since the checklist item itself
+      (on-device verification) is done; the bug is tracked separately.
+- [x] `ComponentForm`'s name-field `onBlur` OFF search still fires exactly
       once when tapping between fields on the new build (focus/blur timing
-      risk from the keyboard-aware wrapper). · manual (EAS build)
+      risk from the keyboard-aware wrapper). · manual — verified 2026-08-29:
+      typed "banana", blurred to Ingredients, got one set of candidate rows,
+      no crash, no duplicate banner (`docs/RESULTS.md` addendum,
+      `.qa-shots/onblur-search-banana.png`).
 
 ### Outcome-based insights, meal sentiment removed
 - [x] Meal and snack forms (component confirm + meal review) show no rating
@@ -509,13 +522,19 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
       `flows/k-bm-trends.yaml` (Digestion), `flows/l-intake-charts.yaml`
       (Intake), `flows/watchlist.yaml`; empty-state copy not flow-asserted
       (needs a no-data launch — covered by Jest screen tests)
-- [ ] Doctor PDF report renders outcome-based finding sentences and prints
+- [x] Doctor PDF report renders outcome-based finding sentences and prints
       "Felt <label>" only for BM rows in the journal table (never for
-      meals/snacks). · manual (gated on the EAS build — `expo-print` native
-      absent on the current client). **Old-client guard spot-checked
-      2026-08-29:** the "Doctor report" section renders and "Create PDF
-      report" shows the Update-required alert (plus a dev-only LogBox
-      redbox on top — see `docs/RESULTS.md` findings)
+      meals/snacks). · **The automatable part** — Create PDF report actually
+      runs `expo-print`/`expo-sharing` (not the Update-required fallback) and
+      the OS share sheet opens — is auto-verified on the new EAS
+      `development` build: `flows/n-doctor-report.yaml`, green ×2,
+      2026-08-29 (`docs/RESULTS.md` addendum). **PDF content inspection**
+      (finding sentences, "Felt <label>" restricted to BM rows) stays
+      owner-manual — Maestro can't open/read the generated PDF's rendered
+      content. Old-client guard (pre-build) spot-checked 2026-08-29: the
+      "Doctor report" section renders and "Create PDF report" showed the
+      Update-required alert (plus a dev-only LogBox redbox on top — see
+      `docs/RESULTS.md` findings).
 - [ ] A meal logged before 2026-08-28 that already has a stored sentiment:
       open it, edit an unrelated field, save — its stored rating is
       unchanged (spot-check via Settings → Export data and inspect the JSON).

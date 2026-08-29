@@ -1,0 +1,45 @@
+appId: com.tummytracker.app.dev
+# N — Doctor PDF report, real path (2026-08-29 new dev build: expo-print +
+# expo-haptics natives now present, so handleCreateReport's try branch runs
+# instead of falling into the Update-required catch).
+#   - Seed minimal data so the report has something to summarize
+#   - Settings -> Doctor report section -> exercise a range chip -> Create PDF report
+#   - expo-print builds the PDF, expo-sharing opens the OS share sheet
+#   - Assert the share sheet appeared ("Sharing 1 file" — Android's own share-sheet
+#     header, stable and independent of the app/file name) and that the
+#     Update-required alert (the old-client fallback copy) did NOT appear
+#   - Dismiss the share sheet with Back (system overlay; app underneath is untouched)
+#     and confirm Settings is still showing
+# PDF *content* inspection (finding sentences, "Felt <label>" only on BM rows)
+# stays manual/owner — see docs/E2E.md and ACCEPTANCE.md.
+---
+- launchApp:
+    clearState: true
+- runFlow: _helpers/reconnect-dev-client.yaml
+- runFlow: _helpers/seed-two-meals.yaml
+
+- tapOn:
+    id: "tab-settings"
+- waitForAnimationToEnd
+- assertVisible: "Settings"
+- scrollUntilVisible:
+    element:
+      text: "Create PDF report"
+    direction: DOWN
+    centerElement: true
+
+# Exercise a range chip (default is "30 days" — tap "2 weeks" instead).
+- tapOn: "2 weeks"
+
+- tapOn: "Create PDF report"
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# The real path succeeded: OS share sheet appeared, no Update-required fallback.
+- assertVisible: "Sharing 1 file"
+- assertNotVisible: "Update required"
+
+- back
+- waitForAnimationToEnd
+- assertVisible: "Settings"
+- assertVisible: "Doctor report"

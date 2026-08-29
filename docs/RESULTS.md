@@ -129,3 +129,84 @@ deterministic temporal data), `m-finding-drilldown` 5m22s. Suite wall time
 - Superseded 2026-08-28 annotations on 01b / 01d / D-section /
   finding-drilldown rows updated from "owed a rework" to "reworked +
   verified 2026-08-29".
+
+---
+
+## Addendum — new-build QA (2026-08-29)
+
+Same day, separate session: the owner's new EAS `development` build landed on
+the Pixel 5 (`com.tummytracker.app.dev`, `lastUpdateTime` today), shipping the
+natives the previous full run above was still missing —
+`react-native-keyboard-controller`, `expo-print`, `expo-haptics`. This session
+closed out the two owed manual items (E2E.md #6/#7) and authored the real-PDF
+flow that was blocked on this exact build.
+
+- **Build install:** verified already installed and current at session start
+  (no reinstall performed — Metro on 8081, `adb reverse` active, reconnect
+  helper unchanged).
+
+### Keyboard QA (E2E.md manual item #6) — per-screen verdict
+
+Driven via six scratch Maestro flows (deleted before commit; screenshots kept
+in `.qa-shots/`, gitignored) that each navigate to a screen, scroll to a
+landmark below the bottom-most field (gotcha #1), tap it, wait, and
+screenshot. Judged by eye per the task's pass criterion (focused input's box
+fully visible above the keyboard):
+
+| # | Screen | Field | Verdict | Screenshot |
+|---|---|---|---|---|
+| 1 | `meal/component` (ComponentForm) | Sodium (mg) | ❌ **FAIL** (app bug — see E2E.md finding) | `meal-component-keyboard.png`, `-retake-longwait.png`, isolating pass case `-noname.png` |
+| 2 | `meal/review` | Notes | ✅ Pass | `meal-review-keyboard.png` |
+| 3 | `entry/new` (LogEntryForm, via Home Recent) | Sodium (mg) | ✅ Pass | `entry-new-keyboard.png` |
+| 4 | `entry/[id]` (LogEntryForm, edit) | Sodium (mg) | ✅ Pass | `entry-id-keyboard.png` |
+| 5 | `entry/component/[componentId]` (drill-down editor) | Sodium (mg) | ✅ Pass | `component-drilldown-keyboard.png` |
+| 6 | `bm/new` | Notes | ✅ Pass | `bm-new-keyboard.png` |
+| 7 | `symptom/new` (Bloating chip selected first) | Notes | ✅ Pass | `symptom-new-keyboard.png` |
+| 8 | Home tab (RecentFoodPicker search) | Search past foods | ✅ Pass | `home-recent-search-keyboard.png` |
+| 9 | Insights tab (Watchlist) | New watchlist term | ✅ Pass | `insights-watchlist-keyboard.png` |
+| 10 | Goals tab (Sodium row editor) | Set sodium goal | ✅ Pass | `goals-editor-keyboard.png` |
+
+**9 of 10 pass.** Screen 1 is a real, reproducible app bug (not a flow issue
+or a timing flake — reproduced identically at 1.5s and 4s waits): typing a
+searchable Name on `/meal/component` (which fires the OFF onBlur search) and
+later focusing Sodium leaves the keyboard-aware scroll anchored near the top
+of the nutrition grid instead of the focused field. An isolating re-run that
+skips typing a Name (no search fires) scrolls correctly. Full writeup in
+`docs/E2E.md`'s new finding. Not fixed here (QA guardrail: flows/docs only).
+
+### onBlur OFF search (E2E.md manual item #7)
+
+Typed "banana" into the Name field on `/meal/component`, tapped Ingredients
+to blur, waited ~2s. Search fired exactly once: five candidate rows (Banana
+89 kcal, Banana 81 kcal, Fresh Banana, Bananas, …), no crash, no duplicated
+banner or notice. Network was reachable on-device, so this is a full
+verification, not "unverifiable". Screenshot: `onblur-search-banana.png`.
+
+### `n-doctor-report.yaml` (real-PDF flow, newly authored)
+
+Seeds two meals, opens Settings, taps the "2 weeks" range chip, taps "Create
+PDF report", and asserts the OS share sheet's own header text **"Sharing 1
+file"** appeared (a stable, app/file-name-independent selector — see E2E.md
+finding; the file name itself is a random UUID and the target-app row list
+is device-specific) while `assertNotVisible: "Update required"` confirms the
+old-client fallback alert did NOT fire. Dismissed with `back`; confirmed
+Settings (and the "Doctor report" section) still renders underneath.
+**Verified green twice consecutively** (both full runs, no failures). PDF
+*content* inspection (finding sentences, "Felt <label>" restricted to BM
+rows) stays manual/owner per the original coverage plan — this flow only
+proves the real print+share pipeline runs end-to-end without the
+graceful-degradation fallback.
+
+### Findings this session
+
+1. `meal/component` keyboard-aware scroll mis-anchor after the OFF search
+   fires (app bug, see above + `docs/E2E.md`).
+2. Android share sheet's stable selector is "Sharing 1 file" (documented in
+   `docs/E2E.md` for future flows that need to assert a share sheet opened).
+
+### Files changed
+
+- Added: `flows/n-doctor-report.yaml`.
+- Docs: `docs/E2E.md`, `docs/RESULTS.md` (this addendum),
+  `docs/ACCEPTANCE.md`, `.gitignore` (`.qa-shots/`).
+- No `src/**` changes (guardrail honored).

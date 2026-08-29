@@ -51,3 +51,6 @@ maestro-debug/
 # Maestro JUnit run output (npm run e2e:ci) — per-run, device-specific.
 # The durable, human-readable record is docs/RESULTS.md, not this file.
 flows/results*.xml
+
+# Maestro-driven QA screenshots (ad hoc device review, not build output)
+.qa-shots/

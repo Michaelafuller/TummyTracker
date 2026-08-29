@@ -118,6 +118,7 @@ maestro test flows/ --format junit --output flows/results.xml
 | M — finding drill-down: tap "See all logs: onion" → detail summary, outcome marker, row → Edit entry | `flows/m-finding-drilldown.yaml` | ✅ Automated (authored 2026-08-24; reworked + verified 2026-08-28 for the outcome-based detail summary — the outcome count is now fully deterministic, not just "at least one" as gotcha #6 previously required, since each onion meal's time is set explicitly via the native picker rather than relying on same-minute form-save timing) |
 | Goals — floor/cap thresholds, cap notice, removal | `flows/goal-editor.yaml` | ✅ Automated |
 | Check-in persistence + 7-day horizon | `flows/checkin-persistence.yaml` | ✅ Automated |
+| N — Doctor PDF report, real path (new dev build): range chip, Create PDF report → expo-print → expo-sharing share sheet, Update-required alert does NOT appear | `flows/n-doctor-report.yaml` | ✅ Automated (authored + verified green ×2, 2026-08-29, on the new dev build with `expo-print`/`expo-haptics` natives present; PDF *content* inspection stays manual — see the Manual items list) |
 
 **Finding — label gap:** The Insights screen has no `"Insights"` subtitle heading (unlike
 Journal → `"Journal"` and Settings → `"Settings"`). `nav-tabs.yaml` uses `"Your journal so
@@ -385,21 +386,73 @@ the alert's own tap targets.
 See `docs/RESULTS.md` (2026-08-16/17) for the full diagnosis and the flows each
 fix landed in.
 
+**Finding — app bug: `meal/component`'s keyboard-aware scroll mis-anchors
+after the name-field OFF search fires (2026-08-29, new dev build, real
+`react-native-keyboard-controller` native active):** on `/meal/component`
+(the `ComponentForm` builder screen, `src/app/meal/component.tsx`), typing a
+searchable name (2+ chars) into the Name field, blurring it (which fires the
+OFF onBlur search, `ComponentForm.tsx handleNameBlur`), then later scrolling
+down and focusing the Sodium (mg) field (the last nutrition-grid field)
+leaves the scroll position anchored near the TOP of the nutrition grid
+(showing Calories/Fat, with Sat. fat/Carbs clipped by the keyboard) — Sodium
+itself is scrolled completely out of view, not merely covered. Confirmed
+**not** a timing flake: reproduced identically with a 1.5s and a 4s wait
+before the screenshot (`.qa-shots/meal-component-keyboard.png`,
+`.qa-shots/meal-component-keyboard-retake-longwait.png`). Confirmed the OFF
+search is the trigger via an isolating re-run that opens the same screen and
+focuses Sodium **without ever typing a Name** (so no search fires) — that
+variant shows the full nutrition grid correctly scrolled above the keyboard,
+Sodium included (`.qa-shots/meal-component-keyboard-noname.png`). Likely
+mechanism: the search UI (spinner / result rows / notice) renders
+asynchronously and shifts layout above the Nutrition section; the
+keyboard-aware scroll-to-focused-input measurement appears to run against a
+stale/pre-shift layout. Every other keyboard-aware screen checked this
+session (meal/review, entry/new, entry/[id], the component drill-down editor
+when no name edit is in play, bm/new, symptom/new, Home Recent search,
+Insights watchlist, Goals editor) scrolled correctly. Not fixed here per the
+QA guardrail (flows/docs only) — flagged for the next execute session.
+`ComponentForm` is shared by both `/meal/component` and the component
+drill-down editor (`entry/component/[componentId]`), so the same interaction
+(edit the name there, then focus Sodium) would likely reproduce it on the
+drill-down screen too, though that specific combination wasn't separately
+re-driven this session.
+
+**Finding — Android share-sheet's stable selector is "Sharing N file(s)"
+(2026-08-29):** the OS share sheet Maestro needs to assert on for
+`n-doctor-report.yaml` has no fixed app-specific text (the shared file's name
+is a random UUID, and the target-app row list is this device's own installed
+apps/contacts — unstable across devices). The sheet's own header, **"Sharing
+1 file"**, is a plain Android system string independent of both the app and
+the file name — verified via `maestro hierarchy` after tapping "Create PDF
+report" on the new dev build (`.qa-shots/sharesheet-probe.png`). Used as the
+green assertion in `flows/n-doctor-report.yaml`, paired with
+`assertNotVisible: "Update required"` (the old-client fallback alert title,
+`src/app/(tabs)/settings.tsx` `handleCreateReport`'s catch branch) to confirm
+the real `expo-print` path ran instead of the graceful-degradation path.
+
+See `docs/RESULTS.md` (2026-08-16/17) for the full diagnosis and the flows each
+fix landed in.
+
 **Manual items that stay on your desk:**
 1. Real barcode scan on a physical product
 2. Notification fires at the configured time
 3. Visual contrast / theming in dark mode (UX-1, UX-2)
 4. Export file content inspection
 5. Import round-trip (file picker + full restore verify)
-6. **(owed, Milestone A3, after the owner's next EAS build)** On-device
-   keyboard QA for the 10 input screens (the 7 form screens + Home + Insights
-   + Goals): focus the bottom-most field on each and confirm it stays visible
-   above the keyboard, now that the dev client actually has the
-   `react-native-keyboard-controller` native module instead of falling back.
-7. **(owed, Milestone A3, same build)** Verify `ComponentForm`'s name-field
-   `onBlur` OFF search still fires exactly once when tapping between fields —
-   the keyboard-aware wrapper changes focus/blur timing on Android and this
-   hasn't been re-driven on a build where KC is actually active.
+6. **Verified 2026-08-29** (new dev build, `react-native-keyboard-controller`
+   native active) — on-device keyboard QA for the 10 input screens via
+   Maestro-driven screenshots (screen → bottom-most field, kept out of
+   Maestro's own flows since the pass/fail call is visual judgment, not an
+   assertion): 9 of 10 screens pass (the focused field's box stays fully
+   visible above the keyboard); `meal/component`'s Sodium field fails under
+   one specific condition (see the finding above) — an app bug, not a flow
+   gap. Screenshots left in `.qa-shots/` (gitignored) for review; see
+   `docs/RESULTS.md` for the per-screen table.
+7. **Verified 2026-08-29** (same build) — `ComponentForm`'s name-field
+   `onBlur` OFF search still fires exactly once when tapping between fields:
+   typed "banana", tapped Ingredients to blur, got exactly one set of
+   candidate rows (Banana 89 kcal / Banana 81 kcal / Fresh Banana / Bananas /
+   …), no crash, no duplicated banner (`.qa-shots/onblur-search-banana.png`).
 
 ---
 
