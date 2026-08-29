@@ -96,14 +96,20 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   `9478e90`). Full Maestro regression 24/24 on 2026-08-24 — the suite's
   clean baseline (superseded for the sentiment-touching flows by the
   2026-08-28 rework above).
-- **Carried recommendations (RESULTS 2026-08-16/17):** root-level React error
-  boundary around the tab navigator · "Insights" subtitle heading for
-  label-consistency · **dev-mode React warning on launch (seen 2026-08-21 on
-  the Pixel, post-fix relaunch): "Can't perform a React state update on a
-  component that hasn't mounted yet" — non-fatal, no stack captured; repro
-  with LogBox open and read the component stack before fixing (candidates:
-  async setState in a lazily-loaded route; `AppProviders`' store loads are
-  already inside effects).**
+- **Carried recommendations (RESULTS 2026-08-16/17):** ~~root-level React error
+  boundary around the tab navigator~~ — **shipped 2026-08-29** as
+  `src/components/root-error-boundary.tsx`, mounted above `ThemeProvider` in
+  `src/app/_layout.tsx`. Remaining: "Insights" subtitle heading for
+  label-consistency · **dev-mode mount-warning ("Can't perform a React state
+  update on a component that hasn't mounted yet") — not reproducible
+  2026-08-29: zero occurrences across dozens of launches (including two full
+  Maestro suites) on the new build/host with the current code; likely
+  incidentally fixed by an intervening cycle; closing unless it resurfaces.**
+- **New low-priority finding (2026-08-29):** `DateTimePicker: onChange is
+  deprecated. Use onValueChange, onDismiss...` warned once at launch.
+  `src/components/date-time-field.tsx` and `src/components/time-field.tsx`
+  both use the deprecated `onChange` prop — candidate small fix for a future
+  cycle.
 - **Owner on-device checklist (carried):** iOS app icon (needs EAS build), iOS
   time-picker Done-button feel, light-mode look, and the full scan →
   add-next → finish-meal → review → save loop (camera).

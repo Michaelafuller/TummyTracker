@@ -254,7 +254,9 @@ truth (value ↔ label ↔ emoji). Never hard-code emojis in screens.
 ## 8. Conventions
 
 - TypeScript strict mode on. No `any` without a `// reason:` comment.
-- Functional components + hooks. No class components.
+- Functional components + hooks. No class components (single exception:
+  `src/components/root-error-boundary.tsx` — React exposes error boundaries
+  only via class lifecycles).
 - Validation lives in `src/lib/` as pure functions and is unit-tested (e.g.
   `validateNotes`, `validateNutrition`).
 - Accessibility: every interactive element gets an `accessibilityLabel`.

@@ -4,6 +4,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { AppProviders } from '@/components/app-providers';
+import { RootErrorBoundary } from '@/components/root-error-boundary';
 import { Colors } from '@/constants/theme';
 
 // Palette-driven navigation themes (HANDOFF.md Cycle C): react-navigation's
@@ -43,41 +44,43 @@ export default function RootLayout() {
     // on the entry screen) — expo-router's own Stack only wraps its internal
     // gesture view, not the whole tree (HANDOFF.md meal-component delete).
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkNavTheme : LightNavTheme}>
-        <AppProviders>
-          <AnimatedSplashOverlay />
-          <Stack>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="entry/new" options={{ title: 'Add entry', presentation: 'modal' }} />
-            <Stack.Screen name="bm/new" options={{ title: 'Log bowel movement', presentation: 'modal' }} />
-            <Stack.Screen name="symptom/new" options={{ title: 'Log symptom', presentation: 'modal' }} />
-            <Stack.Screen name="entry/[id]" options={{ title: 'Edit entry' }} />
-            <Stack.Screen
-              name="entry/component/[componentId]"
-              options={{ title: 'Edit component' }}
-            />
-            <Stack.Screen name="insight/detail" options={{ title: 'Finding' }} />
-            <Stack.Screen
-              name="meal/component"
-              options={{ title: 'Confirm item', presentation: 'modal' }}
-            />
-            <Stack.Screen name="meal/review" options={{ title: 'Review meal', presentation: 'modal' }} />
-            <Stack.Screen
-              name="scan"
-              options={{
-                title: 'Scan barcode',
-                presentation: 'modal',
-                // Camera preview is always dark — keep the header legible against
-                // it, deliberately independent of the active app theme (light or
-                // dark stays dark here on purpose).
-                headerStyle: { backgroundColor: Colors.dark.background },
-                headerTintColor: Colors.dark.text,
-                headerTitleStyle: { color: Colors.dark.text },
-              }}
-            />
-          </Stack>
-        </AppProviders>
-      </ThemeProvider>
+      <RootErrorBoundary>
+        <ThemeProvider value={colorScheme === 'dark' ? DarkNavTheme : LightNavTheme}>
+          <AppProviders>
+            <AnimatedSplashOverlay />
+            <Stack>
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="entry/new" options={{ title: 'Add entry', presentation: 'modal' }} />
+              <Stack.Screen name="bm/new" options={{ title: 'Log bowel movement', presentation: 'modal' }} />
+              <Stack.Screen name="symptom/new" options={{ title: 'Log symptom', presentation: 'modal' }} />
+              <Stack.Screen name="entry/[id]" options={{ title: 'Edit entry' }} />
+              <Stack.Screen
+                name="entry/component/[componentId]"
+                options={{ title: 'Edit component' }}
+              />
+              <Stack.Screen name="insight/detail" options={{ title: 'Finding' }} />
+              <Stack.Screen
+                name="meal/component"
+                options={{ title: 'Confirm item', presentation: 'modal' }}
+              />
+              <Stack.Screen name="meal/review" options={{ title: 'Review meal', presentation: 'modal' }} />
+              <Stack.Screen
+                name="scan"
+                options={{
+                  title: 'Scan barcode',
+                  presentation: 'modal',
+                  // Camera preview is always dark — keep the header legible against
+                  // it, deliberately independent of the active app theme (light or
+                  // dark stays dark here on purpose).
+                  headerStyle: { backgroundColor: Colors.dark.background },
+                  headerTintColor: Colors.dark.text,
+                  headerTitleStyle: { color: Colors.dark.text },
+                }}
+              />
+            </Stack>
+          </AppProviders>
+        </ThemeProvider>
+      </RootErrorBoundary>
     </GestureHandlerRootView>
   );
 }

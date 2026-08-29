@@ -21,8 +21,6 @@ configureNotificationHandler();
 
 type KeyboardProviderShellProps = {
   children: ReactNode;
-  statusBarTranslucent?: boolean;
-  navigationBarTranslucent?: boolean;
 };
 
 // Resolved once at module scope, not inside a component: React Compiler
@@ -30,8 +28,7 @@ type KeyboardProviderShellProps = {
 // after the tree has mounted. See src/lib/keyboard.ts for why the underlying
 // native-module probe must be synchronous. When the running client predates
 // react-native-keyboard-controller's native module, this falls back to a
-// transparent passthrough sharing the same prop signature, so it can safely
-// ignore the Android translucency props it doesn't understand.
+// transparent passthrough sharing the same prop signature.
 const kc = getKeyboardController();
 const KeyboardProviderOrIdentity: ComponentType<KeyboardProviderShellProps> =
   kc?.KeyboardProvider ?? (({ children }) => <>{children}</>);
@@ -90,7 +87,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <KeyboardProviderOrIdentity statusBarTranslucent navigationBarTranslucent>
+    <KeyboardProviderOrIdentity>
       <QueryClientProvider client={queryClient}>
         <MigrationGate>{children}</MigrationGate>
       </QueryClientProvider>
