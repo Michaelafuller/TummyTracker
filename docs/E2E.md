@@ -210,6 +210,19 @@ occurred:**
    again 2026-08-17: after typing into the search field, the whole screen —
    search box and filtered rows both — sat underneath the keyboard until a
    `hideKeyboard` cleared it.)
+
+   **Fixed 2026-08-28** (Milestone A3) via `react-native-keyboard-controller`
+   behind the graceful seam in `src/lib/keyboard.ts` +
+   `src/components/keyboard-aware-screen.tsx`: Home now wraps its content
+   column in `KeyboardShiftView` so the keyboard pads the container instead of
+   covering it, and Insights/Goals swapped their bare `ScrollView` for
+   `FormScrollView` (keyboard-aware scrolling + `keyboardShouldPersistTaps`).
+   On the **current (old) dev client** — built before this cycle —
+   `getKeyboardController()` still returns null, so all three screens fall
+   back to exactly today's behavior; the `hideKeyboard` workarounds above stay
+   in the flows until the owner's next EAS build ships the native module, at
+   which point a fresh test-execute session should re-check whether they're
+   still needed.
 3. A second row in a short list can sit just below the fold on a Pixel 5
    viewport even when the section header above it is already on-screen —
    `assertVisible` does not scroll, so a below-fold row silently "fails to be
@@ -253,6 +266,15 @@ fix landed in.
 3. Visual contrast / theming in dark mode (UX-1, UX-2)
 4. Export file content inspection
 5. Import round-trip (file picker + full restore verify)
+6. **(owed, Milestone A3, after the owner's next EAS build)** On-device
+   keyboard QA for the 10 input screens (the 7 form screens + Home + Insights
+   + Goals): focus the bottom-most field on each and confirm it stays visible
+   above the keyboard, now that the dev client actually has the
+   `react-native-keyboard-controller` native module instead of falling back.
+7. **(owed, Milestone A3, same build)** Verify `ComponentForm`'s name-field
+   `onBlur` OFF search still fires exactly once when tapping between fields —
+   the keyboard-aware wrapper changes focus/blur timing on Android and this
+   hasn't been re-driven on a build where KC is actually active.
 
 ---
 
@@ -279,7 +301,8 @@ flow file. A `<failure>` element means the flow failed. Claude then:
 
 - Flips `[ ]` → `[x]` in ACCEPTANCE.md for each passing flow
 - Adds a failure note (with the flow step that failed) for each failing flow
-- Leaves the 5 manual items as `[ ]` with a note: "manual — see E2E.md"
+- Leaves the manual items (see the list above) as `[ ]` with a note: "manual —
+  see E2E.md"
 - Writes `docs/RESULTS.md` — the human-readable run report (per-flow result,
   what was fixed, what stays manual, findings for the next planning session).
   See `docs/TEST_STRATEGY.md §4` for the template.

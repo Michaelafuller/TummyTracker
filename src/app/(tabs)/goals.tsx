@@ -1,8 +1,9 @@
 import { Fragment, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { FormScrollView } from '@/components/keyboard-aware-screen';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Spacing, type ThemeColor } from '@/constants/theme';
@@ -54,7 +55,7 @@ export default function GoalsScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <ScrollView
+      <FormScrollView
         contentContainerStyle={[
           styles.content,
           { paddingTop: insets.top + Spacing.three, paddingBottom: insets.bottom + BottomTabInset + Spacing.four },
@@ -191,7 +192,7 @@ export default function GoalsScreen() {
         <GoalsSection />
 
         <CheckInSection />
-      </ScrollView>
+      </FormScrollView>
     </ThemedView>
   );
 }

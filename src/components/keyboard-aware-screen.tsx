@@ -75,6 +75,7 @@ export const FormScrollView = kc
 export interface KeyboardShiftViewProps {
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
+  testID?: string;
 }
 
 /**
@@ -82,18 +83,19 @@ export interface KeyboardShiftViewProps {
  * header for the fallback contract.
  */
 export const KeyboardShiftView = kc
-  ? function KeyboardShiftView({ children, style }: KeyboardShiftViewProps) {
+  ? function KeyboardShiftView({ children, style, testID }: KeyboardShiftViewProps) {
       return (
-        <kc.KeyboardAvoidingView behavior="padding" style={[styles.flex, style]}>
+        <kc.KeyboardAvoidingView behavior="padding" style={[styles.flex, style]} testID={testID}>
           {children}
         </kc.KeyboardAvoidingView>
       );
     }
-  : function KeyboardShiftView({ children, style }: KeyboardShiftViewProps) {
+  : function KeyboardShiftView({ children, style, testID }: KeyboardShiftViewProps) {
       return (
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={[styles.flex, style]}>
+          style={[styles.flex, style]}
+          testID={testID}>
           {children}
         </KeyboardAvoidingView>
       );

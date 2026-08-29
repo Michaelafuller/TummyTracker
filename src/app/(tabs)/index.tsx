@@ -3,6 +3,7 @@ import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { KeyboardShiftView } from '@/components/keyboard-aware-screen';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Spacing } from '@/constants/theme';
@@ -44,7 +45,7 @@ export default function HomeScreen() {
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.content}>
+        <KeyboardShiftView testID="home-keyboard-shift" style={styles.content}>
           <ThemedView style={styles.hero}>
             <ThemedText type="title" style={styles.title} numberOfLines={1} adjustsFontSizeToFit>
               TummyTracker
@@ -117,7 +118,7 @@ export default function HomeScreen() {
               <RecentFoodPicker entries={recents} onSelect={handleRecentTap} limit={50} />
             </ThemedView>
           )}
-        </ThemedView>
+        </KeyboardShiftView>
       </SafeAreaView>
     </ThemedView>
   );

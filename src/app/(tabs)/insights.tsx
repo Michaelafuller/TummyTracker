@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BarMeter } from '@/components/charts/BarMeter';
@@ -9,6 +9,7 @@ import { CountBars } from '@/components/charts/CountBars';
 import { IntakeBars } from '@/components/charts/IntakeBars';
 import { MiniHistogram } from '@/components/charts/MiniHistogram';
 import { TrendBars } from '@/components/charts/TrendBars';
+import { FormScrollView } from '@/components/keyboard-aware-screen';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Spacing } from '@/constants/theme';
@@ -162,7 +163,7 @@ export default function InsightsScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <ScrollView
+      <FormScrollView
         contentContainerStyle={[
           styles.content,
           { paddingTop: insets.top + Spacing.three, paddingBottom: insets.bottom + BottomTabInset + Spacing.four },
@@ -329,7 +330,7 @@ export default function InsightsScreen() {
             </ThemedText>
           </View>
         ) : null}
-      </ScrollView>
+      </FormScrollView>
     </ThemedView>
   );
 }
