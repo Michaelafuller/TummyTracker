@@ -41,6 +41,27 @@ export function isOutcome(entry: LogEntry): boolean {
   return false;
 }
 
+/**
+ * For each of `meals`, whether it was followed by >=1 outcome (anywhere in
+ * `entries`) within `windowMs` — the strictly-after, inclusive-of-boundary
+ * join rule shared by every outcome-rate analysis. Returns a map keyed by
+ * meal id. Exported so callers outside this module (e.g. a nutrient-split
+ * outcome analysis) can reuse the same join instead of re-deriving it.
+ */
+export function mealsFollowedByOutcome(
+  entries: readonly LogEntry[],
+  meals: readonly LogEntry[],
+  windowMs: number = DEFAULT_WINDOW_MS,
+): Map<string, boolean> {
+  const outcomes = entries.filter(isOutcome);
+  function hasFollowingOutcome(meal: LogEntry): boolean {
+    return outcomes.some(
+      (o) => o.loggedAt > meal.loggedAt && o.loggedAt <= meal.loggedAt + windowMs,
+    );
+  }
+  return new Map(meals.map((m) => [m.id, hasFollowingOutcome(m)]));
+}
+
 /** A grouping key + its display label, as produced by an `analyzeOutcomeRates` caller. */
 export interface OutcomeKey {
   key: string;
@@ -103,18 +124,7 @@ export function analyzeOutcomeRates(
 
   if (eligibleMeals.length === 0) return [];
 
-  const outcomes = entries.filter(isOutcome);
-
-  // Precompute: did this meal have any outcome following it within the window?
-  function hasFollowingOutcome(meal: LogEntry): boolean {
-    return outcomes.some(
-      (o) => o.loggedAt > meal.loggedAt && o.loggedAt <= meal.loggedAt + windowMs,
-    );
-  }
-
-  const mealOutcomeMap = new Map<string, boolean>(
-    eligibleMeals.map((m) => [m.id, hasFollowingOutcome(m)]),
-  );
+  const mealOutcomeMap = mealsFollowedByOutcome(entries, eligibleMeals, windowMs);
 
   const baseHits = eligibleMeals.filter((m) => mealOutcomeMap.get(m.id)).length;
   const baseRate = eligibleMeals.length > 0 ? baseHits / eligibleMeals.length : 0;
@@ -188,16 +198,11 @@ export function tagHitRates(
     (e) => FOOD_TYPES_SET.has(e.type) && parseTagsJson(e.tagsJson).length > 0,
   );
 
-  const outcomes = entries.filter(isOutcome);
-  function hasFollowingOutcome(meal: LogEntry): boolean {
-    return outcomes.some(
-      (o) => o.loggedAt > meal.loggedAt && o.loggedAt <= meal.loggedAt + windowMs,
-    );
-  }
+  const mealOutcomeMap = mealsFollowedByOutcome(entries, taggedMeals, windowMs);
 
   const byTag = new Map<string, { hits: number; total: number }>();
   for (const meal of taggedMeals) {
-    const hit = hasFollowingOutcome(meal);
+    const hit = mealOutcomeMap.get(meal.id) ?? false;
     for (const tag of parseTagsJson(meal.tagsJson)) {
       const group = byTag.get(tag) ?? { hits: 0, total: 0 };
       group.total += 1;

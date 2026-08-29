@@ -7,6 +7,7 @@ import {
   DEFAULT_WINDOW_MS,
   isOutcome,
   MAX_LOW_CONFIDENCE_FINDINGS,
+  mealsFollowedByOutcome,
   tagHitRates,
 } from '../temporal';
 
@@ -456,6 +457,47 @@ describe('analyzeOutcomeRates', () => {
     const meals = [makeEntry({ type: 'meal', name: 'Rice', loggedAt: T })];
     const findings = analyzeOutcomeRates(meals, () => []);
     expect(findings).toHaveLength(0);
+  });
+});
+
+describe('mealsFollowedByOutcome', () => {
+  it('marks a meal true when an outcome follows it within windowMs, false otherwise', () => {
+    const meals = [
+      makeEntry({ type: 'meal', name: 'Hit', loggedAt: T }),
+      makeEntry({ type: 'meal', name: 'Miss', loggedAt: T + 10 * HOUR }),
+    ];
+    const outcome = makeEntry({ type: 'symptom', severity: 4, loggedAt: T + HOUR });
+
+    const map = mealsFollowedByOutcome([...meals, outcome], meals, 2 * HOUR);
+
+    expect(map.get(meals[0].id)).toBe(true);
+    expect(map.get(meals[1].id)).toBe(false);
+  });
+
+  it('excludes an outcome at or before the meal, and one beyond the window', () => {
+    const meal = makeEntry({ type: 'meal', name: 'Meal', loggedAt: T + 5 * HOUR });
+    const before = makeEntry({ type: 'symptom', severity: 4, loggedAt: T + 5 * HOUR }); // same instant, not "after"
+    const beyond = makeEntry({ type: 'symptom', severity: 4, loggedAt: T + 5 * HOUR + 3 * HOUR }); // past 2h window
+
+    const map = mealsFollowedByOutcome([meal, before, beyond], [meal], 2 * HOUR);
+
+    expect(map.get(meal.id)).toBe(false);
+  });
+
+  it('includes an outcome exactly at the window boundary (inclusive)', () => {
+    const meal = makeEntry({ type: 'meal', name: 'Meal', loggedAt: T });
+    const boundary = makeEntry({ type: 'symptom', severity: 4, loggedAt: T + 2 * HOUR });
+
+    const map = mealsFollowedByOutcome([meal, boundary], [meal], 2 * HOUR);
+
+    expect(map.get(meal.id)).toBe(true);
+  });
+
+  it('defaults windowMs to DEFAULT_WINDOW_MS', () => {
+    const meal = makeEntry({ type: 'meal', name: 'Meal', loggedAt: T });
+    const justInside = makeEntry({ type: 'symptom', severity: 4, loggedAt: T + DEFAULT_WINDOW_MS });
+    const map = mealsFollowedByOutcome([meal, justInside], [meal]);
+    expect(map.get(meal.id)).toBe(true);
   });
 });
 

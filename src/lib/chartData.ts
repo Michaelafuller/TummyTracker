@@ -3,9 +3,11 @@
 
 import type { LogEntry } from '@/db/schema';
 import { FOOD_TYPES } from '@/db/schema';
+import { isOutcome } from '@/features/analysis/temporal';
 import { isSentimentValue } from '@/features/sentiment/scale';
 import { mean } from '@/lib/stats';
 import type { NutritionField } from '@/lib/validation';
+import type { BmWeekBucket } from '@/lib/bmTrends';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MONTH_ABBR = [
@@ -112,6 +114,38 @@ export function weeklyIntake(
     buckets.push({
       label: `${MONTH_ABBR[d.getMonth()]} ${d.getDate()}`,
       avg: values.length > 0 ? round1(values.reduce((sum, v) => sum + v, 0) / 7) : null,
+    });
+  }
+
+  return buckets;
+}
+
+/**
+ * Rolling 7-day rough-outcome (`isOutcome` — see `@/features/analysis/temporal`)
+ * count buckets, using the identical bucketing/labels as `weeklySentiment`/
+ * `weeklyBmCounts` (so week labels line up across all three charts). Returns
+ * `BmWeekBucket`s — the shape `CountBars` already renders — with `badCount`
+ * set equal to `count`: every rough outcome is itself the "bad" event this
+ * chart exists to surface, so the whole bar renders in CountBars' danger
+ * color rather than being split.
+ */
+export function weeklyOutcomes(entries: readonly LogEntry[], now: number, weeks = 8): BmWeekBucket[] {
+  const todayStart = startOfDay(now);
+  const outcomes = entries.filter(isOutcome);
+
+  const buckets: BmWeekBucket[] = [];
+  for (let w = weeks - 1; w >= 0; w--) {
+    // Exclusive end: the instant after the bucket's last day.
+    const end = todayStart + DAY_MS - w * 7 * DAY_MS;
+    const start = end - 7 * DAY_MS;
+
+    const count = outcomes.filter((e) => e.loggedAt >= start && e.loggedAt < end).length;
+
+    const d = new Date(start);
+    buckets.push({
+      label: `${MONTH_ABBR[d.getMonth()]} ${d.getDate()}`,
+      count,
+      badCount: count,
     });
   }
 

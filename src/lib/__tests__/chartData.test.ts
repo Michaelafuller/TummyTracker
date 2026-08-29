@@ -1,5 +1,5 @@
 import type { LogEntry } from '@/db/schema';
-import { weeklyIntake, weeklySentiment } from '../chartData';
+import { weeklyIntake, weeklyOutcomes, weeklySentiment } from '../chartData';
 
 let seq = 0;
 function makeEntry(overrides: Partial<LogEntry>): LogEntry {
@@ -148,5 +148,54 @@ describe('weeklyIntake', () => {
 
   it('defaults to 8 weeks', () => {
     expect(weeklyIntake([], NOW, 'calories')).toHaveLength(8);
+  });
+});
+
+describe('weeklyOutcomes', () => {
+  it('counts isOutcome entries into the same rolling 7-day buckets, with badCount mirroring count', () => {
+    const entries = [
+      // Current week (Jun 26 - Jul 2): a bad-Bristol BM (outcome) and a mild BM (not an outcome).
+      makeEntry({ type: 'bowel_movement', loggedAt: new Date(2026, 5, 30, 12, 0, 0).getTime(), bristolScale: 1 }),
+      makeEntry({ type: 'bowel_movement', loggedAt: new Date(2026, 6, 1, 8, 0, 0).getTime(), bristolScale: 4 }),
+      // Prior week (Jun 19 - Jun 25): a severity-3 symptom (outcome) and a mild one (not).
+      makeEntry({ type: 'symptom', loggedAt: new Date(2026, 5, 20, 9, 0, 0).getTime(), severity: 3 }),
+      makeEntry({ type: 'symptom', loggedAt: new Date(2026, 5, 21, 9, 0, 0).getTime(), severity: 2 }),
+    ];
+
+    const buckets = weeklyOutcomes(entries, NOW, 2);
+
+    expect(buckets).toHaveLength(2);
+    // Oldest-first, same labels as weeklyBmCounts/weeklySentiment for this `now`.
+    expect(buckets[0]).toEqual({ label: 'Jun 19', count: 1, badCount: 1 });
+    expect(buckets[1]).toEqual({ label: 'Jun 26', count: 1, badCount: 1 });
+  });
+
+  it('ignores non-outcome entries (good-Bristol BM, mild symptom, food entries)', () => {
+    const entries = [
+      makeEntry({ type: 'bowel_movement', loggedAt: new Date(2026, 6, 1, 8, 0, 0).getTime(), bristolScale: 4 }),
+      makeEntry({ type: 'symptom', loggedAt: new Date(2026, 6, 1, 8, 0, 0).getTime(), severity: 1 }),
+      makeEntry({ type: 'meal', loggedAt: new Date(2026, 6, 1, 8, 0, 0).getTime() }),
+    ];
+    const buckets = weeklyOutcomes(entries, NOW, 1);
+    expect(buckets[0]).toEqual({ label: 'Jun 26', count: 0, badCount: 0 });
+  });
+
+  it('returns count: 0, badCount: 0 buckets for empty input', () => {
+    const buckets = weeklyOutcomes([], NOW, 3);
+    expect(buckets).toHaveLength(3);
+    for (const bucket of buckets) {
+      expect(bucket.count).toBe(0);
+      expect(bucket.badCount).toBe(0);
+    }
+  });
+
+  it('uses the same bucket boundaries/labels as weeklySentiment for the same now', () => {
+    const sentimentBuckets = weeklySentiment([], NOW, 4);
+    const outcomeBuckets = weeklyOutcomes([], NOW, 4);
+    expect(outcomeBuckets.map((b) => b.label)).toEqual(sentimentBuckets.map((b) => b.label));
+  });
+
+  it('defaults to 8 weeks', () => {
+    expect(weeklyOutcomes([], NOW)).toHaveLength(8);
   });
 });
