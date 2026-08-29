@@ -1,0 +1,80 @@
+appId: com.tummytracker.app.dev
+# O — watchlist badge + in-place term editing (2026-08-29 cycle).
+# Adds "soy" to the watchlist, logs a Soy Curls meal, checks the journal row
+# shows the "watch" pill, then edits the term soy -> soybean and verifies the
+# card re-renders with the new term and keeps its stats sentence.
+---
+- launchApp:
+    clearState: true
+- runFlow: _helpers/reconnect-dev-client.yaml
+
+# Add "soy" to the watchlist (Insights tab)
+- tapOn:
+    id: "tab-insights"
+- scrollUntilVisible:
+    element:
+      text: "New watchlist term"
+    direction: DOWN
+    centerElement: true
+- tapOn: "New watchlist term"
+- inputText: "soy"
+- hideKeyboard
+- tapOn: "Add to watchlist"
+- assertVisible: "soy"
+
+# Log a meal containing soy
+- tapOn:
+    id: "tab-home"
+- tapOn: "+ Add manually"
+- tapOn: "Component name"
+- inputText: "Soy Curls"
+- hideKeyboard
+- tapOn: "Ingredients"
+- inputText: "soy protein, salt"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Finish meal"
+    direction: DOWN
+    centerElement: true
+- tapOn: "Finish meal"
+- assertVisible: "Review meal"
+- scrollUntilVisible:
+    element:
+      text: "Save meal"
+    direction: DOWN
+    centerElement: true
+- tapOn: "Save meal"
+- assertVisible: "TummyTracker"
+
+# Journal row shows the watch pill
+- tapOn:
+    id: "tab-journal"
+- scrollUntilVisible:
+    element:
+      id: "entry-row-soy-curls"
+    direction: DOWN
+    centerElement: true
+- assertVisible:
+    id: "entry-row-soy-curls-watched"
+- assertVisible: "watch"
+- takeScreenshot: watch-badge-journal
+
+# Edit the term: soy -> soybean (rename in place)
+- tapOn:
+    id: "tab-insights"
+- scrollUntilVisible:
+    element:
+      text: "soy"
+    direction: DOWN
+    centerElement: true
+- tapOn: "Edit soy"
+- assertVisible: "Edit watchlist term"
+- tapOn: "Edit watchlist term"
+- eraseText
+- inputText: "soybean"
+- hideKeyboard
+- tapOn: "Save watchlist term"
+- assertVisible: "soybean"
+- assertVisible: ".*since watching.*"
+- takeScreenshot: watch-term-renamed

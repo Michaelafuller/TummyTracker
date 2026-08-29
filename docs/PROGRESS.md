@@ -134,23 +134,36 @@ Ranked by value-add to the north star. **Effort:** S (hours) · M (a session) ·
 **⚠ = new dependency** — allowed, but CVE-inventory it and justify the value first.
 Completed tiers are collapsed to a single line; their detail lives in git.
 
-## 📌 Pinned — next up (owner-directed 2026-08-28, fifth pin)
+## 📌 Pinned — next up
 
-| Item | Why it matters | Effort | Notes |
-|------|----------------|:--:|------|
-| **Root-level React error boundary** | One screen's render error currently blanks the whole app; a boundary around the tab navigator turns that into a recoverable screen — and de-risks every future cycle. Carried recommendation since RESULTS 2026-08-16. | S | Wrap at the navigator/root level with a themed fallback (message + retry); keep it dependency-free. Rider candidates while in the area: repro the dev-mode "state update on a component that hasn't mounted yet" warning with LogBox open (candidates in Status). |
-| **Watchlist follow-ons: browse/calendar badges + term editing** | Tier 1 differentiator polish — surfacing watched ingredients where entries are browsed closes the elimination-mode loop, and the outcome-based stats (2026-08-28) make the badge signal honest. | M | Badges on Journal/calendar entry rows for entries matching a watched term; edit a watched term in place (rename keeps its `watchedAt`). Follow-on candidates named at the Tier 1 watchlist row since 2026-08-15. |
+_(none currently — the fifth pin, error boundary + watchlist follow-ons,
+**shipped + on-device verified 2026-08-29** — see below. Next plan session
+picks from the tiers.)_
 
-**Sequencing note:** feature cycle runs after (or parallel to) the owed test
-session in Status — the Maestro rework + keyboard QA need the owner's EAS
-development build on the Pixel first.
+**✅ Shipped 2026-08-29 (error boundary + watchlist cycle — Sonnet executed,
+Fable reviewed, on-device verified same day):**
+1. **Root error boundary** — `src/components/root-error-boundary.tsx`
+   (documented CLAUDE.md §8 class-component carve-out), mounted above
+   `ThemeProvider` in `_layout.tsx`; themed "Something went wrong" + Try
+   again. Jest-covered (no deterministic on-device trigger exists). Riders:
+   removed the edge-to-edge-ignored KeyboardProvider translucency props
+   (launch warning gone); mount-warning closed as not-reproducible.
+2. **Watchlist badges** — journal/calendar rows with a watched ingredient
+   show a "watch" pill + a11y clause (`entryWatchedMatches` exported in
+   `src/lib/watchlist.ts`, food-entries-only gate). Home recents
+   deliberately unbadged (separate component — optional follow-on).
+3. **Watched-term editing** — in-place rename (`renameWatchlistItem` +
+   store `rename`, GoalsSection-style inline editor) preserving `createdAt`
+   and therefore the "since watching" stats.
+Rungs green (75 suites / 672 tests). New flow `o-watchlist-edit.yaml`
+(badge + rename, verified ×2); targeted re-runs green (watchlist,
+c-symptom-logging, 01d-browse-edit). Suite = 30 flows.
 
 **Recently shipped (2026-08-24/28):** doctor PDF report + haptics ✅ ·
-multi-symptom logging ✅ · BM "Digestion" section ✅ (remediation: chart
-`accessible` fix `8872c4e`) · intake charts ✅ · per-food/ingredient
-drill-down ✅ (remediation: tag matching food-gated `9478e90`) · keyboard
-handling (seam + FormScrollView/KeyboardShiftView) ✅ · outcome-based
-insights, meal sentiment removed ✅ — detail in Status.
+multi-symptom logging ✅ · BM "Digestion" section ✅ · intake charts ✅ ·
+per-food/ingredient drill-down ✅ · keyboard handling ✅ (incl. the
+2026-08-29 `meal/component` scroll-anchor fix + all-10-screens QA pass) ·
+outcome-based insights, meal sentiment removed ✅ — detail in Status.
 
 ## Tier 0 — Foundations · ✅ complete
 Saturated fat, backup/export-import, native date/time picker, serving-size scaling,

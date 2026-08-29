@@ -543,3 +543,34 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
       · manual — the update-path mechanism (no `sentiment` key ever emitted)
       is Jest-regression-tested in `formModel.test.ts`; this row is the
       real-data double-check
+
+## Post-MVP · 2026-08-29 release (error boundary + watchlist follow-ons)
+
+> Executed + on-device verified same day (Sonnet executed, Fable reviewed).
+> Rungs green (75 suites / 672 tests).
+
+### Root error boundary
+- [x] A screen render error shows the themed "Something went wrong" fallback
+      with a working "Try again" instead of blanking the whole app.
+      · Jest `src/components/__tests__/root-error-boundary.test.tsx` (throw →
+      fallback → recover); no deterministic on-device trigger exists without
+      app code, so there is no flow/manual row.
+
+### Watchlist badges (journal/calendar)
+- [x] A journal/calendar row whose entry contains a watched ingredient shows
+      the "watch" pill; the row's a11y label gains "contains watched
+      ingredient: <terms>". · auto `flows/o-watchlist-edit.yaml`
+- [x] BM/symptom rows never badge (food-type gate, same as watch stats).
+      · Jest (`EntryRow.test.tsx`, `watchlist.test.ts entryWatchedMatches`)
+- [ ] Badge look in light mode. · manual (visual)
+
+### Watched-term editing
+- [x] Edit → inline editor seeded with the term → Save renames the card in
+      place. · auto `flows/o-watchlist-edit.yaml` (soy → soybean)
+- [x] Rename preserves watch history ("since watching" stats continue —
+      `createdAt` untouched). · auto `flows/o-watchlist-edit.yaml` asserts the
+      stats sentence post-rename; Jest asserts the repo update leaves
+      `createdAt` alone
+- [x] Duplicate / invalid terms show an inline error in the editor without
+      touching the add row; Cancel discards. · Jest
+      (`WatchlistSection.test.tsx`, 12 cases)
