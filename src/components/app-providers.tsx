@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, type ComponentType, type ReactNode } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { Spacing } from '@/constants/theme';
@@ -10,6 +10,7 @@ import { useGoalsStore } from '@/features/goals/goalsStore';
 import { configureNotificationHandler } from '@/features/notifications/service';
 import { usePrefsStore } from '@/features/prefs/prefsStore';
 import { useWatchlistStore } from '@/features/watchlist/watchlistStore';
+import { getKeyboardController } from '@/lib/keyboard';
 import { ThemedText } from './themed-text';
 
 // One QueryClient for the app lifetime (react-query is used for the barcode lookup).
@@ -17,6 +18,23 @@ const queryClient = new QueryClient();
 
 // Foreground reminders show as a banner.
 configureNotificationHandler();
+
+type KeyboardProviderShellProps = {
+  children: ReactNode;
+  statusBarTranslucent?: boolean;
+  navigationBarTranslucent?: boolean;
+};
+
+// Resolved once at module scope, not inside a component: React Compiler
+// forbids conditional hooks, and a provider component can't be swapped in
+// after the tree has mounted. See src/lib/keyboard.ts for why the underlying
+// native-module probe must be synchronous. When the running client predates
+// react-native-keyboard-controller's native module, this falls back to a
+// transparent passthrough sharing the same prop signature, so it can safely
+// ignore the Android translucency props it doesn't understand.
+const kc = getKeyboardController();
+const KeyboardProviderOrIdentity: ComponentType<KeyboardProviderShellProps> =
+  kc?.KeyboardProvider ?? (({ children }) => <>{children}</>);
 
 function Centered({ children }: { children: ReactNode }) {
   return <View style={styles.centered}>{children}</View>;
@@ -72,9 +90,11 @@ export function AppProviders({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <MigrationGate>{children}</MigrationGate>
-    </QueryClientProvider>
+    <KeyboardProviderOrIdentity statusBarTranslucent navigationBarTranslucent>
+      <QueryClientProvider client={queryClient}>
+        <MigrationGate>{children}</MigrationGate>
+      </QueryClientProvider>
+    </KeyboardProviderOrIdentity>
   );
 }
 

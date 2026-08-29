@@ -58,6 +58,7 @@ describe('app.config default export', () => {
     expect(result.scheme).toBe('tummytracker');
     expect(result.ios?.bundleIdentifier).toBe('com.tummytracker.app');
     expect(result.android?.package).toBe('com.tummytracker.app');
+    expect(result.android?.softwareKeyboardLayoutMode).toBe('resize');
     expect(result.extra?.eas?.projectId).toBe('f7438f6a-f52a-4f45-80c9-a71013f94d3c');
   });
 

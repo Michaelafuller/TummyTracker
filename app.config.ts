@@ -124,6 +124,10 @@ export default ({ config }: { config: ExpoConfig }): ExpoConfig => {
       },
       predictiveBackGestureEnabled: false,
       permissions: ['android.permission.CAMERA', 'android.permission.RECORD_AUDIO'],
+      // Pins the current Expo default explicitly: react-native-keyboard-controller
+      // requires `adjustResize` (Expo's `softwareKeyboardLayoutMode: 'resize'`) to
+      // work correctly on Android.
+      softwareKeyboardLayoutMode: 'resize' as const,
     },
     web: {
       output: 'static' as const,

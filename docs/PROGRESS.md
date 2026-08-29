@@ -92,6 +92,13 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   light/dark visual walkthrough, import round-trip content, migration
   spot-checks 0006–0008 against the real DB). The automated flow backlog is
   **clear** as of 2026-08-24 (`j-component-drilldown.yaml` was the last).
+- **`react-native-keyboard-controller` added 2026-08-28** (owner-approved,
+  near-leaf dep — peers `react-native-reanimated`/`react-native-gesture-handler`
+  already present) behind a graceful seam (`src/lib/keyboard.ts`,
+  `TurboModuleRegistry.get('KeyboardController')` probe — same discipline as
+  `expo-haptics`); `KeyboardProvider` wired into `AppProviders` behind an
+  identity fallback. Native module not yet in the installed dev client —
+  deferred to the next EAS build. `npm audit`: unchanged (no new advisories).
 - **Carried recommendations (RESULTS 2026-08-16/17):** root-level React error
   boundary around the tab navigator · "Insights" subtitle heading for
   label-consistency · **dev-mode React warning on launch (seen 2026-08-21 on
