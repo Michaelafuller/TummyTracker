@@ -120,8 +120,9 @@ describe('findingInstances — outcome window', () => {
   });
 
   it('never counts an instance as its own outcome', () => {
-    // A poorly-rated food entry is itself an "outcome" per temporal's isOutcome,
-    // but it must never satisfy its own followedByOutcome.
+    // Under isOutcome v2, food entries are never outcomes at all (regardless
+    // of sentiment) — so a lone lactose meal, even one rated poorly, never
+    // flags itself as followed-by-outcome.
     const meal = makeEntry({ type: 'meal', tagsJson: '["lactose"]', loggedAt: T, sentiment: 1 });
 
     const instances = findingInstances([meal], 'tag', 'lactose');

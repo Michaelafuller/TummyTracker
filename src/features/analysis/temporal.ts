@@ -22,21 +22,195 @@ export const MAX_LOW_CONFIDENCE_FINDINGS = 3;
 const FOOD_TYPES_SET = new Set(FOOD_TYPES as readonly string[]);
 
 /**
- * An outcome is something that represents a poor gut experience:
- * a bad BM (Bristol 1, 2, 6, or 7), a significant symptom (severity ≥ 3),
- * or a food entry rated poorly (sentiment ≤ 2).
+ * A rough outcome: a bad BM (Bristol 1, 2, 6, 7), a BM that felt bad (feel
+ * rating <= 2), or a significant symptom (severity >= 3). Food entries are
+ * never outcomes — analysis keys on outcomes, not meal ratings. A BM's
+ * optional "how did it feel?" rating lives in the same `sentiment` column as
+ * the food-entry rating; that's what the BM feel-rating arm reads here.
  */
 export function isOutcome(entry: LogEntry): boolean {
   if (entry.type === 'bowel_movement') {
-    return isBadBristol(entry.bristolScale);
+    return (
+      isBadBristol(entry.bristolScale) ||
+      (isSentimentValue(entry.sentiment) && (entry.sentiment as number) <= 2)
+    );
   }
   if (entry.type === 'symptom') {
     return isSeverityValue(entry.severity) && (entry.severity as number) >= 3;
   }
-  if (FOOD_TYPES_SET.has(entry.type)) {
-    return isSentimentValue(entry.sentiment) && (entry.sentiment as number) <= 2;
-  }
   return false;
+}
+
+/** A grouping key + its display label, as produced by an `analyzeOutcomeRates` caller. */
+export interface OutcomeKey {
+  key: string;
+  label: string;
+}
+
+export interface OutcomeFinding {
+  key: string;
+  label: string;
+  /** Meals (food entries) contributing to this group. */
+  occurrences: number;
+  /** How many of those meals were followed by >=1 outcome within windowMs. */
+  hits: number;
+  /** hits / occurrences. */
+  hitRate: number;
+  /** Fraction of all eligible meals that are followed by any outcome — the baseline. */
+  baseRate: number;
+  confidence: ConfidenceTier;
+}
+
+export interface OutcomeRateOptions {
+  windowMs?: number;
+  minOccurrences?: number;
+}
+
+/**
+ * For each grouping key returned by `keysOf`, measure how often a meal in
+ * that group is followed by a bad outcome within `windowMs`. Reports groups
+ * whose hit rate exceeds the overall base rate, gated on a minimum number of
+ * meals in the group, and labels each finding's confidence via a Wilson
+ * score interval:
+ *  - `high`  — the Wilson lower bound on the group's hit rate clears baseRate
+ *              (the excess risk is unlikely to be noise even at the pessimistic end).
+ *  - `medium` — the raw hit rate clears baseRate by MEDIUM_HIT_RATE_MARGIN with
+ *              at least MEDIUM_CONFIDENCE_MIN_MEALS meals, but the Wilson bound
+ *              doesn't clear baseRate outright.
+ *  - `low`   — excess risk exists but neither bar above is cleared.
+ *
+ * All medium+high findings are surfaced; low-confidence findings are included
+ * only when nothing better exists, capped at MAX_LOW_CONFIDENCE_FINDINGS.
+ *
+ * Findings are sorted by (hitRate − baseRate) descending — highest excess risk first.
+ *
+ * A meal may contribute to several groups at once (`keysOf` may return more
+ * than one key). When a key is seen from more than one meal, the label from
+ * the first meal it's seen on wins.
+ */
+export function analyzeOutcomeRates(
+  entries: readonly LogEntry[],
+  keysOf: (meal: LogEntry) => OutcomeKey[],
+  options: OutcomeRateOptions = {},
+): OutcomeFinding[] {
+  const windowMs = options.windowMs ?? DEFAULT_WINDOW_MS;
+  const minOccurrences = options.minOccurrences ?? DEFAULT_MIN_MEALS;
+
+  // Food entries that yield at least one grouping key — these are the potential triggers.
+  const eligibleMeals = entries.filter(
+    (e) => FOOD_TYPES_SET.has(e.type) && keysOf(e).length > 0,
+  );
+
+  if (eligibleMeals.length === 0) return [];
+
+  const outcomes = entries.filter(isOutcome);
+
+  // Precompute: did this meal have any outcome following it within the window?
+  function hasFollowingOutcome(meal: LogEntry): boolean {
+    return outcomes.some(
+      (o) => o.loggedAt > meal.loggedAt && o.loggedAt <= meal.loggedAt + windowMs,
+    );
+  }
+
+  const mealOutcomeMap = new Map<string, boolean>(
+    eligibleMeals.map((m) => [m.id, hasFollowingOutcome(m)]),
+  );
+
+  const baseHits = eligibleMeals.filter((m) => mealOutcomeMap.get(m.id)).length;
+  const baseRate = eligibleMeals.length > 0 ? baseHits / eligibleMeals.length : 0;
+
+  // Group by key (first-seen label wins).
+  const byKey = new Map<string, { label: string; meals: LogEntry[] }>();
+  for (const meal of eligibleMeals) {
+    for (const { key, label } of keysOf(meal)) {
+      const group = byKey.get(key) ?? { label, meals: [] };
+      group.meals.push(meal);
+      byKey.set(key, group);
+    }
+  }
+
+  const highOrMedium: OutcomeFinding[] = [];
+  const low: OutcomeFinding[] = [];
+  for (const [key, group] of byKey.entries()) {
+    if (group.meals.length < minOccurrences) continue;
+    const hits = group.meals.filter((m) => mealOutcomeMap.get(m.id)).length;
+    const hitRate = hits / group.meals.length;
+    if (hitRate <= baseRate) continue; // no excess risk
+
+    const lowerBound = wilsonLowerBound(hits, group.meals.length);
+    let confidence: ConfidenceTier;
+    if (lowerBound > baseRate) {
+      confidence = 'high';
+    } else if (hitRate >= baseRate + MEDIUM_HIT_RATE_MARGIN && group.meals.length >= MEDIUM_CONFIDENCE_MIN_MEALS) {
+      confidence = 'medium';
+    } else {
+      confidence = 'low';
+    }
+
+    const finding: OutcomeFinding = {
+      key,
+      label: group.label,
+      occurrences: group.meals.length,
+      hits,
+      hitRate: Math.round(hitRate * 100) / 100,
+      baseRate: Math.round(baseRate * 100) / 100,
+      confidence,
+    };
+    if (confidence === 'low') {
+      low.push(finding);
+    } else {
+      highOrMedium.push(finding);
+    }
+  }
+
+  const byExcessDesc = (a: OutcomeFinding, b: OutcomeFinding) =>
+    b.hitRate - b.baseRate - (a.hitRate - a.baseRate);
+
+  highOrMedium.sort(byExcessDesc);
+  if (highOrMedium.length > 0) return highOrMedium;
+
+  return low.sort(byExcessDesc).slice(0, MAX_LOW_CONFIDENCE_FINDINGS);
+}
+
+/**
+ * Per-tag RAW hit rates (hits / occurrences) over the same tag-eligible meals
+ * and window `analyzeTemporalTriggers` uses, but with NO gating (minOccurrences,
+ * excess-over-baseline) and NO rounding — callers needing precision beyond 2dp
+ * (e.g. a pair-interaction filter comparing two raw rates) should use this
+ * instead of reading `hitRate` off an `OutcomeFinding`. Returns an empty map
+ * when there are no tag-eligible meals.
+ */
+export function tagHitRates(
+  entries: readonly LogEntry[],
+  windowMs: number = DEFAULT_WINDOW_MS,
+): Map<string, number> {
+  const taggedMeals = entries.filter(
+    (e) => FOOD_TYPES_SET.has(e.type) && parseTagsJson(e.tagsJson).length > 0,
+  );
+
+  const outcomes = entries.filter(isOutcome);
+  function hasFollowingOutcome(meal: LogEntry): boolean {
+    return outcomes.some(
+      (o) => o.loggedAt > meal.loggedAt && o.loggedAt <= meal.loggedAt + windowMs,
+    );
+  }
+
+  const byTag = new Map<string, { hits: number; total: number }>();
+  for (const meal of taggedMeals) {
+    const hit = hasFollowingOutcome(meal);
+    for (const tag of parseTagsJson(meal.tagsJson)) {
+      const group = byTag.get(tag) ?? { hits: 0, total: 0 };
+      group.total += 1;
+      if (hit) group.hits += 1;
+      byTag.set(tag, group);
+    }
+  }
+
+  const rates = new Map<string, number>();
+  for (const [tag, group] of byTag.entries()) {
+    rates.set(tag, group.hits / group.total);
+  }
+  return rates;
 }
 
 export interface TemporalFinding {
@@ -58,100 +232,26 @@ export interface TemporalOptions {
 }
 
 /**
- * For each ingredient tag, measure how often a meal containing it is followed
- * by a bad outcome within `windowMs`. Reports tags whose hit rate exceeds the
- * overall base rate, gated on a minimum number of meals with that tag, and
- * labels each finding's confidence via a Wilson score interval:
- *  - `high`  — the Wilson lower bound on the tag's hit rate clears baseRate
- *              (the excess risk is unlikely to be noise even at the pessimistic end).
- *  - `medium` — the raw hit rate clears baseRate by MEDIUM_HIT_RATE_MARGIN with
- *              at least MEDIUM_CONFIDENCE_MIN_MEALS meals, but the Wilson bound
- *              doesn't clear baseRate outright.
- *  - `low`   — excess risk exists but neither bar above is cleared.
- *
- * All medium+high findings are surfaced; low-confidence findings are included
- * only when nothing better exists, capped at MAX_LOW_CONFIDENCE_FINDINGS.
- *
- * Findings are sorted by (hitRate − baseRate) descending — highest excess risk first.
+ * Thin wrapper over `analyzeOutcomeRates`, grouping by ingredient tag (the
+ * original, tag-specific shape of this analyzer). See `analyzeOutcomeRates`
+ * for the gating/confidence-tier rules, which apply unchanged here.
  */
 export function analyzeTemporalTriggers(
   entries: readonly LogEntry[],
   options: TemporalOptions = {},
 ): TemporalFinding[] {
-  const windowMs = options.windowMs ?? DEFAULT_WINDOW_MS;
-  const minMeals = options.minMeals ?? DEFAULT_MIN_MEALS;
-
-  // Food entries that have at least one tag — these are the potential triggers.
-  const taggedMeals = entries.filter(
-    (e) => FOOD_TYPES_SET.has(e.type) && parseTagsJson(e.tagsJson).length > 0,
+  const findings = analyzeOutcomeRates(
+    entries,
+    (meal) => parseTagsJson(meal.tagsJson).map((tag) => ({ key: tag, label: tag })),
+    { windowMs: options.windowMs, minOccurrences: options.minMeals },
   );
 
-  if (taggedMeals.length === 0) return [];
-
-  const outcomes = entries.filter(isOutcome);
-
-  // Precompute: did this meal have any outcome following it within the window?
-  function hasFollowingOutcome(meal: LogEntry): boolean {
-    return outcomes.some(
-      (o) => o.loggedAt > meal.loggedAt && o.loggedAt <= meal.loggedAt + windowMs,
-    );
-  }
-
-  const mealOutcomeMap = new Map<string, boolean>(
-    taggedMeals.map((m) => [m.id, hasFollowingOutcome(m)]),
-  );
-
-  const baseHits = taggedMeals.filter((m) => mealOutcomeMap.get(m.id)).length;
-  const baseRate = taggedMeals.length > 0 ? baseHits / taggedMeals.length : 0;
-
-  // Group by tag.
-  const byTag = new Map<string, { meals: LogEntry[] }>();
-  for (const meal of taggedMeals) {
-    for (const tag of parseTagsJson(meal.tagsJson)) {
-      const group = byTag.get(tag) ?? { meals: [] };
-      group.meals.push(meal);
-      byTag.set(tag, group);
-    }
-  }
-
-  const highOrMedium: TemporalFinding[] = [];
-  const low: TemporalFinding[] = [];
-  for (const [tag, group] of byTag.entries()) {
-    if (group.meals.length < minMeals) continue;
-    const hits = group.meals.filter((m) => mealOutcomeMap.get(m.id)).length;
-    const hitRate = hits / group.meals.length;
-    if (hitRate <= baseRate) continue; // no excess risk
-
-    const lowerBound = wilsonLowerBound(hits, group.meals.length);
-    let confidence: ConfidenceTier;
-    if (lowerBound > baseRate) {
-      confidence = 'high';
-    } else if (hitRate >= baseRate + MEDIUM_HIT_RATE_MARGIN && group.meals.length >= MEDIUM_CONFIDENCE_MIN_MEALS) {
-      confidence = 'medium';
-    } else {
-      confidence = 'low';
-    }
-
-    const finding: TemporalFinding = {
-      tag,
-      meals: group.meals.length,
-      hits,
-      hitRate: Math.round(hitRate * 100) / 100,
-      baseRate: Math.round(baseRate * 100) / 100,
-      confidence,
-    };
-    if (confidence === 'low') {
-      low.push(finding);
-    } else {
-      highOrMedium.push(finding);
-    }
-  }
-
-  const byExcessDesc = (a: TemporalFinding, b: TemporalFinding) =>
-    b.hitRate - b.baseRate - (a.hitRate - a.baseRate);
-
-  highOrMedium.sort(byExcessDesc);
-  if (highOrMedium.length > 0) return highOrMedium;
-
-  return low.sort(byExcessDesc).slice(0, MAX_LOW_CONFIDENCE_FINDINGS);
+  return findings.map((f) => ({
+    tag: f.key,
+    meals: f.occurrences,
+    hits: f.hits,
+    hitRate: f.hitRate,
+    baseRate: f.baseRate,
+    confidence: f.confidence,
+  }));
 }
