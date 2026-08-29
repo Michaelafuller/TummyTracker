@@ -28,77 +28,74 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   calendar, reminders, BM + symptom logging, insights v2, serving-size scaling,
   backup/restore, 5-tab nav (incl. Goals), offline mode, OFF Search-a-licious
   search, trigger watchlist, threshold goals + daily check-in.
-- **Health:** rungs green at HEAD (63 suites / 551 tests) + `bundle:check`.
-  **Maestro full regression 2026-08-24: 24/24 — the new clean baseline**, and
-  the first full run on the dev variant, closing the variant-split shared-infra
-  debt (`docs/RESULTS.md`). The dev-client reconnect gap is handled by flow
-  infra (`flows/_helpers/reconnect-dev-client.yaml` — hardcodes Metro port
-  8081; update per session).
-- **✅ Shipped this cycle (two cycles, planned + executed + reviewed 2026-08-21):**
-  1. **Meal-component drill-down** — tap a saved meal's component row →
-     component edit screen (full nutrition visible) → save re-aggregates the
-     parent entry (fresh nutrition, additive tags). No remediations needed.
-     Discovery result: serving-multiply (nutrition × servings) **verified
-     correct** across builder → save → display → tally; no defect found.
-  2. **Build-variant split + Home layout** — dev builds now
-     `com.tummytracker.app.dev` / "TummyTracker (dev)" / `tummytracker-dev`
-     scheme (see Tier 4 row); Home tab hero + CTAs frozen, Recent fills the
-     viewport and scrolls its rows only (cap 6 → 50). One Fable-review
-     remediation: variant resolver inlined into app.config.ts (nested `.ts`
-     import needed Node ≥ 23.6 — would have broken EAS cloud workers on
-     older Node; regression-checked with `--no-experimental-strip-types`).
-  3. **Goals tab: tally drill-down + "Today" rename + long date** — tap a
-     daily-tally row to expand the entries behind its total (name, amount,
-     time · meal slot; missing-data entries as "no data"; sub-rows open the
-     entry); page header "Goals" → "Today" so GoalsSection owns the one
-     Goals heading; date line → "August 21, 2026". No remediations.
-  Rungs green at HEAD (60 suites / 538 tests) + `bundle:check`. Maestro:
-  tally-row drill-down verified 2026-08-21; **full re-run done 2026-08-24
-  (24/24)**; `j-component-drilldown.yaml` authored + verified 2026-08-24 —
-  **no owed flows remain** (suite is now 25).
-- **✅ Fixed 2026-08-21 (on-device verified):** Home Recent list was still
-  truncated after the layout change — root cause (painted-box screenshots +
-  uiautomator): `BottomTabInset` reserved 80dp of dead bottom padding on
-  Android (native tab bar is in-flow; the constant only makes sense for the
-  absolute-positioned **web** bar, where it was ironically 0). Now
-  `Platform.select({ web: 80, default: 0 })` + gap tightening on Home; the
-  rows list grew 77px → 385px (≈3 full rows on a Pixel 5). Goals/Insights/
-  Settings just lose scroll slack. **Next lever if more is wanted:** put
-  "Log bowel movement" + "Log symptom" side by side (≈ +1 row) — owner's call.
-- **✅ Shipped + device-verified 2026-08-21 (evening cycle, survived two host
-  BSODs):** (A) Home fits 5 Recent rows on a Pixel 5 — rows list measured
-  763px (≥ 623 needed); BM + symptom buttons side by side ("💩 BM" / "🤢
-  Symptom"), one-line tagline, 12dp button padding, 16dp section gap.
-  (B) delete a saved meal component — swipe-to-delete on the entry screen
-  (RNGH `ReanimatedSwipeable`, root `GestureHandlerRootView`) + Delete next
-  to Save on the component editor, re-aggregating the parent; refuses the
-  last component. One review remediation (stale list after a delete left
-  one component → render-time `visibleComponents`). Both paths exercised on
-  the Pixel via scratch Maestro flows (swipe reveal, confirm, totals 300→100,
-  section hidden). (C) BM entries labelled "BM" (owner edits ported from the
-  main checkout). **Haptics (`expo-haptics`) owner-approved but deferred to
-  the next native-build cycle** — not in the installed dev build.
-  **Infra finding:** Metro's watcher missed a committed edit — restart Metro
-  after source changes before trusting device runs (`docs/E2E.md`).
-- **✅ Shipped + device-verified 2026-08-24 (multi-symptom cycle + test-execute):**
-  multi-symptom logging in one pass (multi-select picker, one `logEntry` row per
-  symptom via transactional `createLogEntries`; edit stays single-select; Fable
-  review of Sonnet's execution: no remediation). `flows/c2-multi-symptom.yaml` +
-  `flows/j-component-drilldown.yaml` authored and verified — **flow backlog
-  clear, suite = 25**; full regression 24/24 = new baseline (`docs/RESULTS.md`).
-  New E2E gotcha #4: center rows before `swipe:`/tap (gesture-nav dead zone).
+- **Health:** rungs green at HEAD (74 suites / 648 tests) + `bundle:check`.
+  **Maestro full regression 2026-08-24: 24/24 — the last clean baseline**
+  (pre-dates the 2026-08-28 keyboard + outcome-insights cycle below, which is
+  code-complete but not yet re-run on-device — see that cycle's owed items).
+  The dev-client reconnect gap is handled by flow infra
+  (`flows/_helpers/reconnect-dev-client.yaml` — hardcodes Metro port 8081;
+  update per session).
+- **✅ Shipped 2026-08-28 (keyboard + outcome-insights cycle, code-complete):**
+  1. **Keyboard** — `react-native-keyboard-controller` added behind a
+     graceful seam (`src/lib/keyboard.ts`, sync TurboModule probe — CLAUDE.md
+     §0 explains why this seam is sync where haptics/print are async);
+     `FormScrollView`/`KeyboardShiftView`
+     (`src/components/keyboard-aware-screen.tsx`) replaced the 7 hand-rolled
+     form-screen KAV setups and now also cover Home/Insights/Goals;
+     `android.softwareKeyboardLayoutMode: 'resize'` pinned in
+     `app.config.ts`. The upside (fields staying visible above the keyboard)
+     only lights up once the owner's next EAS development build ships the
+     native module — on the current client the seam returns null and every
+     screen falls back to exactly today's behavior. `npm audit`: unchanged.
+  2. **Outcome-based insights, meal sentiment removed** — `isOutcome` v2 (bad
+     BM Bristol 1/2/6/7, OR BM feel ≤ 2, OR symptom severity ≥ 3; food
+     entries are never outcomes — Decision 4). A new generic engine
+     (`analyzeOutcomeRates`/`tagHitRates`/`mealsFollowedByOutcome` in
+     `temporal.ts`) backs five insights.ts analyses (ingredients, foods,
+     pairs, nutrients, summary), replacing the four sentiment analyses +
+     histogram + `analyzeTemporalTriggers` (all deleted). The Insights tab,
+     drill-down, and the doctor PDF report all follow the same engine.
+     `LogEntryForm`/meal review no longer show a sentiment selector; the edit
+     path is regression-tested to never clobber a stored historical rating.
+     The `sentiment` column is RETAINED (CLAUDE.md §0/§6) — BMs still write
+     it, history/backups still read it.
+  Rungs green (74 suites / 648 tests) + `bundle:check`. **Owed:**
+  (a) **Maestro rework, later test session** — `01b-manual-entry.yaml` and
+  `01d-browse-edit.yaml` (the latter's purpose was editing a meal's
+  sentiment; repurpose to a different edit field), seed helpers
+  `seed-two-meals` / `seed-meals-for-insights` / `seed-ingredient-reactions`
+  (must seed symptom/BM outcomes instead of sentiment to produce findings),
+  and the `m-finding-drilldown` / `e-temporal-insights` /
+  `d-ingredient-insights` assertions (summary-line + finding-card text
+  changed shape); `02-bm-tracking.yaml` is unaffected (BM rating untouched).
+  The ~45 `hideKeyboard` workarounds across the flow suite (docs/E2E.md
+  gotcha #2) stay until the new build ships keyboard-controller, then a test
+  session should re-check which are still needed. (b) **Owner's next EAS
+  development build now carries THREE natives** — `expo-print`,
+  `expo-haptics` (both already owed from the 2026-08-24 cycle), and
+  `react-native-keyboard-controller` — one build covers all three; install
+  alongside the existing dev client per CLAUDE.md §0's signing caveat.
+  (c) On-device keyboard QA checklist — already written up in `docs/E2E.md`
+  ("Manual items that stay on your desk" #6–7).
 - **Still owed (test sessions):** manual-only items per `docs/E2E.md` (camera
   loop, notification timing, dictation double-text check on both platforms,
   light/dark visual walkthrough, import round-trip content, migration
-  spot-checks 0006–0008 against the real DB). The automated flow backlog is
-  **clear** as of 2026-08-24 (`j-component-drilldown.yaml` was the last).
-- **`react-native-keyboard-controller` added 2026-08-28** (owner-approved,
-  near-leaf dep — peers `react-native-reanimated`/`react-native-gesture-handler`
-  already present) behind a graceful seam (`src/lib/keyboard.ts`,
-  `TurboModuleRegistry.get('KeyboardController')` probe — same discipline as
-  `expo-haptics`); `KeyboardProvider` wired into `AppProviders` behind an
-  identity fallback. Native module not yet in the installed dev client —
-  deferred to the next EAS build. `npm audit`: unchanged (no new advisories).
+  spot-checks 0006–0008 against the real DB), plus the doctor-PDF device
+  items carried from 2026-08-24 (old-client safety spot-check —
+  `settings-smoke` + `i-backup` re-run, Pixel dropped off adb mid-session,
+  reconnect USB — then `n-doctor-report.yaml` once the EAS build above
+  lands). The automated flow backlog is otherwise **clear** as of 2026-08-24
+  aside from the 2026-08-28 rework in the block above.
+- **Shipped 2026-08-21 to 2026-08-24 (five cycles — detail collapsed, full
+  history in `git log`):** meal-component drill-down + edit/delete with
+  re-aggregation · build-variant split (`com.tummytracker.app.dev`) + frozen
+  Home hero/scrolling Recent · Goals tally drill-down + "Today" header ·
+  multi-symptom logging (one save → N entries) · BM "Digestion" insights
+  section (remediation: chart `accessible` fix `8872c4e`) · intake charts ·
+  per-food/ingredient drill-down (remediation: tag-matching food-gated
+  `9478e90`). Full Maestro regression 24/24 on 2026-08-24 — the suite's
+  clean baseline (superseded for the sentiment-touching flows by the
+  2026-08-28 rework above).
 - **Carried recommendations (RESULTS 2026-08-16/17):** root-level React error
   boundary around the tab navigator · "Insights" subtitle heading for
   label-consistency · **dev-mode React warning on launch (seen 2026-08-21 on
@@ -113,14 +110,15 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
 
 ### Shipped last cycle (overwrite each plan cycle; full history = `git log`)
 
-2026-08-16/17 (planned 2026-08-16, executed + test-executed through 2026-08-17):
-- **Check-in persistence fix** — enabled/hour/minute persisted in prefs +
-  7-day one-shot horizon re-arm (the fired-notification-consumes-state bug).
-- **Dictation double-text fix** in `ThemedTextInput` (device check still owed).
-- **Light-theme palette pass** + **splash/notification colors → palette**
-  (visible with the next EAS build).
-- **Test-execute: 23/23 Maestro baseline** — dev-client reconnect helper,
-  three flow-bug fixes, ACCEPTANCE.md flips (23 items). See `docs/RESULTS.md`.
+2026-08-24 (doctor PDF report + haptics rider, planned + executed + reviewed):
+- **Doctor / dietitian PDF report** — range picker (14/30/90 days) +
+  printable HTML summary (findings + day-grouped journal + disclaimer) via
+  `expo-print`, shared via `expo-sharing`; both new deps dynamic-import-only
+  (grep-verified) so the old dev client stays crash-safe until the next build.
+- **Haptics** — tactile feedback on delete/save via `expo-haptics`, graceful
+  no-op wrapper `src/lib/haptics.ts`.
+- Fable review: no code remediation. Rungs green (72 suites / 630 tests) +
+  `bundle:check`. Device items owed — folded into Status above.
 
 ---
 
@@ -130,17 +128,18 @@ Ranked by value-add to the north star. **Effort:** S (hours) · M (a session) ·
 **⚠ = new dependency** — allowed, but CVE-inventory it and justify the value first.
 Completed tiers are collapsed to a single line; their detail lives in git.
 
-## 📌 Pinned — next up (owner-directed 2026-08-24, fourth pin)
+## 📌 Pinned — next up
 
-| Item | Why it matters | Effort | Notes |
-|------|----------------|:--:|------|
-| **Doctor / dietitian PDF report (+ haptics rider)** | Turns the journal into something a professional can act on — a shareable, printable range summary with the insights attached | M | **✅ shipped 2026-08-24, code-complete + reviewed** (Sonnet executed; Fable review: **no code remediation**; accepted deviation: Jest-only Babel `import()`→`require` plugin, `bundle:check`-verified inert for real bundles). All four rungs green (72 suites / 630 tests + `bundle:check`); dynamic-imports-only grep-verified. **Device items owed:** old-client safety spot-check + `settings-smoke`/`i-backup` re-run (Pixel dropped off adb mid-session — reconnect USB), then **owner: EAS `development` build + install** to light up PDF + haptics, then `n-doctor-report.yaml`. Unpin next plan cycle. |
+_(none currently — the doctor-PDF pin shipped 2026-08-24 and is unpinned per
+its own note; its remaining device items live in Status above alongside the
+2026-08-28 cycle's owed items.)_
 
-**Recently shipped pins (2026-08-24):** multi-symptom logging ✅ · BM
-"Digestion" section ✅ (remediation: chart `accessible` fix `8872c4e`) ·
-intake charts ✅ · per-food/ingredient drill-down ✅ (remediation: tag
-matching food-gated `9478e90`; new gotcha #6 minute-granularity `loggedAt`;
-follow-on: pair-finding drill-down) — detail in Status.
+**Recently shipped (2026-08-24/28):** doctor PDF report + haptics ✅ ·
+multi-symptom logging ✅ · BM "Digestion" section ✅ (remediation: chart
+`accessible` fix `8872c4e`) · intake charts ✅ · per-food/ingredient
+drill-down ✅ (remediation: tag matching food-gated `9478e90`) · keyboard
+handling (seam + FormScrollView/KeyboardShiftView) ✅ · outcome-based
+insights, meal sentiment removed ✅ — detail in Status.
 
 ## Tier 0 — Foundations · ✅ complete
 Saturated fat, backup/export-import, native date/time picker, serving-size scaling,
@@ -159,18 +158,19 @@ are **✅ shipped**. Remaining:
 
 ## Tier 2 — The payoff (turn data into trust + motivation)
 
-Sentiment trend chart, confidence labeling, and ingredient-pair analysis **✅ shipped**
-(insights v2, 2026-07-02). Remaining:
+Trend chart (shipped 2026-07-02 as a sentiment trend chart; reworked
+2026-08-28 into outcome-rate `CountBars`), confidence labeling, and
+ingredient-pair analysis **✅ shipped**. Remaining:
 
 | Item | Why | Effort | Notes |
 |------|-----|:--:|------|
 | **Goals tab: daily nutrition tally** | 5th nav tab aggregating today's nutrients | S–M | **✅ shipped 2026-08-15** — missing-data caveats included; follow-on: 7-day mini-trend (see intake-charts row) |
 | **Nutrient threshold goals + daily check-in** | Floors (≥) and caps (≤) per nutrient, one daily check-in | M | **✅ shipped 2026-08-15** (migration 0008) — floors notify / caps alert at save; **persistence bug found 2026-08-16, fix planned (see Status)**; follow-on: cap alert on the entry-**edit** path |
 | **Per-food / ingredient drill-down** | Tap a finding → every instance + outcomes | S–M | **✅ shipped + device-verified 2026-08-24** — see Status; pair-finding drill-down deferred |
-| **BM-regularity charts** | Complete the trends story beyond sentiment | S–M | **📌 pinned 2026-08-24** — see the pinned section above |
-| **Intake charts (nutrient trends)** | The other half of the old combined row — weekly intake bars (fiber/calories) reusing the same chart components | S | **📌 pinned 2026-08-24** — see the pinned section above |
+| **BM-regularity charts** | Complete the trends story beyond BM logging | S–M | **✅ shipped 2026-08-24** (as the Insights "Digestion" section — regularity line, weekly count bars, Bristol histogram) |
+| **Intake charts (nutrient trends)** | The other half of the old combined row — weekly intake bars (fiber/calories) reusing the same chart components | S | **✅ shipped 2026-08-24** (as the Insights "Intake" section) |
 | **Meal-component editing after save** | v1 meal builder saves components immutably; edit/remove with re-aggregation is the obvious next ask | S–M | **✅ shipped 2026-08-21** (edit + re-aggregate; removal + single-component-meal drill-down deferred) — Maestro flow owed |
-| **Doctor / dietitian PDF report** | Share a date range + insights with a pro | M | **📌 pinned 2026-08-24** (⚠ `expo-print` owner-approved) — see the pinned section above |
+| **Doctor / dietitian PDF report** | Share a date range + insights with a pro | M | **✅ shipped 2026-08-24** (⚠ `expo-print` owner-approved) — device items owed, see Status |
 
 ## Tier 3 — Quality of life
 
@@ -215,9 +215,14 @@ once entry volume grows.
    stats/charting dependencies.
 3. **Symptoms = a new loggable type** (mirror the BM migration), dedicated severity, not
    by overloading `sentiment`.
-4. **`isOutcome` definition:** bad BM (Bristol 1, 2, 6, 7) OR symptom (severity ≥ 3) OR
-   food entry (sentiment ≤ 2). Used by temporal correlation; tighten later if food-entry
-   self-rating proves too circular.
+4. **`isOutcome` definition (revised 2026-08-28, owner-directed — supersedes the
+   food-sentiment arm below).** Bad BM (Bristol 1, 2, 6, 7) OR BM feel-afterward
+   rating ≤ 2 OR symptom (severity ≥ 3). Food entries are never outcomes. This
+   resolves the original definition's own caveat ("tighten later if food-entry
+   self-rating proves too circular") — it did prove circular, so per-meal
+   sentiment was removed outright rather than tightened. Used by
+   `analyzeOutcomeRates`/`tagHitRates`/`mealsFollowedByOutcome` (temporal
+   correlation) and the doctor PDF report.
 5. **`isFood` uses a positive allowlist** (`FOOD_TYPES = ['meal','snack']`), required once
    'symptom' became a third type.
 6. **USDA FoodData Central migration/hybrid — evaluated 2026-07-03, deferred.** OFF's
@@ -245,6 +250,12 @@ once entry volume grows.
    after migration; if it still bites, the preferred fix is a **bundled on-device
    USDA SR Legacy subset** (CC0, ~300 foods ≈ 50 KB or ~7,800 ≈ 1.5 MB SQLite,
    zero network/keys, local-first-aligned) over an FDC API fallback.
+7. **Per-meal sentiment removed 2026-08-28 (owner-directed):** rating outcomes
+   beats rating meals — asking the user to self-rate a meal's digestive impact
+   at write time duplicated (and biased) what the correlation engine computes
+   after the fact from real, dated symptom/BM events. The `sentiment` column
+   is retained for history and old-backup imports; the BM feel-afterward
+   rating is kept and is what now feeds `isOutcome` (Decision 4).
 
 ## Definition of done (see CLAUDE.md §4)
 

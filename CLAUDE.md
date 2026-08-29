@@ -83,14 +83,38 @@
   execution) sidesteps this entirely. The resolver is still unit-tested, now
   at `__tests__/app.config.test.ts` (repo root, importing the named
   `resolveAppIdentity` export and driving the default export end-to-end).
+- **`react-native-keyboard-controller` seam is a SYNC TurboModule probe, not
+  haptics' async dynamic import (2026-08-28).** `src/lib/keyboard.ts` calls
+  `TurboModuleRegistry.get('KeyboardController')` directly at import time and
+  returns null on the current (pre-cycle) dev client — no `await import(...)`,
+  because `KeyboardProvider` has to wrap the app tree synchronously at mount
+  (a provider can't render behind a resolved promise without an extra loading
+  frame), whereas the haptics/print seam only needs a value inside an async
+  event handler and can afford `await import(...)`. Same discipline (never
+  call into a native module the installed client doesn't have; fall back
+  cleanly), different mechanism because of *where* in the render lifecycle the
+  value is needed. `FormScrollView`/`KeyboardShiftView`
+  (`src/components/keyboard-aware-screen.tsx`) consume the seam and fall back
+  to today's plain `ScrollView`/`KeyboardAvoidingView` behavior when the probe
+  returns null.
+- **Per-meal sentiment removed, outcome-based correlation adopted
+  (owner-directed 2026-08-28).** Rating a bowel movement or symptom is a real,
+  dated event; rating a *meal* asked the user to self-diagnose causation at
+  write time, which both biased and duplicated what the correlation engine
+  exists to compute. `isOutcome` v2 (bad BM Bristol 1/2/6/7, OR BM feel ≤2, OR
+  symptom severity ≥3) replaced the old food-sentiment arm entirely — food
+  entries are never outcomes. The `sentiment` DB column is RETAINED (additive-
+  migrations rule, §9): history and old backups import unchanged, and it still
+  stores the BM feel-afterward rating. See §1, §6, §7.
 
 ## 1. What this project is
 
 A **local-first food-sensitivity journal** for mobile. The user logs meals and
-snacks, records how each one made them feel afterward (a 1–5 sentiment scale),
-and over time the app surfaces correlations between what was eaten and poor
-sentiment. Nutritional tracking (fats, carbs, protein, etc.) is a first-class
-bonus, not the primary purpose.
+snacks, logs symptoms and bowel movements (each rated — symptom severity 1–5;
+BM Bristol type + feel-afterward 1–5), and over time the app surfaces
+correlations between what was eaten and a rough outcome (a bad BM or a
+significant symptom) within 24 hours. Nutritional tracking (fats, carbs,
+protein, etc.) is a first-class bonus, not the primary purpose.
 
 Primary data ingestion is **barcode scan → nutrition lookup**, with **manual
 entry** as the always-available fallback.
@@ -125,6 +149,7 @@ to learn **autonomous, agentic coding workflows** with Claude Code. Therefore:
 | Calendar       | `expo-calendar` (native calendar interop)            |
 | Calendar UI    | `react-native-calendars` for day/week/month picker   |
 | Date/time pick | `@react-native-community/datetimepicker` (native OS picker) |
+| Keyboard       | `react-native-keyboard-controller` (owner-approved 2026-08-28; graceful seam `src/lib/keyboard.ts`, sync TurboModule probe; native module ships with the next dev build) |
 | File export    | `expo-file-system` (SDK 56 `File`/`Paths` API) + `expo-sharing` |
 | PDF report     | `expo-print` (owner-approved 2026-08-24; **dynamic import only** until the next dev build ships it) |
 | Haptics        | `expo-haptics` (owner-approved 2026-08-21; **dynamic import only**, graceful no-op wrapper `src/lib/haptics.ts`) |
@@ -191,7 +216,10 @@ MVP entities:
   - `name` (text)
   - `barcode` (text, nullable)
   - `loggedAt` (timestamp — when the meal happened, editable)
-  - `sentiment` (int 1–5, nullable until rated; see §7)
+  - `sentiment` (int 1–5, nullable — see §7; **written only by the BM
+    feel-afterward rating since 2026-08-28**; retained on meal/snack rows
+    purely for history and old-backup imports, never written or read by the
+    current meal/snack forms)
   - `notes` (text, **max 500 chars** — enforce in validation, not just UI)
   - nutrition: `calories, fatG, carbsG, proteinG, fiberG, sugarG, sodiumMg`
     (all real, nullable)
@@ -200,12 +228,17 @@ MVP entities:
 Conventions:
 - Timestamps stored as Unix epoch (ms) integers.
 - `loggedAt` is user-editable (they may backfill or correct a meal's time).
-- Sentiment can be set on creation **or** added/updated later — design every
-  write path to allow a later sentiment edit.
+- The BM feel-afterward rating can be set on creation **or** added/updated
+  later — design every write path to allow a later edit. Meal/snack write
+  paths deliberately carry no sentiment field at all.
 
-## 7. Sentiment scale
+## 7. Feel-afterward scale (BM rating only)
 
-Single enum, 1–5, low = bad digestive experience, high = great:
+Single enum, 1–5, low = bad digestive experience, high = great. Since
+2026-08-28 this scale feeds only the bowel-movement "How did it feel?"
+rating (which in turn feeds `isOutcome`, §0) and renders historical
+meal/snack `sentiment` values saved before that date — it is never shown on
+a meal/snack form:
 
 | value | meaning          | emoji |
 |-------|------------------|-------|

@@ -74,7 +74,9 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
 ## Phase 1b — Manual entry
 - [x] Add a meal manually (now a two-screen flow: component confirm → meal review):
       name, ingredients, nutrition, then slot, time, notes, sentiment. · auto
-      `flows/01b-manual-entry.yaml`
+      `flows/01b-manual-entry.yaml` **(superseded 2026-08-28 — the meal-review
+      screen no longer shows a sentiment step at all; the flow still asserts
+      the old field and is owed a rework, see docs/E2E.md)**
 - [x] The Notes field's live char counter tracks what's typed (e.g. "67/500").
       · auto `flows/01b-manual-entry.yaml` — the 500-char maxLength clamp
       itself is Jest-covered (`src/lib/__tests__/validation.test.ts`
@@ -93,7 +95,7 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
 ## Phase 1d — Browse & edit
 - [x] Entries are grouped by day. · auto `flows/01d-browse-edit.yaml`
 - [x] Day / week / month calendar toggle works. · auto `flows/01d-browse-edit.yaml` · auto `flows/journal-calendar.yaml` (toggle + collapse/expand)
-- [x] Open a past entry, add/change its sentiment, save; the change sticks. · auto `flows/01d-browse-edit.yaml`
+- [x] Open a past entry, add/change its sentiment, save; the change sticks. · auto `flows/01d-browse-edit.yaml` **(superseded 2026-08-28 — meal/snack entries no longer expose a sentiment field to edit; this flow's purpose is owed a repurpose to a different edit field, see docs/E2E.md)**
 
 ## Phase 1e — Reminders
 - [x] Configure a reminder time; the OS permission prompt appears. · auto `flows/01e-reminders.yaml`
@@ -136,13 +138,13 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
 - [x] Edit flow loads saved type and severity. · auto `flows/c-symptom-logging.yaml`
 - [x] Existing meal/BM entries unaffected. · auto `flows/c-symptom-logging.yaml`
 
-### D · Ingredient → sentiment correlation
-- [x] "Ingredients you react to" section appears in Insights when threshold is met. · auto `flows/d-ingredient-insights.yaml`
-- [x] Cards cite average sentiment and number of meals. · auto `flows/d-ingredient-insights.yaml`
-- [x] Well-rated tags do not appear.
+### D · Ingredient → sentiment correlation **(superseded 2026-08-28 — see the outcome-based section below; kept for history)**
+- [x] "Ingredients you react to" section appears in Insights when threshold is met. · auto `flows/d-ingredient-insights.yaml` **(renamed "Ingredients linked to rough outcomes"; flow assertions owed a rework, see docs/E2E.md)**
+- [x] Cards cite average sentiment and number of meals. · auto `flows/d-ingredient-insights.yaml` **(superseded — cards now cite an outcome rate vs. baseline, not average sentiment)**
+- [x] Well-rated tags do not appear. **(superseded — suppression is now baseline-margin-relative on outcome rate, not a sentiment cutoff)**
 
 ### E · Temporal meal → outcome correlation
-- [x] "Timing patterns" section appears in Insights when a tag's hit rate exceeds baseline. · manual (timing-dependent — 24h window can't be constructed deterministically in clearState)
+- [x] "Timing patterns" section appears in Insights when a tag's hit rate exceeds baseline. · manual (timing-dependent — 24h window can't be constructed deterministically in clearState) **(superseded 2026-08-28 — "Timing patterns" was merged into the Ingredients section; same analysis, no standalone section any more)**
 - [x] Card body quotes hit count, meal count, hit %, and baseline %.
 - [x] Tags where hit rate equals baseline are suppressed.
 - [x] Section carries "Observation only" framing.
@@ -163,7 +165,7 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
 
 ### Meal builder · multi-scan grouped meals
 - [ ] Scan an item → confirm (one serving assumed) → "Add & scan next" chains another scan. · manual (camera)
-- [ ] "Finish meal" opens the review screen with aggregated nutrition and one meal-level sentiment. · manual (camera)
+- [ ] "Finish meal" opens the review screen with aggregated nutrition and one meal-level sentiment. · manual (camera) **(superseded 2026-08-28 — meal review no longer collects a sentiment; nothing to verify here any more)**
 - [ ] Saved grouped meal shows "· N items" in its journal subtitle. · manual (camera path to create; render is `flows`-adjacent)
 - [ ] Editing the meal shows a read-only "In this meal" component list. · manual (camera path to create)
 - [ ] Migration 0006 applies cleanly over an existing on-device database. · manual (device)
@@ -173,7 +175,7 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
 - [x] Insights tab renders (Trend / findings / confidence chips) without redbox. · auto `flows/03-insights.yaml`
 - [ ] Ingredient/food findings are baseline-relative with a confidence chip + mini-histogram. · manual (needs seeded data volume)
 - [ ] "Combinations" surfaces an ingredient pair worse than either alone. · manual (needs seeded data volume)
-- [ ] Trend chart shows weekly average sentiment. · manual (visual)
+- [ ] Trend chart shows weekly average sentiment. · manual (visual) **(superseded 2026-08-28 — the trend chart now shows weekly rough-outcome counts, not average sentiment; see the "Rough outcomes" row in the 2026-08-28 release section below)**
 
 ## Post-MVP · UX polish sprint  *(2026-06-28)*
 
@@ -438,7 +440,10 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
       date/time, sentiment, and a "Rough outcome within 24 h" marker; a row
       opens the entry editor. Pair/nutrient cards are not tappable
       (deferred). · auto `flows/m-finding-drilldown.yaml` (recorded green,
-      `flows/results-m.xml`)
+      `flows/results-m.xml`) **(superseded 2026-08-28 — the summary line is
+      now `{count, outcomes}` and per-row sentiment is gone; the detail
+      screen reads "N logs · M followed by a rough outcome within 24 h".
+      Flow assertions owed a rework, see docs/E2E.md)**
 - [x] Matching parity with the findings (food-entries-only for both kinds —
       review-pass remediation `9478e90`), case-insensitive food names, exact
       tag tokens, outcome-window edges. · Jest
@@ -462,3 +467,41 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
       build; `n-doctor-report.yaml` flow. · owed after owner's EAS
       `development` build
 - [ ] Haptics feel on delete/save on the new build. · manual (owner)
+
+---
+
+## Post-MVP · 2026-08-28 release (keyboard + outcome-based insights)
+
+> Code-complete, rungs green (74 suites / 648 tests) + `bundle:check`; not yet
+> re-run on-device (see `docs/PROGRESS.md` Status and `docs/E2E.md` for the
+> owed Maestro rework). All rows below need the owner's next EAS
+> `development` build unless noted otherwise.
+
+### Keyboard
+- [ ] On each of the 10 input screens (the 7 form screens + Home + Insights +
+      Goals), focusing the bottom-most field keeps it visible above the
+      on-screen keyboard instead of it being covered. · manual (EAS build —
+      `react-native-keyboard-controller` native module)
+- [ ] `ComponentForm`'s name-field `onBlur` OFF search still fires exactly
+      once when tapping between fields on the new build (focus/blur timing
+      risk from the keyboard-aware wrapper). · manual (EAS build)
+
+### Outcome-based insights, meal sentiment removed
+- [ ] Meal and snack forms (component confirm + meal review) show no rating
+      selector anywhere in the flow. · manual (no build needed — already
+      true on the current JS)
+- [ ] The bowel-movement form still shows "How did it feel?" (1–5) and saving
+      it feeds `isOutcome`. · manual (no build needed)
+- [ ] Insights renders the new section set (Disclaimer · summary line ·
+      "Rough outcomes" weekly bars · Digestion · Intake · Watchlist ·
+      "Ingredients linked to rough outcomes" · "Combinations" · "Foods linked
+      to rough outcomes" · Nutrients · empty state "Keep logging meals — and
+      log symptoms and bowel movements when they happen…"). · manual (no
+      build needed)
+- [ ] Doctor PDF report renders outcome-based finding sentences and prints
+      "Felt <label>" only for BM rows in the journal table (never for
+      meals/snacks). · manual (also gated on the PDF/EAS-build item above)
+- [ ] A meal logged before 2026-08-28 that already has a stored sentiment:
+      open it, edit an unrelated field, save — its stored rating is
+      unchanged (spot-check via Settings → Export data and inspect the JSON).
+      · manual

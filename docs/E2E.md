@@ -257,6 +257,42 @@ occurred:**
    assert the stable parts (totals, at-least-one marker), not exact
    order-dependent counts.
 
+**Finding — wide blast radius from the 2026-08-28 sentiment removal (owed,
+next test-execute session):** meal/snack sentiment was deleted in favor of
+outcome-based correlation (`isOutcome` v2 — bad BM, BM feel ≤2, or symptom
+severity ≥3; see `docs/PROGRESS.md` Decisions 4 & 7). Every flow or seed
+helper that rated a meal, or asserted UI text derived from meal sentiment,
+is stale and needs a rework before its next run:
+1. `flows/01b-manual-entry.yaml` — asserts a sentiment step in the
+   meal-review screen; that step no longer exists (meal forms show no
+   rating selector at all).
+2. `flows/01d-browse-edit.yaml` — its whole purpose was opening a past entry
+   and editing its stored sentiment, which is no longer possible for a
+   meal/snack; repurpose the flow to exercise a different edit field.
+3. `flows/_helpers/seed-two-meals.yaml`, `flows/_helpers/seed-meals-for-insights.yaml`,
+   `flows/_helpers/seed-ingredient-reactions.yaml` — all seed sentiment-rated
+   meals to give the old sentiment analyses something to find; they must
+   instead seed symptom/BM entries that produce a rough outcome within 24h
+   of the food, or the new outcome-based analyses will have nothing to
+   report and every flow that `runFlow`s these helpers will fail downstream.
+4. `flows/m-finding-drilldown.yaml` — asserts the old detail-screen summary
+   line ("logs, rated, avg sentiment, outcome count") and a per-row
+   sentiment column; the summary is now `{count, outcomes}` and the screen
+   reads "N logs · M followed by a rough outcome within 24 h".
+5. `flows/e-temporal-insights.yaml` — exercised the standalone "Timing
+   patterns" section, which no longer exists (merged into the Ingredients
+   analysis, same underlying engine); the food/BM/symptom summary-count
+   assertions likely still hold, but the section-specific ones do not.
+6. `flows/d-ingredient-insights.yaml` — asserts the "Ingredients you react
+   to" title and that cards "cite average sentiment"; the section is
+   renamed "Ingredients linked to rough outcomes" and cards now cite an
+   outcome rate vs. baseline, not a sentiment average.
+
+`flows/02-bm-tracking.yaml` is **unaffected** — bowel-movement logging and
+its Bristol/feel-afterward rating are untouched by this cycle. This is a
+list of what needs to change and why; the flows themselves are not
+rewritten here.
+
 See `docs/RESULTS.md` (2026-08-16/17) for the full diagnosis and the flows each
 fix landed in.
 
