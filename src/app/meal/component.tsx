@@ -1,9 +1,8 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from 'react-native';
 
+import { FormScrollView } from '@/components/keyboard-aware-screen';
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
 import { ComponentForm } from '@/features/logging/ComponentForm';
 import { useComponentPrefillStore } from '@/features/logging/componentPrefillStore';
 import { useMealBuilderStore } from '@/features/logging/mealBuilderStore';
@@ -38,36 +37,21 @@ export default function MealComponentScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <ThemedText type="small" themeColor="textSecondary">
-          {componentCount > 0
-            ? `${componentCount} item${componentCount === 1 ? '' : 's'} added so far`
-            : 'Confirm this item, then add more or finish the meal.'}
-        </ThemedText>
+    <FormScrollView>
+      <ThemedText type="small" themeColor="textSecondary">
+        {componentCount > 0
+          ? `${componentCount} item${componentCount === 1 ? '' : 's'} added so far`
+          : 'Confirm this item, then add more or finish the meal.'}
+      </ThemedText>
 
-        <ComponentForm
-          initial={prefill ?? undefined}
-          sortOrder={componentCount}
-          submitLabel="Add & scan next"
-          onSubmit={handleAddAndScanNext}
-          secondaryLabel="Finish meal"
-          onSecondarySubmit={handleFinishMeal}
-        />
-      </ScrollView>
-    </KeyboardAvoidingView>
+      <ComponentForm
+        initial={prefill ?? undefined}
+        sortOrder={componentCount}
+        submitLabel="Add & scan next"
+        onSubmit={handleAddAndScanNext}
+        secondaryLabel="Finish meal"
+        onSecondarySubmit={handleFinishMeal}
+      />
+    </FormScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  content: {
-    padding: Spacing.four,
-    paddingBottom: Spacing.six,
-    gap: Spacing.four,
-  },
-});

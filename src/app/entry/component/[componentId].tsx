@@ -1,7 +1,8 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet } from 'react-native';
 
+import { FormScrollView } from '@/components/keyboard-aware-screen';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -111,31 +112,19 @@ export default function EditComponentScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <ComponentForm
-          initial={mealComponentToFormState(component)}
-          sortOrder={component.sortOrder}
-          submitLabel="Save changes"
-          onSubmit={handleSubmit}
-          onDelete={handleDelete}
-        />
-      </ScrollView>
-    </KeyboardAvoidingView>
+    <FormScrollView>
+      <ComponentForm
+        initial={mealComponentToFormState(component)}
+        sortOrder={component.sortOrder}
+        submitLabel="Save changes"
+        onSubmit={handleSubmit}
+        onDelete={handleDelete}
+      />
+    </FormScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  content: {
-    padding: Spacing.four,
-    paddingBottom: Spacing.six,
-    gap: Spacing.four,
-  },
   centered: {
     flex: 1,
     alignItems: 'center',

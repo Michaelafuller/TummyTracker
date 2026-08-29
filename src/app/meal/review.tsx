@@ -1,9 +1,10 @@
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { DateTimeField } from '@/components/date-time-field';
 import { FormField, ThemedTextInput } from '@/components/form-fields';
+import { FormScrollView } from '@/components/keyboard-aware-screen';
 import { PrimaryButton } from '@/components/primary-button';
 import { SegmentedControl } from '@/components/segmented-control';
 import { ThemedText } from '@/components/themed-text';
@@ -116,140 +117,128 @@ export default function MealReviewScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <ThemedText type="smallBold">In this meal</ThemedText>
-        <View style={styles.componentList}>
-          {components.map((component, index) => (
-            <View
-              key={`${component.name}-${index}`}
-              testID={`component-${index}`}
-              style={[styles.componentRow, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
-              <View style={styles.componentBody}>
-                <ThemedText type="small" numberOfLines={1}>
-                  {`${component.name} · ${component.servings ?? 1}× serving${component.calories != null ? ` · ${Math.round(component.calories * (component.servings ?? 1))} kcal` : ''}`}
-                </ThemedText>
-              </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Remove ${component.name} from meal`}
-                onPress={() => removeComponent(index)}>
-                <ThemedText type="link" themeColor="danger">
-                  Remove
-                </ThemedText>
-              </Pressable>
+    <FormScrollView>
+      <ThemedText type="smallBold">In this meal</ThemedText>
+      <View style={styles.componentList}>
+        {components.map((component, index) => (
+          <View
+            key={`${component.name}-${index}`}
+            testID={`component-${index}`}
+            style={[styles.componentRow, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+            <View style={styles.componentBody}>
+              <ThemedText type="small" numberOfLines={1}>
+                {`${component.name} · ${component.servings ?? 1}× serving${component.calories != null ? ` · ${Math.round(component.calories * (component.servings ?? 1))} kcal` : ''}`}
+              </ThemedText>
             </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Remove ${component.name} from meal`}
+              onPress={() => removeComponent(index)}>
+              <ThemedText type="link" themeColor="danger">
+                Remove
+              </ThemedText>
+            </Pressable>
+          </View>
+        ))}
+      </View>
+
+      <ThemedText type="small" themeColor="textSecondary">
+        {`Aggregate: ${aggregate.calories != null ? `${aggregate.calories} kcal` : 'no calorie data'}`}
+      </ThemedText>
+
+      <FormField label="Name" error={errors.name}>
+        <ThemedTextInput
+          value={state.name}
+          onChangeText={(value) => set('name', value)}
+          placeholder="e.g. Chicken salad"
+          accessibilityLabel="Meal name"
+          returnKeyType="next"
+        />
+      </FormField>
+
+      <FormField label="Type">
+        <SegmentedControl
+          options={TYPE_OPTIONS}
+          value={state.type}
+          onChange={(value) => value && set('type', value)}
+        />
+      </FormField>
+
+      <FormField label="Meal slot">
+        <SegmentedControl
+          options={MEAL_SLOT_OPTIONS}
+          value={state.mealSlot}
+          onChange={(value) => set('mealSlot', value as MealSlot | null)}
+          allowClear
+        />
+      </FormField>
+
+      <DateTimeField
+        dateInput={state.dateInput}
+        timeInput={state.timeInput}
+        onDateChange={(v) => set('dateInput', v)}
+        onTimeChange={(v) => set('timeInput', v)}
+        error={errors.loggedAt}
+      />
+
+      <FormField label="How did it sit with you?">
+        <SentimentSelector
+          value={state.sentiment}
+          onChange={(value) => set('sentiment', value)}
+          onClear={() => set('sentiment', null)}
+        />
+      </FormField>
+
+      <FormField label="Notes" error={errors.notes} hint={`${noteCount}/${MAX_NOTES_LENGTH}`}>
+        <ThemedTextInput
+          value={state.notes}
+          onChangeText={(value) => set('notes', value)}
+          placeholder="Anything worth remembering"
+          accessibilityLabel="Notes"
+          multiline
+          maxLength={MAX_NOTES_LENGTH}
+        />
+      </FormField>
+
+      {watchedMatches.length > 0 ? (
+        <View
+          accessibilityRole="alert"
+          accessibilityLabel={`This meal contains a watched ingredient: ${describeWatchedMatches(watchedMatches)}`}
+          style={[styles.watchNotice, { backgroundColor: theme.backgroundSelected, borderColor: theme.danger }]}>
+          <ThemedText type="smallBold" themeColor="danger">
+            Contains a watched ingredient
+          </ThemedText>
+          <ThemedText type="small">{describeWatchedMatches(watchedMatches)}</ThemedText>
+        </View>
+      ) : null}
+
+      {exceededCapEvaluations.length > 0 ? (
+        <View
+          accessibilityRole="alert"
+          accessibilityLabel={`Saving would exceed a goal cap: ${exceededCapEvaluations.map(capNoticeLine).join('; ')}`}
+          style={[styles.watchNotice, { backgroundColor: theme.backgroundSelected, borderColor: theme.danger }]}>
+          <ThemedText type="smallBold" themeColor="danger">
+            This save goes over a goal
+          </ThemedText>
+          {exceededCapEvaluations.map((evaluation) => (
+            <ThemedText key={evaluation.goal.id} type="small">
+              {capNoticeLine(evaluation)}
+            </ThemedText>
           ))}
         </View>
+      ) : null}
 
-        <ThemedText type="small" themeColor="textSecondary">
-          {`Aggregate: ${aggregate.calories != null ? `${aggregate.calories} kcal` : 'no calorie data'}`}
-        </ThemedText>
-
-        <FormField label="Name" error={errors.name}>
-          <ThemedTextInput
-            value={state.name}
-            onChangeText={(value) => set('name', value)}
-            placeholder="e.g. Chicken salad"
-            accessibilityLabel="Meal name"
-            returnKeyType="next"
-          />
-        </FormField>
-
-        <FormField label="Type">
-          <SegmentedControl
-            options={TYPE_OPTIONS}
-            value={state.type}
-            onChange={(value) => value && set('type', value)}
-          />
-        </FormField>
-
-        <FormField label="Meal slot">
-          <SegmentedControl
-            options={MEAL_SLOT_OPTIONS}
-            value={state.mealSlot}
-            onChange={(value) => set('mealSlot', value as MealSlot | null)}
-            allowClear
-          />
-        </FormField>
-
-        <DateTimeField
-          dateInput={state.dateInput}
-          timeInput={state.timeInput}
-          onDateChange={(v) => set('dateInput', v)}
-          onTimeChange={(v) => set('timeInput', v)}
-          error={errors.loggedAt}
-        />
-
-        <FormField label="How did it sit with you?">
-          <SentimentSelector
-            value={state.sentiment}
-            onChange={(value) => set('sentiment', value)}
-            onClear={() => set('sentiment', null)}
-          />
-        </FormField>
-
-        <FormField label="Notes" error={errors.notes} hint={`${noteCount}/${MAX_NOTES_LENGTH}`}>
-          <ThemedTextInput
-            value={state.notes}
-            onChangeText={(value) => set('notes', value)}
-            placeholder="Anything worth remembering"
-            accessibilityLabel="Notes"
-            multiline
-            maxLength={MAX_NOTES_LENGTH}
-          />
-        </FormField>
-
-        {watchedMatches.length > 0 ? (
-          <View
-            accessibilityRole="alert"
-            accessibilityLabel={`This meal contains a watched ingredient: ${describeWatchedMatches(watchedMatches)}`}
-            style={[styles.watchNotice, { backgroundColor: theme.backgroundSelected, borderColor: theme.danger }]}>
-            <ThemedText type="smallBold" themeColor="danger">
-              Contains a watched ingredient
-            </ThemedText>
-            <ThemedText type="small">{describeWatchedMatches(watchedMatches)}</ThemedText>
-          </View>
-        ) : null}
-
-        {exceededCapEvaluations.length > 0 ? (
-          <View
-            accessibilityRole="alert"
-            accessibilityLabel={`Saving would exceed a goal cap: ${exceededCapEvaluations.map(capNoticeLine).join('; ')}`}
-            style={[styles.watchNotice, { backgroundColor: theme.backgroundSelected, borderColor: theme.danger }]}>
-            <ThemedText type="smallBold" themeColor="danger">
-              This save goes over a goal
-            </ThemedText>
-            {exceededCapEvaluations.map((evaluation) => (
-              <ThemedText key={evaluation.goal.id} type="small">
-                {capNoticeLine(evaluation)}
-              </ThemedText>
-            ))}
-          </View>
-        ) : null}
-
-        <PrimaryButton
-          label={submitting ? 'Saving…' : 'Save meal'}
-          accessibilityLabel="Save meal"
-          disabled={submitting || components.length === 0}
-          onPress={handleSave}
-        />
-      </ScrollView>
-    </KeyboardAvoidingView>
+      <PrimaryButton
+        label={submitting ? 'Saving…' : 'Save meal'}
+        accessibilityLabel="Save meal"
+        disabled={submitting || components.length === 0}
+        onPress={handleSave}
+      />
+    </FormScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  content: {
-    padding: Spacing.four,
-    paddingBottom: Spacing.six,
-    gap: Spacing.four,
-  },
   componentList: {
     gap: Spacing.two,
   },

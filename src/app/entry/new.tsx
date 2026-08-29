@@ -1,8 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, ScrollView, StatusBar, StyleSheet } from 'react-native';
 
-import { Spacing } from '@/constants/theme';
+import { FormScrollView } from '@/components/keyboard-aware-screen';
 import { createLogEntry } from '@/db/repository';
 import type { BuiltLogEntry } from '@/features/logging/formModel';
 import { LogEntryForm } from '@/features/logging/LogEntryForm';
@@ -29,29 +28,13 @@ export default function NewEntryScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior="padding"
-      keyboardVerticalOffset={StatusBar.currentHeight ?? 0}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <LogEntryForm
-          initial={prefill ?? undefined}
-          onSubmit={handleSubmit}
-          submitLabel="Save entry"
-          submitting={submitting}
-        />
-      </ScrollView>
-    </KeyboardAvoidingView>
+    <FormScrollView>
+      <LogEntryForm
+        initial={prefill ?? undefined}
+        onSubmit={handleSubmit}
+        submitLabel="Save entry"
+        submitting={submitting}
+      />
+    </FormScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  content: {
-    padding: Spacing.four,
-    paddingBottom: Spacing.six,
-    gap: Spacing.four,
-  },
-});

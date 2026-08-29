@@ -1,8 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from 'react-native';
 
-import { Spacing } from '@/constants/theme';
+import { FormScrollView } from '@/components/keyboard-aware-screen';
 import { createLogEntry } from '@/db/repository';
 import { BmForm } from '@/features/bm/BmForm';
 import type { BuiltBmEntry } from '@/features/bm/formModel';
@@ -22,23 +21,8 @@ export default function NewBowelMovementScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <BmForm onSubmit={handleSubmit} submitLabel="Save" submitting={submitting} />
-      </ScrollView>
-    </KeyboardAvoidingView>
+    <FormScrollView>
+      <BmForm onSubmit={handleSubmit} submitLabel="Save" submitting={submitting} />
+    </FormScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  content: {
-    padding: Spacing.four,
-    paddingBottom: Spacing.six,
-    gap: Spacing.four,
-  },
-});
