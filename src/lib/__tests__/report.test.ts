@@ -33,6 +33,8 @@ function makeEntry(overrides: Partial<LogEntry>): LogEntry {
   };
 }
 
+const HOUR = 60 * 60 * 1000;
+
 // "Now" = local Aug 24, 2026, 10:00 — the 30-day window ending today (inclusive)
 // spans [Jul 26 00:00, Aug 25 00:00).
 const NOW = new Date(2026, 7, 24, 10, 0, 0).getTime();
@@ -92,37 +94,44 @@ describe('buildReportHtml — escaping', () => {
 });
 
 describe('buildReportHtml — summary', () => {
-  it('includes the entries/food/BM/rated/avg-sentiment summary numbers', () => {
+  it('includes the entries/food/BM/symptoms/rough-outcomes summary numbers', () => {
     const entries = [
-      makeEntry({ type: 'meal', name: 'Toast', loggedAt: NOW, sentiment: 4 }),
-      makeEntry({ type: 'bowel_movement', name: 'BM', loggedAt: NOW, bristolScale: 4 }),
+      makeEntry({ type: 'meal', name: 'Toast', loggedAt: NOW }),
+      makeEntry({ type: 'bowel_movement', name: 'BM', loggedAt: NOW, bristolScale: 1 }), // bad Bristol -> rough outcome
+      makeEntry({ type: 'symptom', name: 'Cramps', loggedAt: NOW, severity: 4 }),
     ];
     const html = buildReportHtml(entries, NOW, 30);
-    expect(html).toContain('2 entries');
+    expect(html).toContain('3 entries');
     expect(html).toContain('1 food');
     expect(html).toContain('1 BM');
-    expect(html).toContain('1 rated');
-    expect(html).toContain('avg sentiment 4');
+    expect(html).toContain('1 symptoms');
+    expect(html).toContain('2 rough outcomes');
   });
 });
 
 describe('buildReportHtml — findings', () => {
-  it('produces a finding sentence for a seeded low-sentiment recurring food', () => {
-    // Same fixture shape as analyzeFoodSentiment's proven case (insights.test.ts):
-    // "Chicken Salad" x3 low sentiment vs "Toast" x3 baseline -> delta clears
-    // DELTA_MARGIN and the food is flagged (confidence 'low' at n=3, which is
-    // fine — this test only needs the sentence to appear, not high confidence).
-    const entries = [
-      makeEntry({ name: 'Chicken Salad', sentiment: 2, loggedAt: NOW }),
-      makeEntry({ name: 'chicken salad', sentiment: 2, loggedAt: NOW }),
-      makeEntry({ name: 'CHICKEN SALAD', sentiment: 3, loggedAt: NOW }),
-      makeEntry({ name: 'Toast', sentiment: 5, loggedAt: NOW }),
-      makeEntry({ name: 'Toast', sentiment: 4, loggedAt: NOW }),
-      makeEntry({ name: 'Toast', sentiment: 5, loggedAt: NOW }),
+  it('produces a finding sentence for a seeded ingredient-outcome pattern', () => {
+    // Same fixture shape as analyzeIngredientOutcomes's proven case
+    // (analysis/__tests__/insights.test.ts): "lactose" meals all followed by a
+    // symptom within 24h, vs a control group that's never followed by one.
+    // All timestamps sit in the past relative to NOW (offset from a base ~16.6
+    // days back) so nothing falls outside the 30-day report window, which never
+    // includes entries logged after "today".
+    const BASE = NOW - 400 * HOUR;
+    const lactoseMeals = [
+      makeEntry({ type: 'meal', tagsJson: '["lactose"]', loggedAt: BASE }),
+      makeEntry({ type: 'meal', tagsJson: '["lactose"]', loggedAt: BASE + 48 * HOUR }),
+      makeEntry({ type: 'meal', tagsJson: '["lactose"]', loggedAt: BASE + 96 * HOUR }),
+      makeEntry({ type: 'meal', tagsJson: '["rice"]', loggedAt: BASE + 200 * HOUR }),
+      makeEntry({ type: 'meal', tagsJson: '["rice"]', loggedAt: BASE + 248 * HOUR }),
+      makeEntry({ type: 'meal', tagsJson: '["rice"]', loggedAt: BASE + 296 * HOUR }),
+      makeEntry({ type: 'symptom', severity: 4, loggedAt: BASE + 1 * HOUR }),
+      makeEntry({ type: 'symptom', severity: 4, loggedAt: BASE + 49 * HOUR }),
+      makeEntry({ type: 'symptom', severity: 4, loggedAt: BASE + 97 * HOUR }),
     ];
-    const html = buildReportHtml(entries, NOW, 30);
-    expect(html).toContain('Foods');
-    expect(html).toContain('Chicken Salad averages 2.3');
+    const html = buildReportHtml(lactoseMeals, NOW, 30);
+    expect(html).toContain('Ingredients');
+    expect(html).toContain('lactose: 3 of 3 meals');
     expect(html).toContain('confidence');
   });
 
@@ -130,6 +139,23 @@ describe('buildReportHtml — findings', () => {
     const html = buildReportHtml([], NOW, 30);
     expect(html).toContain('No patterns stand out yet.');
     expect(html).toContain('No entries in this range.');
+  });
+});
+
+describe('buildReportHtml — entryDetail', () => {
+  it("prints a BM's feel rating alongside Bristol", () => {
+    const entries = [
+      makeEntry({ type: 'bowel_movement', name: 'BM', loggedAt: NOW, bristolScale: 4, sentiment: 2 }),
+    ];
+    const html = buildReportHtml(entries, NOW, 30);
+    expect(html).toContain('Felt');
+    expect(html).toContain('Bristol 4');
+  });
+
+  it('does not print a sentiment/feel label for a meal or snack', () => {
+    const entries = [makeEntry({ type: 'meal', name: 'Toast', loggedAt: NOW, sentiment: 4 })];
+    const html = buildReportHtml(entries, NOW, 30);
+    expect(html).not.toContain('Felt');
   });
 });
 

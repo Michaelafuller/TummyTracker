@@ -7,26 +7,21 @@ import { BarMeter } from '@/components/charts/BarMeter';
 import { BristolHistogram } from '@/components/charts/BristolHistogram';
 import { CountBars } from '@/components/charts/CountBars';
 import { IntakeBars } from '@/components/charts/IntakeBars';
-import { MiniHistogram } from '@/components/charts/MiniHistogram';
-import { TrendBars } from '@/components/charts/TrendBars';
 import { FormScrollView } from '@/components/keyboard-aware-screen';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import {
   computeInsights,
-  type FoodFinding,
-  type NutrientFinding,
-  type PairFinding,
-  type TagFinding,
-  type TemporalFinding,
+  type NutrientOutcomeFinding,
+  type OutcomeFinding,
 } from '@/features/analysis/insights';
 import { useAllEntries } from '@/features/logging/useEntries';
 import { WatchButton } from '@/features/watchlist/WatchButton';
 import { WatchlistSection } from '@/features/watchlist/WatchlistSection';
 import { useTheme } from '@/hooks/use-theme';
 import { bmRegularity, bristolDistribution, weeklyBmCounts } from '@/lib/bmTrends';
-import { weeklyIntake, weeklySentiment } from '@/lib/chartData';
+import { weeklyIntake, weeklyOutcomes } from '@/lib/chartData';
 import { NUTRITION_NOUNS } from '@/lib/nutrition';
 import type { ConfidenceTier } from '@/lib/stats';
 
@@ -34,31 +29,22 @@ function confidenceLabel(confidence: ConfidenceTier): string {
   return confidence === 'high' ? 'High' : confidence === 'medium' ? 'Medium' : 'Low';
 }
 
-export function nutrientSentence(finding: NutrientFinding): string {
-  return (
-    `Meals higher in ${NUTRITION_NOUNS[finding.nutrient]} (≥ ${finding.thresholdValue}) average a ` +
-    `sentiment of ${finding.highAvgSentiment}, versus ${finding.lowAvgSentiment} otherwise.`
-  );
-}
-
-export function foodSentence(finding: FoodFinding): string {
-  return `${finding.name} averages ${finding.avgSentiment} vs your usual ${finding.baselineAvg}, across ${finding.occurrences} logs.`;
-}
-
-export function ingredientSentence(finding: TagFinding): string {
-  return `Averages ${finding.avgSentiment} vs your usual ${finding.baselineAvg}, across ${finding.occurrences} meals containing this ingredient.`;
-}
-
-export function pairSentence(finding: PairFinding): string {
-  return `${finding.tags[0]} + ${finding.tags[1]} together average ${finding.avgSentiment} vs your usual ${finding.baselineAvg}, across ${finding.occurrences} meals.`;
-}
-
-export function temporalSentence(finding: TemporalFinding): string {
+/** Shared sentence for an ingredient/food/pair outcome finding. */
+export function outcomeSentence(finding: OutcomeFinding): string {
   const pct = Math.round(finding.hitRate * 100);
   const basePct = Math.round(finding.baseRate * 100);
   return (
-    `${finding.hits} of ${finding.meals} meals with this ingredient were followed by a ` +
-    `rough outcome within 24 h (${pct}% vs ${basePct}% baseline).`
+    `${finding.hits} of ${finding.occurrences} meals were followed by a rough outcome within 24 h ` +
+    `(${pct}% vs ${basePct}% baseline).`
+  );
+}
+
+export function nutrientSentence(finding: NutrientOutcomeFinding): string {
+  const pct = Math.round(finding.highRate * 100);
+  const basePct = Math.round(finding.lowRate * 100);
+  return (
+    `Meals higher in ${NUTRITION_NOUNS[finding.nutrient]} (≥ ${finding.thresholdValue}) are followed by a ` +
+    `rough outcome ${pct}% of the time, vs ${basePct}% for lighter meals.`
   );
 }
 
@@ -82,7 +68,6 @@ function Card({
   sample,
   confidence,
   n,
-  histogram,
   children,
   onPress,
   pressLabel,
@@ -92,7 +77,6 @@ function Card({
   sample?: string;
   confidence?: ConfidenceTier;
   n?: number;
-  histogram?: readonly [number, number, number, number, number];
   children?: React.ReactNode;
   onPress?: () => void;
   pressLabel?: string;
@@ -108,7 +92,6 @@ function Card({
         </ThemedText>
       ) : null}
       {confidence != null && n != null ? <ConfidenceChip confidence={confidence} n={n} /> : null}
-      {histogram ? <MiniHistogram counts={histogram} /> : null}
       {children}
     </>
   );
@@ -136,19 +119,12 @@ export default function InsightsScreen() {
   const router = useRouter();
   const entries = useAllEntries();
   const insets = useSafeAreaInsets();
-  const {
-    summary,
-    nutrientFindings,
-    foodFindings,
-    ingredientFindings,
-    pairFindings,
-    temporalFindings,
-  } = computeInsights(entries);
+  const { summary, nutrientFindings, foodFindings, ingredientFindings, pairFindings } = computeInsights(entries);
   // Lazy-init so Date.now() is read once per mount, not on every render pass
   // (the render function itself must stay pure/idempotent).
   const [now] = useState(() => Date.now());
-  const trendBuckets = weeklySentiment(entries, now);
-  const hasTrendData = trendBuckets.some((b) => b.avg != null);
+  const roughOutcomeBuckets = weeklyOutcomes(entries, now);
+  const hasRoughOutcomeData = roughOutcomeBuckets.some((b) => b.count > 0);
   const regularity = bmRegularity(entries, now);
   const caloriesBuckets = weeklyIntake(entries, now, 'calories');
   const fiberBuckets = weeklyIntake(entries, now, 'fiberG');
@@ -158,8 +134,7 @@ export default function InsightsScreen() {
     nutrientFindings.length > 0 ||
     foodFindings.length > 0 ||
     ingredientFindings.length > 0 ||
-    pairFindings.length > 0 ||
-    temporalFindings.length > 0;
+    pairFindings.length > 0;
 
   return (
     <ThemedView style={styles.container}>
@@ -176,14 +151,17 @@ export default function InsightsScreen() {
         <View style={styles.summary}>
           <ThemedText type="smallBold">Your journal so far</ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
-            {`${summary.totalEntries} entries · ${summary.foodEntries} food · ${summary.bmEntries} BM · ${summary.ratedEntries} rated${summary.averageSentiment != null ? ` · avg sentiment ${summary.averageSentiment}` : ''}`}
+            {`${summary.totalEntries} entries · ${summary.foodEntries} food · ${summary.bmEntries} BM · ${summary.symptomEntries} symptoms · ${summary.roughOutcomes} rough outcomes`}
           </ThemedText>
         </View>
 
-        {hasTrendData ? (
+        {hasRoughOutcomeData ? (
           <View style={styles.section}>
-            <ThemedText type="subtitle">Trend</ThemedText>
-            <TrendBars buckets={trendBuckets} />
+            <ThemedText type="subtitle">Rough outcomes</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              Bad BMs, low-rated BMs, and stronger symptoms per week.
+            </ThemedText>
+            <CountBars buckets={roughOutcomeBuckets} />
           </View>
         ) : null}
 
@@ -225,20 +203,20 @@ export default function InsightsScreen() {
 
         {ingredientFindings.length > 0 ? (
           <View style={styles.section}>
-            <ThemedText type="subtitle">Ingredients you react to</ThemedText>
+            <ThemedText type="subtitle">Ingredients linked to rough outcomes</ThemedText>
             {ingredientFindings.map((finding) => (
               <Card
-                key={finding.tag}
-                title={finding.tag}
-                body={ingredientSentence(finding)}
+                key={finding.key}
+                title={finding.label}
+                body={outcomeSentence(finding)}
                 confidence={finding.confidence}
                 n={finding.occurrences}
-                histogram={finding.sentimentCounts}
                 onPress={() =>
-                  router.push({ pathname: '/insight/detail', params: { kind: 'tag', value: finding.tag } })
+                  router.push({ pathname: '/insight/detail', params: { kind: 'tag', value: finding.label } })
                 }
-                pressLabel={`See all logs: ${finding.tag}`}>
-                <WatchButton tag={finding.tag} />
+                pressLabel={`See all logs: ${finding.label}`}>
+                <BarMeter label={finding.label} rate={finding.hitRate} baseRate={finding.baseRate} />
+                <WatchButton tag={finding.label} />
               </Card>
             ))}
           </View>
@@ -248,58 +226,28 @@ export default function InsightsScreen() {
           <View style={styles.section}>
             <ThemedText type="subtitle">Combinations</ThemedText>
             {pairFindings.map((finding) => (
-              <Card
-                key={`${finding.tags[0]}+${finding.tags[1]}`}
-                title={`${finding.tags[0]} + ${finding.tags[1]}`}
-                body={pairSentence(finding)}
-                confidence={finding.confidence}
-                n={finding.occurrences}
-                histogram={finding.sentimentCounts}
-              />
+              <Card key={finding.key} title={finding.label} body={outcomeSentence(finding)} confidence={finding.confidence} n={finding.occurrences}>
+                <BarMeter label={finding.label} rate={finding.hitRate} baseRate={finding.baseRate} />
+              </Card>
             ))}
           </View>
         ) : null}
 
         {foodFindings.length > 0 ? (
           <View style={styles.section}>
-            <ThemedText type="subtitle">Foods you rate poorly</ThemedText>
+            <ThemedText type="subtitle">Foods linked to rough outcomes</ThemedText>
             {foodFindings.map((finding) => (
               <Card
-                key={finding.name}
-                title={finding.name}
-                body={foodSentence(finding)}
-                sample={`Based on ${finding.occurrences} logs.`}
+                key={finding.key}
+                title={finding.label}
+                body={outcomeSentence(finding)}
                 confidence={finding.confidence}
                 n={finding.occurrences}
-                histogram={finding.sentimentCounts}
                 onPress={() =>
-                  router.push({ pathname: '/insight/detail', params: { kind: 'food', value: finding.name } })
+                  router.push({ pathname: '/insight/detail', params: { kind: 'food', value: finding.label } })
                 }
-                pressLabel={`See all logs: ${finding.name}`}
-              />
-            ))}
-          </View>
-        ) : null}
-
-        {temporalFindings.length > 0 ? (
-          <View style={styles.section}>
-            <ThemedText type="subtitle">Timing patterns</ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">
-              Ingredients more often followed by a rough outcome (bad BM, symptom, or poor rating)
-              within 24 hours. Observation only — not a diagnosis.
-            </ThemedText>
-            {temporalFindings.map((finding) => (
-              <Card
-                key={finding.tag}
-                title={finding.tag}
-                body={temporalSentence(finding)}
-                confidence={finding.confidence}
-                n={finding.meals}
-                onPress={() =>
-                  router.push({ pathname: '/insight/detail', params: { kind: 'tag', value: finding.tag } })
-                }
-                pressLabel={`See all logs: ${finding.tag}`}>
-                <BarMeter label={finding.tag} rate={finding.hitRate} baseRate={finding.baseRate} />
+                pressLabel={`See all logs: ${finding.label}`}>
+                <BarMeter label={finding.label} rate={finding.hitRate} baseRate={finding.baseRate} />
               </Card>
             ))}
           </View>
@@ -325,8 +273,9 @@ export default function InsightsScreen() {
           <View style={styles.section}>
             <ThemedText type="smallBold">Not enough data yet</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
-              Keep logging meals and rating how they sit with you. Patterns appear once a few foods
-              or nutrients have enough rated entries.
+              Keep logging meals — and log symptoms and bowel movements when they happen. Patterns
+              appear once a few ingredients or foods have been followed by enough outcomes to
+              compare.
             </ThemedText>
           </View>
         ) : null}

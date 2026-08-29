@@ -10,8 +10,8 @@ import { buildMealEntry, type MealReviewFormState } from '@/features/logging/mea
 import { mapOffResponse, offProductToComponentFormState } from '@/lib/openFoodFacts';
 import { parseTagsJson, serializeTags } from '@/lib/ingredients';
 import { unionComponentTags, type MealComponentDraft } from '@/lib/mealAggregate';
-import { analyzeIngredientSentiment, MIN_TAG_OCCURRENCES } from '../insights';
-import { analyzeTemporalTriggers, DEFAULT_MIN_MEALS } from '../temporal';
+import { analyzeIngredientOutcomes } from '../insights';
+import { DEFAULT_MIN_MEALS } from '../temporal';
 
 function draft(name: string, tagsJson: string): MealComponentDraft {
   return {
@@ -74,26 +74,7 @@ describe('grouped-meal analysis compatibility (Phase 2.6)', () => {
     expect(entry.tagsJson).toContain('onion');
   });
 
-  it('analyzeIngredientSentiment sees a grouped meal under both of its component tags', () => {
-    // Need MIN_TAG_OCCURRENCES rated meals per tag to clear the gate; reuse the
-    // same grouped-meal shape N times (distinct ids) to simulate repeat logging.
-    // Baseline-relative analysis also needs OTHER rated food entries to compare
-    // against — add a few high-sentiment control entries so the tag's delta
-    // clears DELTA_MARGIN (without them there's no baseline to compare to).
-    const groupedMeals = Array.from({ length: MIN_TAG_OCCURRENCES }, () => groupedMealEntry({ sentiment: 2 }));
-    const control: LogEntry[] = Array.from({ length: 3 }, (_, i) => ({
-      ...groupedMealEntry({ sentiment: 5 }),
-      id: `control${i}`,
-      tagsJson: null,
-      componentCount: null,
-    }));
-    const findings = analyzeIngredientSentiment([...groupedMeals, ...control]);
-    const tags = findings.map((f) => f.tag);
-    expect(tags).toContain('milk');
-    expect(tags).toContain('onion');
-  });
-
-  it('analyzeTemporalTriggers sees a grouped meal under both of its component tags', () => {
+  it('analyzeIngredientOutcomes sees a grouped meal under both of its component tags', () => {
     const HOUR = 60 * 60 * 1000;
     const entries: LogEntry[] = [];
     // Grouped meals (tagged milk+onion) are ALWAYS followed by a bad outcome —
@@ -124,8 +105,8 @@ describe('grouped-meal analysis compatibility (Phase 2.6)', () => {
         }),
       );
     }
-    const findings = analyzeTemporalTriggers(entries);
-    const tags = findings.map((f) => f.tag);
+    const findings = analyzeIngredientOutcomes(entries);
+    const tags = findings.map((f) => f.key);
     expect(tags).toContain('milk');
     expect(tags).toContain('onion');
   });

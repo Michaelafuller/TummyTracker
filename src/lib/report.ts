@@ -14,11 +14,8 @@ import { isSentimentValue, sentimentLabel } from '@/features/sentiment/scale';
 import { isSeverityValue } from '@/features/symptoms/severity';
 import {
   computeInsights,
-  type FoodFinding,
-  type NutrientFinding,
-  type PairFinding,
-  type TagFinding,
-  type TemporalFinding,
+  type NutrientOutcomeFinding,
+  type OutcomeFinding,
 } from '@/features/analysis/insights';
 import { formatLongDate, formatTime12h, MONTHS_LONG } from '@/lib/datetime';
 import { groupEntriesByDay } from '@/lib/journal';
@@ -60,46 +57,36 @@ function tierLabel(confidence: ConfidenceTier): string {
   return confidence === 'high' ? 'High' : confidence === 'medium' ? 'Medium' : 'Low';
 }
 
-function ingredientSentence(f: TagFinding): string {
-  return (
-    `${escapeHtml(f.tag)} averages ${f.avgSentiment} vs a usual ${f.baselineAvg} across ${f.occurrences} meals ` +
-    `containing it (${tierLabel(f.confidence)} confidence, n=${f.occurrences}).`
-  );
-}
-
-function pairSentence(f: PairFinding): string {
-  return (
-    `${escapeHtml(f.tags[0])} + ${escapeHtml(f.tags[1])} together average ${f.avgSentiment} vs a usual ${f.baselineAvg} ` +
-    `across ${f.occurrences} meals (${tierLabel(f.confidence)} confidence, n=${f.occurrences}).`
-  );
-}
-
-function foodSentence(f: FoodFinding): string {
-  return (
-    `${escapeHtml(f.name)} averages ${f.avgSentiment} vs a usual ${f.baselineAvg} across ${f.occurrences} logs ` +
-    `(${tierLabel(f.confidence)} confidence, n=${f.occurrences}).`
-  );
-}
-
-function temporalSentence(f: TemporalFinding): string {
+/** Shared sentence for an ingredient/combination/food outcome finding. */
+function outcomeSentence(f: OutcomeFinding): string {
   const pct = Math.round(f.hitRate * 100);
   const basePct = Math.round(f.baseRate * 100);
   return (
-    `${escapeHtml(f.tag)}: ${f.hits} of ${f.meals} meals with this ingredient were followed by a rough outcome ` +
-    `within 24h (${pct}% vs ${basePct}% baseline) (${tierLabel(f.confidence)} confidence, n=${f.meals}).`
+    `${escapeHtml(f.label)}: ${f.hits} of ${f.occurrences} meals were followed by a rough outcome ` +
+    `within 24h (${pct}% vs ${basePct}% baseline) (${tierLabel(f.confidence)} confidence, n=${f.occurrences}).`
   );
 }
 
-function nutrientSentence(f: NutrientFinding): string {
+function nutrientSentence(f: NutrientOutcomeFinding): string {
+  const pct = Math.round(f.highRate * 100);
+  const basePct = Math.round(f.lowRate * 100);
   return (
-    `Higher ${NUTRITION_NOUNS[f.nutrient]} (≥ ${f.thresholdValue}) meals average sentiment ${f.highAvgSentiment} ` +
-    `vs ${f.lowAvgSentiment} otherwise (${tierLabel(f.confidence)} confidence, n=${f.sampleSize}).`
+    `Meals higher in ${NUTRITION_NOUNS[f.nutrient]} (≥ ${f.thresholdValue}) are followed by a rough outcome ` +
+    `${pct}% of the time, vs ${basePct}% for lighter meals (${tierLabel(f.confidence)} confidence, n=${f.sampleSize}).`
   );
 }
 
+/**
+ * A BM's optional "how did it feel?" rating (the `sentiment` column, reused
+ * from the old meal-rating field) still prints alongside Bristol — it's a
+ * real observation about the BM itself. Meals/snacks no longer carry a
+ * sentiment rating in this report; the outcome engine doesn't use it.
+ */
 function entryDetail(entry: LogEntry): string {
   const parts: string[] = [];
-  if (isSentimentValue(entry.sentiment)) parts.push(sentimentLabel(entry.sentiment));
+  if (entry.type === 'bowel_movement' && isSentimentValue(entry.sentiment)) {
+    parts.push(`Felt ${sentimentLabel(entry.sentiment)}`);
+  }
   if (isBristolValue(entry.bristolScale)) parts.push(`Bristol ${entry.bristolScale}`);
   if (isSeverityValue(entry.severity)) parts.push(`Severity ${entry.severity}`);
   return parts.join(' · ');
@@ -124,13 +111,12 @@ export function buildReportHtml(
   const { summary } = insights;
   const summaryLine =
     `${summary.totalEntries} entries · ${summary.foodEntries} food · ${summary.bmEntries} BM · ` +
-    `${summary.ratedEntries} rated${summary.averageSentiment != null ? ` · avg sentiment ${summary.averageSentiment}` : ''}`;
+    `${summary.symptomEntries} symptoms · ${summary.roughOutcomes} rough outcomes`;
 
   const sections: { title: string; items: string[] }[] = [
-    { title: 'Ingredients', items: insights.ingredientFindings.map(ingredientSentence) },
-    { title: 'Combinations', items: insights.pairFindings.map(pairSentence) },
-    { title: 'Foods', items: insights.foodFindings.map(foodSentence) },
-    { title: 'Timing', items: insights.temporalFindings.map(temporalSentence) },
+    { title: 'Ingredients', items: insights.ingredientFindings.map(outcomeSentence) },
+    { title: 'Combinations', items: insights.pairFindings.map(outcomeSentence) },
+    { title: 'Foods', items: insights.foodFindings.map(outcomeSentence) },
     { title: 'Nutrients', items: insights.nutrientFindings.map(nutrientSentence) },
   ].filter((section) => section.items.length > 0);
 

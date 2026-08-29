@@ -35,7 +35,7 @@ export interface BmWeekBucket {
 
 /**
  * Rolling 7-day BM-count buckets, anchored on `now`'s local calendar day —
- * same bucketing as `weeklySentiment` in chartData.ts, so week labels line up
+ * same bucketing as `weeklyOutcomes`/`weeklyIntake` in chartData.ts, so week labels line up
  * across charts. Returns `weeks` buckets ordered oldest-first. Entries with a
  * null/invalid `bristolScale` count toward `count` but never `badCount`.
  */

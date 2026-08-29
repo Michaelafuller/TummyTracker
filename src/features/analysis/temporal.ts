@@ -184,7 +184,7 @@ export function analyzeOutcomeRates(
 
 /**
  * Per-tag RAW hit rates (hits / occurrences) over the same tag-eligible meals
- * and window `analyzeTemporalTriggers` uses, but with NO gating (minOccurrences,
+ * and window `analyzeIngredientOutcomes` uses, but with NO gating (minOccurrences,
  * excess-over-baseline) and NO rounding — callers needing precision beyond 2dp
  * (e.g. a pair-interaction filter comparing two raw rates) should use this
  * instead of reading `hitRate` off an `OutcomeFinding`. Returns an empty map
@@ -218,45 +218,3 @@ export function tagHitRates(
   return rates;
 }
 
-export interface TemporalFinding {
-  tag: string;
-  /** Meals (food entries with this tag) in the dataset. */
-  meals: number;
-  /** How many of those meals were followed by ≥1 outcome within windowMs. */
-  hits: number;
-  /** hits / meals. */
-  hitRate: number;
-  /** Fraction of all tagged meals that are followed by any outcome — the baseline. */
-  baseRate: number;
-  confidence: ConfidenceTier;
-}
-
-export interface TemporalOptions {
-  windowMs?: number;
-  minMeals?: number;
-}
-
-/**
- * Thin wrapper over `analyzeOutcomeRates`, grouping by ingredient tag (the
- * original, tag-specific shape of this analyzer). See `analyzeOutcomeRates`
- * for the gating/confidence-tier rules, which apply unchanged here.
- */
-export function analyzeTemporalTriggers(
-  entries: readonly LogEntry[],
-  options: TemporalOptions = {},
-): TemporalFinding[] {
-  const findings = analyzeOutcomeRates(
-    entries,
-    (meal) => parseTagsJson(meal.tagsJson).map((tag) => ({ key: tag, label: tag })),
-    { windowMs: options.windowMs, minOccurrences: options.minMeals },
-  );
-
-  return findings.map((f) => ({
-    tag: f.key,
-    meals: f.occurrences,
-    hits: f.hits,
-    hitRate: f.hitRate,
-    baseRate: f.baseRate,
-    confidence: f.confidence,
-  }));
-}
