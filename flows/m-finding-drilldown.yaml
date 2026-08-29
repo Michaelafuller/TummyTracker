@@ -1,15 +1,19 @@
 appId: com.tummytracker.app.dev
 # M — Per-food / ingredient drill-down (2026-08-24 release):
-#   - Seed 3x "Onion Dish" (sentiment 1, tags onion+garlic) + "Rice" control
+#   - Seed 3x "Onion Dish" (distinct times a few hours ago, tags onion+garlic)
+#     + "Rice" control (dated 8+ days back) + a severity-3 symptom "now"
 #     (seed-ingredient-reactions, same as d-ingredient-insights)
 #   - Tap the onion ingredient finding's card -> /insight/detail
-#   - Summary: 3 logs, 3 rated, avg sentiment 1 — deterministic. The
-#     followed-by-outcome COUNT is not: the entry form stores loggedAt at
-#     MINUTE granularity, so dishes saved in the same minute share the exact
-#     same timestamp and the strictly-after outcome rule skips them (correct
-#     by design). At least one boundary is always crossed across the seed's
-#     three ~1-min form passes, so >=1 marker is guaranteed — assert that.
+#   - Summary: "3 logs · 3 followed by a rough outcome within 24 h" —
+#     deterministic now that each onion meal's time is set explicitly via the
+#     native time picker (distinct minutes, all strictly before the seeded
+#     symptom) instead of relying on same-minute form-save timing.
 #   - Row opens the entry edit screen
+# Reworked 2026-08-28 (outcome-based insights cycle): meal/snack sentiment no
+# longer exists — the detail screen's summary is now `{count, outcomes}`
+# ("N logs · M followed by a rough outcome within 24 h",
+# src/app/insight/detail.tsx), not "logs, rated, avg sentiment"; there is no
+# per-row sentiment column to assert.
 ---
 - launchApp:
     clearState: true
@@ -28,8 +32,9 @@ appId: com.tummytracker.app.dev
 - tapOn: "See all logs: onion"
 - waitForAnimationToEnd
 
-# --- Detail screen: stable summary parts + at least one outcome marker ---
-- assertVisible: ".*3 logs · 3 rated · avg sentiment 1.*"
+# --- Detail screen: deterministic summary + at least one outcome marker ---
+- assertVisible: ".*3 logs.*"
+- assertVisible: ".*3 followed by a rough outcome within 24 h.*"
 - assertVisible: "Rough outcome within 24 h"
 
 # --- Row opens the entry editor ---

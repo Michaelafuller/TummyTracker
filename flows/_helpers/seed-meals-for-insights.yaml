@@ -1,12 +1,28 @@
 appId: com.tummytracker.app.dev
-# Helper — seeds 5 "Wheat Bread" meals (low sentiment) + 2 "Rice Bowl" meals
-# (high sentiment) to trigger analyzeFoodSentiment.
-# Ingredients omitted to avoid scroll — food name alone is enough for food
-# sentiment analysis. Assumes app is running and Home screen is visible.
-# Rewritten 2026-08-16 test-backfill for the two-screen component -> review
-# chain (Home's "Add an entry manually" opens ComponentForm, not the old
-# single-screen LogEntryForm — was stale at "Entry name").
+# Helper — seeds 5 "Wheat Bread" meals at distinct times a few hours ago today
+# + 2 "Rice Bowl" control meals dated 8+ days in the past, then one severity-3
+# symptom logged at "now" (the rough outcome, strictly after all 5 Wheat
+# Bread meals and within the 24h window) to trigger analyzeFoodOutcomes.
+# Ingredients omitted — food name alone is enough for food-outcome grouping
+# (analyzeFoodOutcomes groups by name, not tag; unlike the ingredient
+# analysis, EVERY food entry is eligible regardless of tags, so the Rice Bowl
+# controls need no tag to count toward the baseline).
+#
+# Reworked 2026-08-28 (outcome-based insights cycle): meal/snack sentiment no
+# longer exists, so the old "sentiment-1"/"sentiment-2"/"sentiment-5" taps on
+# the meal-review screen are gone. In their place, each Wheat Bread meal's
+# time is set via the native time picker's text-input mode (trigger-times.js
+# computes 5 distinct minutes sharing one hour/am-pm) and each Rice Bowl's
+# date is pushed back via the calendar picker (control-date.js) — same
+# mechanism and math as seed-ingredient-reactions.yaml; see its header
+# comment and docs/E2E.md's date/time-picker finding for the picker
+# mechanics. Two-screen ComponentForm -> meal/review entry path is unchanged
+# from the 2026-08-16 test-backfill rework.
+# Assumes app is running and Home screen is visible.
 ---
+- runScript: trigger-times.js
+- runScript: control-date.js
+
 - tapOn:
     text: "Add an entry manually"
 - assertVisible:
@@ -23,7 +39,23 @@ appId: com.tummytracker.app.dev
     text: "Finish meal"
 - waitForAnimationToEnd
 - tapOn:
-    id: "sentiment-1"
+    text: "Choose time"
+- waitForAnimationToEnd
+- tapOn:
+    text: "Switch to text input mode for the time input."
+- waitForAnimationToEnd
+- tapOn:
+    id: "android:id/input_hour"
+- inputText: "${output.triggerHour}"
+- tapOn:
+    id: "android:id/input_minute"
+- inputText: "${output.triggerMinute1}"
+- hideKeyboard
+- tapOn:
+    id: "android:id/am_pm_spinner"
+- tapOn: "${output.triggerAmPm}"
+- tapOn: "OK"
+- waitForAnimationToEnd
 - scrollUntilVisible:
     element:
       text: "Save meal"
@@ -48,7 +80,23 @@ appId: com.tummytracker.app.dev
     text: "Finish meal"
 - waitForAnimationToEnd
 - tapOn:
-    id: "sentiment-2"
+    text: "Choose time"
+- waitForAnimationToEnd
+- tapOn:
+    text: "Switch to text input mode for the time input."
+- waitForAnimationToEnd
+- tapOn:
+    id: "android:id/input_hour"
+- inputText: "${output.triggerHour}"
+- tapOn:
+    id: "android:id/input_minute"
+- inputText: "${output.triggerMinute2}"
+- hideKeyboard
+- tapOn:
+    id: "android:id/am_pm_spinner"
+- tapOn: "${output.triggerAmPm}"
+- tapOn: "OK"
+- waitForAnimationToEnd
 - scrollUntilVisible:
     element:
       text: "Save meal"
@@ -73,7 +121,23 @@ appId: com.tummytracker.app.dev
     text: "Finish meal"
 - waitForAnimationToEnd
 - tapOn:
-    id: "sentiment-1"
+    text: "Choose time"
+- waitForAnimationToEnd
+- tapOn:
+    text: "Switch to text input mode for the time input."
+- waitForAnimationToEnd
+- tapOn:
+    id: "android:id/input_hour"
+- inputText: "${output.triggerHour}"
+- tapOn:
+    id: "android:id/input_minute"
+- inputText: "${output.triggerMinute3}"
+- hideKeyboard
+- tapOn:
+    id: "android:id/am_pm_spinner"
+- tapOn: "${output.triggerAmPm}"
+- tapOn: "OK"
+- waitForAnimationToEnd
 - scrollUntilVisible:
     element:
       text: "Save meal"
@@ -98,7 +162,23 @@ appId: com.tummytracker.app.dev
     text: "Finish meal"
 - waitForAnimationToEnd
 - tapOn:
-    id: "sentiment-2"
+    text: "Choose time"
+- waitForAnimationToEnd
+- tapOn:
+    text: "Switch to text input mode for the time input."
+- waitForAnimationToEnd
+- tapOn:
+    id: "android:id/input_hour"
+- inputText: "${output.triggerHour}"
+- tapOn:
+    id: "android:id/input_minute"
+- inputText: "${output.triggerMinute4}"
+- hideKeyboard
+- tapOn:
+    id: "android:id/am_pm_spinner"
+- tapOn: "${output.triggerAmPm}"
+- tapOn: "OK"
+- waitForAnimationToEnd
 - scrollUntilVisible:
     element:
       text: "Save meal"
@@ -123,7 +203,60 @@ appId: com.tummytracker.app.dev
     text: "Finish meal"
 - waitForAnimationToEnd
 - tapOn:
-    id: "sentiment-1"
+    text: "Choose time"
+- waitForAnimationToEnd
+- tapOn:
+    text: "Switch to text input mode for the time input."
+- waitForAnimationToEnd
+- tapOn:
+    id: "android:id/input_hour"
+- inputText: "${output.triggerHour}"
+- tapOn:
+    id: "android:id/input_minute"
+- inputText: "${output.triggerMinute5}"
+- hideKeyboard
+- tapOn:
+    id: "android:id/am_pm_spinner"
+- tapOn: "${output.triggerAmPm}"
+- tapOn: "OK"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "Save meal"
+    direction: DOWN
+- tapOn:
+    text: "Save meal"
+- waitForAnimationToEnd
+- waitForAnimationToEnd
+- assertVisible: "TummyTracker"
+
+# Controls: dated well outside every outcome window so they contribute to the
+# baseline denominator (every named food entry is eligible for
+# analyzeFoodOutcomes) but are never themselves a hit.
+- tapOn:
+    text: "Add an entry manually"
+- tapOn:
+    text: "Component name"
+- inputText: "Rice Bowl"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Finish meal"
+    direction: DOWN
+- tapOn:
+    text: "Finish meal"
+- waitForAnimationToEnd
+- tapOn:
+    text: "Choose date"
+- waitForAnimationToEnd
+- repeat:
+    times: ${output.controlMonthsBack}
+    commands:
+      - tapOn:
+          text: "Previous month"
+- tapOn: "${output.controlDateLabel}"
+- tapOn: "OK"
+- waitForAnimationToEnd
 - scrollUntilVisible:
     element:
       text: "Save meal"
@@ -148,7 +281,16 @@ appId: com.tummytracker.app.dev
     text: "Finish meal"
 - waitForAnimationToEnd
 - tapOn:
-    id: "sentiment-5"
+    text: "Choose date"
+- waitForAnimationToEnd
+- repeat:
+    times: ${output.controlMonthsBack}
+    commands:
+      - tapOn:
+          text: "Previous month"
+- tapOn: "${output.controlDateLabel}"
+- tapOn: "OK"
+- waitForAnimationToEnd
 - scrollUntilVisible:
     element:
       text: "Save meal"
@@ -159,27 +301,13 @@ appId: com.tummytracker.app.dev
 - waitForAnimationToEnd
 - assertVisible: "TummyTracker"
 
-- tapOn:
-    text: "Add an entry manually"
-- tapOn:
-    text: "Component name"
-- inputText: "Rice Bowl"
-- hideKeyboard
-- scrollUntilVisible:
-    element:
-      text: "Finish meal"
-    direction: DOWN
-- tapOn:
-    text: "Finish meal"
+# The outcome: a significant symptom logged at "now" — strictly after all
+# five Wheat Bread meals (set hours in the past above) and within the 24h
+# window.
+- tapOn: "Log a symptom"
 - waitForAnimationToEnd
-- tapOn:
-    id: "sentiment-5"
-- scrollUntilVisible:
-    element:
-      text: "Save meal"
-    direction: DOWN
-- tapOn:
-    text: "Save meal"
-- waitForAnimationToEnd
+- tapOn: "Bloating"
+- tapOn: "Severity 3: Significant"
+- tapOn: "Save"
 - waitForAnimationToEnd
 - assertVisible: "TummyTracker"

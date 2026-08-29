@@ -84,15 +84,15 @@ maestro test flows/ --format junit --output flows/results.xml
 | ACCEPTANCE.md item | Flow file | Status |
 |---|---|---|
 | Phase 0 — app launches | `flows/00-launch.yaml` | ✅ Automated |
-| 1b — manual entry (two-screen ComponentForm → meal/review), notes counter, SQLite persist | `flows/01b-manual-entry.yaml` | ✅ Automated (notes counter *wiring* only — the 500-char overflow clamp is Jest-covered, not re-driven on-device; see the reconnect/text-injection finding below) |
+| 1b — manual entry (two-screen ComponentForm → meal/review), notes counter, SQLite persist | `flows/01b-manual-entry.yaml` | ✅ Automated (notes counter *wiring* only — the 500-char overflow clamp is Jest-covered, not re-driven on-device; see the reconnect/text-injection finding below; reworked + verified 2026-08-28: sentiment removed, no rating step on the meal-review screen anymore) |
 | 1c — barcode scan (real product) | — | ❌ Camera required |
 | 1c — manual fallback from scan screen | `flows/01c-barcode-fallback.yaml` | ✅ Automated |
 | OFF search-by-name lookup | — | ❌ Manual (network, real product DB — same class as a real barcode scan) |
-| 1d — day/week/month views, edit sentiment | `flows/01d-browse-edit.yaml` | ✅ Automated |
+| 1d — day/week/month views, edit Notes | `flows/01d-browse-edit.yaml` | ✅ Automated (reworked + verified 2026-08-28: meal/snack sentiment no longer exists, so the edit target changed from "change its sentiment" to "edit its Notes field, save, reopen, verify the new text persisted") |
 | 1d — day/week/month + collapse/expand calendar | `flows/journal-calendar.yaml` | ✅ Automated |
 | 1e — reminder toggle, permission prompt | `flows/01e-reminders.yaml` | ⚠️ Partial (fires at scheduled time: manual) |
 | 2 — log BM, filter, coexists with food | `flows/02-bm-tracking.yaml` | ✅ Automated |
-| 3 — Insights renders findings, observation framing | `flows/03-insights.yaml` | ✅ Automated |
+| 3 — Insights renders findings, observation framing | `flows/03-insights.yaml` | ✅ Automated (reworked + verified 2026-08-28: asserts the renamed "Foods linked to rough outcomes" section and the outcomeSentence fragment instead of the old sentiment-era "Based on N logs." sample line, which no longer renders for food findings) |
 | UX-1 — title doesn't wrap | — | ❌ Visual only |
 | UX-2 — segmented control contrast | — | ❌ Visual/colour only |
 | UX-3 — scan screen buttons visible | `flows/ux3-scan-screen.yaml` | ✅ Automated |
@@ -105,9 +105,9 @@ maestro test flows/ --format junit --output flows/results.xml
 | Ingredient-capture hardening — additive-only tag policy | `flows/ab-satfat-ingredients.yaml` (extend) | ✅ Automated — proxied via the watchlist banner (no direct tag-list UI exists anywhere in the app) |
 | C — symptom log, render, filter, edit reload | `flows/c-symptom-logging.yaml` | ✅ Automated |
 | C2 — multi-symptom: two chips, one save → two journal entries, per-entry edit with shared severity | `flows/c2-multi-symptom.yaml` | ✅ Automated (authored + passed individually 2026-08-24, fresh-bundle-verified) |
-| D — "Ingredients you react to" insight | `flows/d-ingredient-insights.yaml` | ✅ Automated |
-| E — summary counts (food · BM · rated) | `flows/e-temporal-insights.yaml` | ✅ Automated |
-| E — "Timing patterns" section | — | ❌ Manual (24h windowed join can't be constructed deterministically in clearState) |
+| D — "Ingredients linked to rough outcomes" insight | `flows/d-ingredient-insights.yaml` | ✅ Automated (reworked + verified 2026-08-28: renamed section, cards now cite an outcome-rate sentence instead of an average sentiment) |
+| E — summary counts (food · BM · symptoms · rough outcomes) | `flows/e-temporal-insights.yaml` | ✅ Automated (reworked + verified 2026-08-28: new 5-field summary line) |
+| E — "Timing patterns" section | — | **Superseded 2026-08-28** — the section no longer exists (merged into the ingredient analysis; `analyzeIngredientOutcomes` *is* the timing analysis now, `src/features/analysis/insights.ts`). What was manual (a 24h windowed join couldn't be constructed deterministically in a `clearState` run) is now fully automated and deterministic — `flows/_helpers/seed-ingredient-reactions.yaml` / `seed-meals-for-insights.yaml` drive the native date/time picker to set exact, distinct-minute meal times instead of relying on real-clock timing, so the outcome join is no longer a race. See `flows/d-ingredient-insights.yaml` and `flows/m-finding-drilldown.yaml` for the coverage this folded into, and the new "driving the native date/time picker" finding below for the mechanism. |
 | Nav — 5 bottom tabs reachable | `flows/nav-tabs.yaml` | ✅ Automated |
 | Settings — offline toggle + sections render | `flows/settings-smoke.yaml` | ✅ Automated (offline-mode switch value is not assertable in Maestro → manual regardless) |
 | Watchlist — add term, non-blocking flag on review + entry view | `flows/watchlist.yaml` | ✅ Automated — targets the **Insights** tab, not Settings (`WatchlistSection` renders in `src/app/(tabs)/insights.tsx`) |
@@ -115,7 +115,7 @@ maestro test flows/ --format junit --output flows/results.xml
 | J — meal-component drill-down: servings edit re-aggregates totals, swipe-delete + editor Delete (confirms), section hides at 1 component, relaunch persistence | `flows/j-component-drilldown.yaml` | ✅ Automated (authored 2026-08-24; recorded green + confirmation re-run) |
 | K — BM trends: Insights "Digestion" section (regularity line, weekly count bars, Bristol histogram) with 2 seeded BMs; chart a11y summaries asserted | `flows/k-bm-trends.yaml` | ✅ Automated (authored 2026-08-24; caught the missing-`accessible` a11y bug, gotcha #5) |
 | L — intake charts: Insights "Intake" section (Calories + Fiber weekly avg/day) from one 210 kcal / 7 g-fiber meal; summaries asserted | `flows/l-intake-charts.yaml` | ✅ Automated (authored 2026-08-24; passed first try) |
-| M — finding drill-down: tap "See all logs: onion" → detail summary, outcome marker, row → Edit entry | `flows/m-finding-drilldown.yaml` | ✅ Automated (authored 2026-08-24; see gotcha #6 on outcome-count determinism) |
+| M — finding drill-down: tap "See all logs: onion" → detail summary, outcome marker, row → Edit entry | `flows/m-finding-drilldown.yaml` | ✅ Automated (authored 2026-08-24; reworked + verified 2026-08-28 for the outcome-based detail summary — the outcome count is now fully deterministic, not just "at least one" as gotcha #6 previously required, since each onion meal's time is set explicitly via the native picker rather than relying on same-minute form-save timing) |
 | Goals — floor/cap thresholds, cap notice, removal | `flows/goal-editor.yaml` | ✅ Automated |
 | Check-in persistence + 7-day horizon | `flows/checkin-persistence.yaml` | ✅ Automated |
 
@@ -257,41 +257,105 @@ occurred:**
    assert the stable parts (totals, at-least-one marker), not exact
    order-dependent counts.
 
-**Finding — wide blast radius from the 2026-08-28 sentiment removal (owed,
-next test-execute session):** meal/snack sentiment was deleted in favor of
-outcome-based correlation (`isOutcome` v2 — bad BM, BM feel ≤2, or symptom
-severity ≥3; see `docs/PROGRESS.md` Decisions 4 & 7). Every flow or seed
-helper that rated a meal, or asserted UI text derived from meal sentiment,
-is stale and needs a rework before its next run:
-1. `flows/01b-manual-entry.yaml` — asserts a sentiment step in the
-   meal-review screen; that step no longer exists (meal forms show no
-   rating selector at all).
-2. `flows/01d-browse-edit.yaml` — its whole purpose was opening a past entry
-   and editing its stored sentiment, which is no longer possible for a
-   meal/snack; repurpose the flow to exercise a different edit field.
+**Finding — wide blast radius from the 2026-08-28 sentiment removal (resolved
+2026-08-28):** meal/snack sentiment was deleted in favor of outcome-based
+correlation (`isOutcome` v2 — bad BM, BM feel ≤2, or symptom severity ≥3; see
+`docs/PROGRESS.md` Decisions 4 & 7). Every flow or seed helper that rated a
+meal, or asserted UI text derived from meal sentiment, was stale — all six
+items below (plus their transitive dependents: `flows/03-insights.yaml` via
+`seed-meals-for-insights.yaml`, and `flows/journal-calendar.yaml` /
+`flows/h-recent-foods.yaml` / `flows/i-backup.yaml` / `flows/c-symptom-logging.yaml`
+via `seed-two-meals.yaml`) were reworked and individually verified green on
+the connected Pixel 5 this session. The seed helpers no longer rely on
+same-minute form-save timing to produce (or avoid) an outcome match — they
+now drive the native date/time picker to set exact, distinct-minute meal
+times deterministically; see the new finding below on driving that picker.
+The rework, for the record:
+1. `flows/01b-manual-entry.yaml` — removed the stale sentiment tap on the
+   meal-review screen (meal forms show no rating selector at all now).
+2. `flows/01d-browse-edit.yaml` — repurposed from "open a past entry and edit
+   its sentiment" (no longer possible for a meal/snack) to "edit its Notes
+   field, save, reopen, verify the new text persisted."
 3. `flows/_helpers/seed-two-meals.yaml`, `flows/_helpers/seed-meals-for-insights.yaml`,
-   `flows/_helpers/seed-ingredient-reactions.yaml` — all seed sentiment-rated
-   meals to give the old sentiment analyses something to find; they must
-   instead seed symptom/BM entries that produce a rough outcome within 24h
-   of the food, or the new outcome-based analyses will have nothing to
-   report and every flow that `runFlow`s these helpers will fail downstream.
-4. `flows/m-finding-drilldown.yaml` — asserts the old detail-screen summary
-   line ("logs, rated, avg sentiment, outcome count") and a per-row
-   sentiment column; the summary is now `{count, outcomes}` and the screen
-   reads "N logs · M followed by a rough outcome within 24 h".
-5. `flows/e-temporal-insights.yaml` — exercised the standalone "Timing
-   patterns" section, which no longer exists (merged into the Ingredients
-   analysis, same underlying engine); the food/BM/symptom summary-count
-   assertions likely still hold, but the section-specific ones do not.
-6. `flows/d-ingredient-insights.yaml` — asserts the "Ingredients you react
-   to" title and that cards "cite average sentiment"; the section is
-   renamed "Ingredients linked to rough outcomes" and cards now cite an
-   outcome rate vs. baseline, not a sentiment average.
+   `flows/_helpers/seed-ingredient-reactions.yaml` — dropped the sentiment
+   taps. `seed-two-meals.yaml` needed nothing else (its dependents only need
+   two named entries to exist). The other two now seed symptom/BM entries
+   that produce a rough outcome within 24h of the food — see the seed-design
+   math in the new date/time-picker finding below.
+4. `flows/m-finding-drilldown.yaml` — now asserts the new detail-screen
+   summary (`{count, outcomes}`, "N logs · M followed by a rough outcome
+   within 24 h") instead of the old "logs, rated, avg sentiment" line, with
+   no per-row sentiment column.
+5. `flows/e-temporal-insights.yaml` — the standalone "Timing patterns"
+   section is gone (merged into the Ingredients analysis, same underlying
+   engine); reworked to assert the new 5-field summary line
+   (`{total} entries · {food} food · {bm} BM · {symptoms} symptoms ·
+   {roughOutcomes} rough outcomes`).
+6. `flows/d-ingredient-insights.yaml` — the section is renamed "Ingredients
+   linked to rough outcomes" and cards now cite an outcome rate vs.
+   baseline (`outcomeSentence`), not an average sentiment.
 
 `flows/02-bm-tracking.yaml` is **unaffected** — bowel-movement logging and
-its Bristol/feel-afterward rating are untouched by this cycle. This is a
-list of what needs to change and why; the flows themselves are not
-rewritten here.
+its Bristol/feel-afterward rating are untouched by this cycle (a BM's "How
+did it feel?" rating is a distinct, still-live field — see
+`src/features/bm/BmForm.tsx` — unlike the deleted meal/snack sentiment).
+
+**Finding — driving the native Android date/time picker to a specific value
+(2026-08-28, new capability):** the outcome-based analyses need meals at
+known, distinct times/dates — no longer satisfiable by letting several
+form-saves land wherever the real clock happens to be (gotcha #6). Maestro
+has no built-in "set this date" command, but the underlying native pickers
+are drivable via their accessibility tree:
+- **Time** (`DateTimePicker` in `mode="time"`, Android's clock-face
+  `TimePickerDialog`): tap the picker's pencil/keyboard toggle,
+  accessibility label **"Switch to text input mode for the time input."**
+  (`android:id/toggle_mode`), to switch from the clock face to two `EditText`
+  fields: `android:id/input_hour` and `android:id/input_minute` (select by
+  `id:`, then `inputText`). The am/pm control is a `Spinner`
+  (`android:id/am_pm_spinner`) — tap it to open the dropdown, then tap
+  `"AM"` or `"PM"` (each is its own list item, full-text-match safe). Confirm
+  with `tapOn: "OK"` (or `"Set"` — see the existing troubleshooting-table
+  entry).
+- **Date** (`DateTimePicker` in `mode="date"`, Android's `DatePickerDialog`):
+  this dialog has **no text-input toggle** on this OS build — it's
+  calendar-grid-only. Each day cell's `accessibilityText` is a full label
+  like `"20 August 2026"` (always 2-digit day) — full-text-match tap that,
+  then `"Previous month"` / `"Next month"` buttons to change months, then
+  `tapOn: "OK"`.
+- Neither the day-of-month nor the month/year is knowable at flow-authoring
+  time, so hardcoding a literal date string only works for one calendar day.
+  Both new seed helpers instead use a `runScript:` step (a small JS file
+  under `flows/_helpers/`) that computes the needed value from `new Date()`
+  at run time and writes it to Maestro's `output` object; later steps
+  reference it as `${output.someKey}` in `tapOn`/`inputText` (confirmed
+  working for both string interpolation and a `repeat: times: ${output.n}`
+  loop, which correctly executes zero iterations when the count is 0).
+  `flows/_helpers/trigger-times.js` computes up to 5 distinct minutes
+  "a few hours ago, today" (sharing one hour + am/pm, so one spinner
+  selection covers all of them) without crossing local midnight backward;
+  `flows/_helpers/control-date.js` computes a "N days ago" day-cell label
+  plus how many `"Previous month"` taps are needed to reach it, verified
+  against both a same-month case (8 days back) and a month-crossing case (35
+  days back, 1 "Previous month" tap) live on-device. Both scripts are
+  reusable by any future flow that needs a deterministic relative
+  time/date — see their header comments for the exact contract.
+
+**Finding — a caught dynamic-import failure still surfaces a LogBox redbox
+(2026-08-28, dev-build-only, not a functional bug):** the owed old-client
+doctor-report spot-check confirmed `handleCreateReport`'s graceful fallback
+works correctly on a build without the `expo-print` native module — the
+`try/catch` around `await import('expo-print')` (`src/app/(tabs)/settings.tsx`
+line 152) does run and does show the intended "Update required" alert.
+**But** the failed dynamic import *also* triggers a React Native LogBox
+"Uncaught Error: Cannot find native module 'ExpoPrint'" redbox on top of
+that alert — confirmed via screenshot: dismissing the redbox (`tapOn:
+"Dismiss"`) reveals the "Update required" alert was already showing
+underneath the whole time. LogBox is a dev-build-only overlay (stripped from
+release/production builds), so this is cosmetic dev-mode noise, not a
+regression in the graceful-degradation contract — but any future flow that
+exercises this path needs an `optional: true` dismiss of the redbox before
+asserting on the alert, since the redbox otherwise sits on top and blocks
+the alert's own tap targets.
 
 See `docs/RESULTS.md` (2026-08-16/17) for the full diagnosis and the flows each
 fix landed in.

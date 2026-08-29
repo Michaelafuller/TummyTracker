@@ -1,9 +1,18 @@
 appId: com.tummytracker.app.dev
-# E — Temporal insights (partial / best-effort):
-#   Assert the Insights summary counts render correctly after seeding food entries.
-#   "Timing patterns" requires a 24h windowed join between food and adverse outcome;
-#   that gap cannot be constructed deterministically in a clearState run without
-#   driving the native date/time picker for every entry — left as manual per spec.
+# E — Insights summary counts (food · BM · symptoms · rough outcomes).
+# Reworked 2026-08-28 (outcome-based insights cycle): the standalone "Timing
+# patterns" section no longer exists — it was merged into the ingredient
+# analysis (src/features/analysis/temporal.ts's analyzeIngredientOutcomes IS
+# the timing analysis now; there is no separate finding set). The summary
+# line itself changed shape too: "{total} entries · {food} food · {bm} BM ·
+# {symptoms} symptoms · {roughOutcomes} rough outcomes"
+# (src/app/(tabs)/insights.tsx). The BM logged below (Bristol 4, feel rating
+# 4) is deliberately NOT a rough outcome — isBadBristol(4) is false and
+# feel<=2 is false (src/features/analysis/temporal.ts isOutcome) — so this
+# flow's seed data always renders "0 rough outcomes"; that's still real
+# summary-line coverage, just not the outcome-count path (see
+# m-finding-drilldown.yaml / d-ingredient-insights.yaml for seeds that do
+# produce a rough outcome).
 ---
 - launchApp:
     clearState: true
@@ -31,16 +40,13 @@ appId: com.tummytracker.app.dev
       text: "Your journal so far"
     direction: DOWN
 - assertVisible: "Your journal so far"
-# The summary DATA line ("<n> entries · <n> food · <n> BM · <n> rated · avg
-# sentiment <x>") is a single Text node (src/app/(tabs)/insights.tsx ~line
-# 145), not four separate ones. Maestro's text selector does a FULL regex
-# match against a node's whole text (Pattern.matches), not a substring
-# search — asserting a bare "food"/"BM"/"rated" against this combined line
-# always fails, timing/scrolling aside (confirmed live: identical failure
-# whether via scrollUntilVisible, a plain assertVisible with no scroll, or
-# immediately after a fresh render — only wildcard-wrapped regexes like
-# ".*food.*" match a substring within a longer node). See docs/E2E.md's
+# The summary DATA line is a single Text node (src/app/(tabs)/insights.tsx),
+# not five separate ones. Maestro's text selector does a FULL regex match
+# against a node's whole text (Pattern.matches), not a substring search —
+# asserting a bare "food"/"BM"/"symptoms"/"rough outcomes" against this
+# combined line always fails, timing/scrolling aside. See docs/E2E.md's
 # flow-authoring gotchas for the general rule.
-- assertVisible: ".*BM.*"
 - assertVisible: ".*food.*"
-- assertVisible: ".*rated.*"
+- assertVisible: ".*BM.*"
+- assertVisible: ".*symptoms.*"
+- assertVisible: ".*rough outcomes.*"

@@ -2,7 +2,13 @@ appId: com.tummytracker.app.dev
 # Phase 1d — Browse and edit:
 #   - Entries grouped by day in Journal
 #   - Day / Week / Month calendar toggle
-#   - Open an entry, change its sentiment, save; verify the form accepted it
+#   - Open an entry, edit its Notes, save; reopen and verify the new text persisted
+# Reworked 2026-08-28 (outcome-based insights cycle): meal/snack sentiment no
+# longer exists, so "change its sentiment" is no longer possible for a
+# meal/snack (LogEntryForm has no rating selector — src/features/logging/LogEntryForm.tsx).
+# Repurposed to edit the Notes field instead, which persists across reopen —
+# a real field, still on this form, still exercises the same save/reload
+# round trip the original flow verified.
 ---
 - launchApp:
     clearState: true
@@ -36,17 +42,17 @@ appId: com.tummytracker.app.dev
 
 - tapOn: "All"
 
-# --- Edit entry: open Oatmeal and change sentiment ---
+# --- Edit entry: open Oatmeal and change its Notes ---
 - tapOn: "Oatmeal"
 - waitForAnimationToEnd
 
-# Change from "very satisfied" to "neutral"
 - scrollUntilVisible:
     element:
-      id: "sentiment-3"
+      text: "Ingredients (optional)"
     direction: DOWN
-- tapOn:
-    id: "sentiment-3"
+- tapOn: "Notes"
+- inputText: "Edited via 01d-browse-edit"
+- hideKeyboard
 
 - scrollUntilVisible:
     element:
@@ -58,3 +64,12 @@ appId: com.tummytracker.app.dev
 
 # Back in journal — edit completed without crashing
 - assertVisible: "Journal"
+
+# --- Reopen and verify the new Notes text persisted ---
+- tapOn: "Oatmeal"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "Edited via 01d-browse-edit"
+    direction: DOWN
+- assertVisible: "Edited via 01d-browse-edit"

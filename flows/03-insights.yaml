@@ -1,9 +1,11 @@
 appId: com.tummytracker.app.dev
-# Phase 3 — Insights: screen renders with seeded data and shows at least one
-# food finding ("Wheat Bread") with a sample-size citation ("across N logs").
-# NOTE: "Observation only" framing appears only when temporal data exists
-# (food entries followed by BM/symptom entries). That path requires physical
-# device timing and is left as a manual check per ACCEPTANCE.md.
+# Phase 3 — Insights: screen renders with seeded data and shows a food finding
+# ("Wheat Bread") citing the outcome-rate sentence.
+# Reworked 2026-08-28 (outcome-based insights cycle): meal/snack sentiment is
+# gone, so the old "sample-size citation" assertion ("Based on 5 logs.") no
+# longer exists — Card only renders a `sample` line for nutrient findings
+# (src/app/(tabs)/insights.tsx), not food/ingredient/pair findings. Assert the
+# renamed section title and the shared outcomeSentence fragment instead.
 ---
 - launchApp:
     clearState: true
@@ -15,16 +17,21 @@ appId: com.tummytracker.app.dev
     text: "Insights"
 - waitForAnimationToEnd
 
-- assertVisible: "Insights"
+- assertVisible: "Your journal so far"
 
-# Food finding should name the seeded food and cite a sample size
+# Food finding should name the seeded food and cite the outcome-rate sentence
 - scrollUntilVisible:
     element:
-      text: "Wheat Bread"
+      text: "Foods linked to rough outcomes"
     direction: DOWN
+- assertVisible: "Foods linked to rough outcomes"
+# The section title can be on-screen while its first card sits just below the
+# fold (gotcha #3) — scroll to the card's own body text, not just the header,
+# before asserting either fragment.
+- scrollUntilVisible:
+    element:
+      text: ".*were followed by a rough outcome within 24 h.*"
+    direction: DOWN
+    centerElement: true
 - assertVisible: "Wheat Bread"
-- scrollUntilVisible:
-    element:
-      text: "Based on 5 logs."
-    direction: DOWN
-- assertVisible: "Based on 5 logs."
+- assertVisible: ".*were followed by a rough outcome within 24 h.*"

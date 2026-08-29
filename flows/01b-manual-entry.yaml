@@ -3,8 +3,11 @@ appId: com.tummytracker.app.dev
 # "OFF search-by-name lookup" cycle, 2026-07-03): Home's "Add an entry
 # manually" opens the component-confirm screen (ComponentForm), then "Finish
 # meal" lands on the meal review screen for the meal-level fields (name, slot,
-# sentiment, notes, 500-char limit). Verifies the full two-screen flow persists
-# across an app restart (SQLite round-trip).
+# notes, 500-char limit). Verifies the full two-screen flow persists across an
+# app restart (SQLite round-trip).
+# Reworked 2026-08-28 (outcome-based insights cycle): meal/snack sentiment no
+# longer exists — dropped the old "sentiment-4" tap (the meal-review screen
+# has no rating selector at all now).
 ---
 - launchApp:
     clearState: true
@@ -64,9 +67,6 @@ appId: com.tummytracker.app.dev
 
 - tapOn:
     text: "Lunch"
-
-- tapOn:
-    id: "sentiment-4"
 
 # Notes — exercise the field + counter with a modest, reliably-typeable string.
 # NOT testing the 500-char overflow cap here: injecting long text via ADB's

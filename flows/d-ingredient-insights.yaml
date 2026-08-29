@@ -1,10 +1,16 @@
 appId: com.tummytracker.app.dev
-# D — "Ingredients you react to" insight:
-#   Seed ≥ 3 rated food entries sharing "onion" tag (MIN_TAG_OCCURRENCES = 3),
-#   navigate to Insights, assert the section and the tag card appear.
-#   NOTE: manual ingredients ARE tag-extracted (buildLogEntry calls extractTags
-#   when tagsJson is empty and ingredientsText is set — confirmed in formModel.ts).
+# D — "Ingredients linked to rough outcomes" insight:
+#   Seed >= 3 food entries sharing the "onion" tag (analyzeIngredientOutcomes's
+#   DEFAULT_MIN_MEALS = 3), each followed by a rough outcome within 24h,
+#   navigate to Insights, assert the section, card, and outcome-rate sentence.
+#   NOTE: manual ingredients ARE tag-extracted (buildLogEntry/buildMealEntry
+#   call extractTags when tagsJson is empty and ingredientsText is set).
 #   Tags are normalized to lowercase, so assert "onion" not "Onion".
+# Reworked 2026-08-28 (outcome-based insights cycle): meal/snack sentiment no
+# longer exists — the section was renamed from "Ingredients you react to" to
+# "Ingredients linked to rough outcomes" and cards now cite an outcome rate
+# vs. baseline (outcomeSentence, src/app/(tabs)/insights.tsx), not an average
+# sentiment.
 ---
 - launchApp:
     clearState: true
@@ -16,8 +22,17 @@ appId: com.tummytracker.app.dev
 - assertVisible: "Your journal so far"
 - scrollUntilVisible:
     element:
-      text: "Ingredients you react to"
+      text: "Ingredients linked to rough outcomes"
     direction: DOWN
-- assertVisible: "Ingredients you react to"
-# The card title is finding.tag (lowercase) from analyzeIngredientSentiment
-- assertVisible: "onion"
+- assertVisible: "Ingredients linked to rough outcomes"
+# The section title can be on-screen while its first card sits just below the
+# fold (gotcha #3) — scroll to the card's own body text, not just the header,
+# before asserting either fragment.
+- scrollUntilVisible:
+    element:
+      text: ".*were followed by a rough outcome within 24 h.*"
+    direction: DOWN
+    centerElement: true
+# The card title is finding.label (lowercase) from analyzeIngredientOutcomes
+- assertVisible: ".*onion.*"
+- assertVisible: ".*were followed by a rough outcome within 24 h.*"

@@ -1,17 +1,28 @@
 appId: com.tummytracker.app.dev
-# Helper — seeds 3 "Onion Dish" meals with sentiment 1 and "onion, garlic"
-# ingredients, each time building tagsJson via extractTags so "onion" and "garlic"
-# accumulate ≥ MIN_TAG_OCCURRENCES (3) in rated food entries.
-# Insights v2 (Phase 3) made ingredient findings baseline-relative — a tag's
-# average sentiment is compared against the mean of all OTHER rated food
-# entries, so at least one high-sentiment control entry is needed or there is
-# no baseline to compare against and no finding surfaces at all. "Rice" below
-# is that control (sentiment 5, no ingredients tag).
+# Helper — seeds 3 "Onion Dish" meals (tags onion+garlic) at distinct times a
+# few hours ago today, 1 "Rice" control meal dated 8+ days in the past (a
+# different tag, so it counts toward analyzeIngredientOutcomes's baseline
+# denominator without ever being a hit), and one severity-3 symptom logged at
+# "now" — the rough outcome that lands strictly after all three onion meals
+# and within the 24h window (temporal.ts's DEFAULT_WINDOW_MS), giving onion a
+# 3/3 hit rate against a lower baseline. See docs/E2E.md's "2026-08-28
+# sentiment removal" finding and the seed-design comment in the test-execute
+# handoff for the analysis math this satisfies.
+#
+# Reworked 2026-08-28 (outcome-based insights cycle): meal/snack sentiment no
+# longer exists (removed from the schema and every form), so the old
+# "sentiment-1" taps on the meal-review screen are gone. In their place, each
+# onion meal's time is set via the native time picker's text-input mode
+# (trigger-times.js computes 3 distinct minutes sharing one hour/am-pm, all a
+# few hours before whatever "now" is when the flow runs) and the rice
+# control's date is pushed back via the calendar picker (control-date.js).
+# Two-screen ComponentForm -> meal/review entry path is unchanged from the
+# 2026-08-16 test-backfill rework.
 # Assumes app is already running and the Home screen is visible.
-# Rewritten 2026-08-16 test-backfill for the two-screen component -> review
-# chain (Ingredients now lives on ComponentForm, not the meal-review screen —
-# was stale at "Entry name").
 ---
+- runScript: trigger-times.js
+- runScript: control-date.js
+
 - tapOn: "Add an entry manually"
 - assertVisible:
     text: "Component name"
@@ -33,7 +44,23 @@ appId: com.tummytracker.app.dev
 - tapOn: "Finish meal"
 - waitForAnimationToEnd
 - tapOn:
-    id: "sentiment-1"
+    text: "Choose time"
+- waitForAnimationToEnd
+- tapOn:
+    text: "Switch to text input mode for the time input."
+- waitForAnimationToEnd
+- tapOn:
+    id: "android:id/input_hour"
+- inputText: "${output.triggerHour}"
+- tapOn:
+    id: "android:id/input_minute"
+- inputText: "${output.triggerMinute1}"
+- hideKeyboard
+- tapOn:
+    id: "android:id/am_pm_spinner"
+- tapOn: "${output.triggerAmPm}"
+- tapOn: "OK"
+- waitForAnimationToEnd
 - scrollUntilVisible:
     element:
       text: "Save meal"
@@ -62,7 +89,23 @@ appId: com.tummytracker.app.dev
 - tapOn: "Finish meal"
 - waitForAnimationToEnd
 - tapOn:
-    id: "sentiment-1"
+    text: "Choose time"
+- waitForAnimationToEnd
+- tapOn:
+    text: "Switch to text input mode for the time input."
+- waitForAnimationToEnd
+- tapOn:
+    id: "android:id/input_hour"
+- inputText: "${output.triggerHour}"
+- tapOn:
+    id: "android:id/input_minute"
+- inputText: "${output.triggerMinute2}"
+- hideKeyboard
+- tapOn:
+    id: "android:id/am_pm_spinner"
+- tapOn: "${output.triggerAmPm}"
+- tapOn: "OK"
+- waitForAnimationToEnd
 - scrollUntilVisible:
     element:
       text: "Save meal"
@@ -91,7 +134,23 @@ appId: com.tummytracker.app.dev
 - tapOn: "Finish meal"
 - waitForAnimationToEnd
 - tapOn:
-    id: "sentiment-1"
+    text: "Choose time"
+- waitForAnimationToEnd
+- tapOn:
+    text: "Switch to text input mode for the time input."
+- waitForAnimationToEnd
+- tapOn:
+    id: "android:id/input_hour"
+- inputText: "${output.triggerHour}"
+- tapOn:
+    id: "android:id/input_minute"
+- inputText: "${output.triggerMinute3}"
+- hideKeyboard
+- tapOn:
+    id: "android:id/am_pm_spinner"
+- tapOn: "${output.triggerAmPm}"
+- tapOn: "OK"
+- waitForAnimationToEnd
 - scrollUntilVisible:
     element:
       text: "Save meal"
@@ -101,23 +160,52 @@ appId: com.tummytracker.app.dev
 - waitForAnimationToEnd
 - assertVisible: "TummyTracker"
 
+# Control: a different tag ("rice"), dated well outside every outcome window
+# so it contributes to the baseline denominator but is never itself a hit.
 - tapOn: "Add an entry manually"
 - tapOn: "Component name"
 - inputText: "Rice"
 - hideKeyboard
 - scrollUntilVisible:
     element:
+      text: "Ingredients (optional)"
+    direction: DOWN
+- tapOn: "Ingredients"
+- inputText: "rice"
+- hideKeyboard
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
       text: "Finish meal"
     direction: DOWN
 - tapOn: "Finish meal"
 - waitForAnimationToEnd
 - tapOn:
-    id: "sentiment-5"
+    text: "Choose date"
+- waitForAnimationToEnd
+- repeat:
+    times: ${output.controlMonthsBack}
+    commands:
+      - tapOn:
+          text: "Previous month"
+- tapOn: "${output.controlDateLabel}"
+- tapOn: "OK"
+- waitForAnimationToEnd
 - scrollUntilVisible:
     element:
       text: "Save meal"
     direction: DOWN
 - tapOn: "Save meal"
 - waitForAnimationToEnd
+- waitForAnimationToEnd
+- assertVisible: "TummyTracker"
+
+# The outcome: a significant symptom logged at "now" — strictly after all
+# three onion meals (set hours in the past above) and within the 24h window.
+- tapOn: "Log a symptom"
+- waitForAnimationToEnd
+- tapOn: "Bloating"
+- tapOn: "Severity 3: Significant"
+- tapOn: "Save"
 - waitForAnimationToEnd
 - assertVisible: "TummyTracker"
