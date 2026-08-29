@@ -362,6 +362,19 @@ export async function removeWatchlistItem(id: string): Promise<void> {
   await db.delete(watchlistItem).where(eq(watchlistItem.id, id));
 }
 
+/**
+ * Renames a watched term in place. `createdAt` is untouched — that IS the
+ * point: it's the "watched since" anchor driving `timesSinceWatch`/`cleanDays`
+ * (src/lib/watchlist.ts `computeWatchStats`), so a typo fix must not reset
+ * watch history the way remove-then-re-add would. Caller passes an
+ * already-normalized term (src/lib/watchlist.ts `normalizeWatchTerm`) — this
+ * only persists it. The UNIQUE index on `term` makes a duplicate rename throw;
+ * that propagates to the caller (the store layer decides how to handle it).
+ */
+export async function renameWatchlistItem(id: string, term: string): Promise<void> {
+  await db.update(watchlistItem).set({ term }).where(eq(watchlistItem.id, id));
+}
+
 /** All nutrient threshold goals, alphabetical by nutrient. */
 export async function listGoals(): Promise<Goal[]> {
   return db.select().from(goal).orderBy(asc(goal.nutrient));

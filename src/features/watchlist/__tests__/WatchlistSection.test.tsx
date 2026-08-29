@@ -1,6 +1,6 @@
 import { fireEvent, render } from '@testing-library/react-native';
 
-import { addWatchlistItem, listWatchlistItems, removeWatchlistItem } from '@/db/repository';
+import { addWatchlistItem, listWatchlistItems, removeWatchlistItem, renameWatchlistItem } from '@/db/repository';
 import type { LogEntry, WatchlistItem } from '@/db/schema';
 import { useWatchlistStore } from '../watchlistStore';
 import { WatchlistSection } from '../WatchlistSection';
@@ -9,6 +9,7 @@ jest.mock('@/db/repository', () => ({
   listWatchlistItems: jest.fn(),
   addWatchlistItem: jest.fn(),
   removeWatchlistItem: jest.fn(),
+  renameWatchlistItem: jest.fn(),
 }));
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -102,5 +103,89 @@ describe('WatchlistSection', () => {
     const { getByLabelText } = await render(<WatchlistSection entries={[]} now={0} />);
     await fireEvent.press(getByLabelText('Stop watching soy'));
     expect(removeWatchlistItem).toHaveBeenCalledWith('w1');
+  });
+
+  it('tapping Edit expands an editor seeded with the current term', async () => {
+    const soy: WatchlistItem = { id: 'w1', term: 'soy', createdAt: 0 };
+    useWatchlistStore.setState({ items: [soy], loaded: true });
+    const { getByLabelText } = await render(<WatchlistSection entries={[]} now={0} />);
+    await fireEvent.press(getByLabelText('Edit soy'));
+    expect(getByLabelText('Edit watchlist term').props.defaultValue).toBe('soy');
+  });
+
+  it('tapping Edit again on the open row collapses it', async () => {
+    const soy: WatchlistItem = { id: 'w1', term: 'soy', createdAt: 0 };
+    useWatchlistStore.setState({ items: [soy], loaded: true });
+    const { getByLabelText, queryByLabelText } = await render(<WatchlistSection entries={[]} now={0} />);
+    await fireEvent.press(getByLabelText('Edit soy'));
+    await fireEvent.press(getByLabelText('Edit soy'));
+    expect(queryByLabelText('Edit watchlist term')).toBeNull();
+  });
+
+  it('saving a rename calls the store with the normalized term and collapses', async () => {
+    const oinon: WatchlistItem = { id: 'w1', term: 'oinon', createdAt: 0 };
+    useWatchlistStore.setState({ items: [oinon], loaded: true });
+    (renameWatchlistItem as jest.Mock).mockResolvedValue(undefined);
+    (listWatchlistItems as jest.Mock).mockResolvedValue([{ id: 'w1', term: 'onion', createdAt: 0 }]);
+    const { getByLabelText, queryByLabelText } = await render(<WatchlistSection entries={[]} now={0} />);
+    await fireEvent.press(getByLabelText('Edit oinon'));
+    await fireEvent.changeText(getByLabelText('Edit watchlist term'), '  ONION! ');
+    await fireEvent.press(getByLabelText('Save watchlist term'));
+    expect(renameWatchlistItem).toHaveBeenCalledWith('w1', 'onion');
+    expect(queryByLabelText('Edit watchlist term')).toBeNull();
+  });
+
+  it('an invalid rename shows an inline error without touching the add row', async () => {
+    const soy: WatchlistItem = { id: 'w1', term: 'soy', createdAt: 0 };
+    useWatchlistStore.setState({ items: [soy], loaded: true });
+    const { getByLabelText, getByText, queryByText } = await render(<WatchlistSection entries={[]} now={0} />);
+    await fireEvent.press(getByLabelText('Edit soy'));
+    await fireEvent.changeText(getByLabelText('Edit watchlist term'), '!');
+    await fireEvent.press(getByLabelText('Save watchlist term'));
+    expect(getByText('Enter at least 2 letters or numbers.')).toBeTruthy();
+    expect(renameWatchlistItem).not.toHaveBeenCalled();
+    // The add row's own error slot stays empty — this is the edit editor's error.
+    expect(queryByText(/Already watching/)).toBeNull();
+  });
+
+  it('renaming to an existing term shows a duplicate error and does not call the repository', async () => {
+    const soy: WatchlistItem = { id: 'w1', term: 'soy', createdAt: 0 };
+    const dairy: WatchlistItem = { id: 'w2', term: 'dairy', createdAt: 0 };
+    useWatchlistStore.setState({ items: [soy, dairy], loaded: true });
+    const { getByLabelText, getByText } = await render(<WatchlistSection entries={[]} now={0} />);
+    await fireEvent.press(getByLabelText('Edit soy'));
+    await fireEvent.changeText(getByLabelText('Edit watchlist term'), 'dairy');
+    await fireEvent.press(getByLabelText('Save watchlist term'));
+    expect(getByText(/Already watching "dairy"/)).toBeTruthy();
+    expect(renameWatchlistItem).not.toHaveBeenCalled();
+  });
+
+  it('Cancel collapses the editor without calling rename', async () => {
+    const soy: WatchlistItem = { id: 'w1', term: 'soy', createdAt: 0 };
+    useWatchlistStore.setState({ items: [soy], loaded: true });
+    const { getByLabelText, queryByLabelText } = await render(<WatchlistSection entries={[]} now={0} />);
+    await fireEvent.press(getByLabelText('Edit soy'));
+    await fireEvent.changeText(getByLabelText('Edit watchlist term'), 'onion');
+    await fireEvent.press(getByLabelText('Cancel editing soy'));
+    expect(renameWatchlistItem).not.toHaveBeenCalled();
+    expect(queryByLabelText('Edit watchlist term')).toBeNull();
+  });
+
+  it('saving with an unchanged (normalized) term just collapses without calling rename', async () => {
+    const soy: WatchlistItem = { id: 'w1', term: 'soy', createdAt: 0 };
+    useWatchlistStore.setState({ items: [soy], loaded: true });
+    const { getByLabelText, queryByLabelText } = await render(<WatchlistSection entries={[]} now={0} />);
+    await fireEvent.press(getByLabelText('Edit soy'));
+    await fireEvent.changeText(getByLabelText('Edit watchlist term'), '  SOY  ');
+    await fireEvent.press(getByLabelText('Save watchlist term'));
+    expect(renameWatchlistItem).not.toHaveBeenCalled();
+    expect(queryByLabelText('Edit watchlist term')).toBeNull();
+  });
+
+  it('the collapsed card still renders the plain term text (Maestro assertVisible contract)', async () => {
+    const soy: WatchlistItem = { id: 'w1', term: 'soy', createdAt: 0 };
+    useWatchlistStore.setState({ items: [soy], loaded: true });
+    const { getByText } = await render(<WatchlistSection entries={[]} now={0} />);
+    expect(getByText('soy')).toBeTruthy();
   });
 });

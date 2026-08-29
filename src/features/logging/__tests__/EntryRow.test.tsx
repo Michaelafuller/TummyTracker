@@ -21,6 +21,7 @@ jest.mock('@/db/repository', () => ({
   listWatchlistItems: jest.fn(),
   addWatchlistItem: jest.fn(),
   removeWatchlistItem: jest.fn(),
+  renameWatchlistItem: jest.fn(),
 }));
 
 const BASE_ENTRY: LogEntry = {
