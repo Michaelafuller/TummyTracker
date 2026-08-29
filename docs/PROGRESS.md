@@ -128,11 +128,16 @@ Ranked by value-add to the north star. **Effort:** S (hours) · M (a session) ·
 **⚠ = new dependency** — allowed, but CVE-inventory it and justify the value first.
 Completed tiers are collapsed to a single line; their detail lives in git.
 
-## 📌 Pinned — next up
+## 📌 Pinned — next up (owner-directed 2026-08-28, fifth pin)
 
-_(none currently — the doctor-PDF pin shipped 2026-08-24 and is unpinned per
-its own note; its remaining device items live in Status above alongside the
-2026-08-28 cycle's owed items.)_
+| Item | Why it matters | Effort | Notes |
+|------|----------------|:--:|------|
+| **Root-level React error boundary** | One screen's render error currently blanks the whole app; a boundary around the tab navigator turns that into a recoverable screen — and de-risks every future cycle. Carried recommendation since RESULTS 2026-08-16. | S | Wrap at the navigator/root level with a themed fallback (message + retry); keep it dependency-free. Rider candidates while in the area: repro the dev-mode "state update on a component that hasn't mounted yet" warning with LogBox open (candidates in Status). |
+| **Watchlist follow-ons: browse/calendar badges + term editing** | Tier 1 differentiator polish — surfacing watched ingredients where entries are browsed closes the elimination-mode loop, and the outcome-based stats (2026-08-28) make the badge signal honest. | M | Badges on Journal/calendar entry rows for entries matching a watched term; edit a watched term in place (rename keeps its `watchedAt`). Follow-on candidates named at the Tier 1 watchlist row since 2026-08-15. |
+
+**Sequencing note:** feature cycle runs after (or parallel to) the owed test
+session in Status — the Maestro rework + keyboard QA need the owner's EAS
+development build on the Pixel first.
 
 **Recently shipped (2026-08-24/28):** doctor PDF report + haptics ✅ ·
 multi-symptom logging ✅ · BM "Digestion" section ✅ (remediation: chart
