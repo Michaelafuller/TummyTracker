@@ -11,7 +11,6 @@ import { Spacing } from '@/constants/theme';
 import { FOOD_TYPES, MEAL_SLOTS, type MealSlot } from '@/db/schema';
 import { NUTRITION_LABELS, scaleNutrition } from '@/lib/nutrition';
 import { MAX_NOTES_LENGTH, NUTRITION_FIELDS, type NutritionField } from '@/lib/validation';
-import { SentimentSelector } from '@/features/sentiment/SentimentSelector';
 import {
   buildLogEntry,
   type BuiltLogEntry,
@@ -38,7 +37,6 @@ function defaultState(initial?: Partial<LogEntryFormState>): LogEntryFormState {
     mealSlot: null,
     dateInput: formatDateInput(now),
     timeInput: formatTimeInput(now),
-    sentiment: null,
     notes: '',
     nutrition: emptyNutritionInputs(),
     barcode: null,
@@ -142,14 +140,6 @@ export function LogEntryForm({
         onTimeChange={(v) => set('timeInput', v)}
         error={errors.loggedAt}
       />
-
-      <FormField label="How did it sit with you?">
-        <SentimentSelector
-          value={state.sentiment}
-          onChange={(value) => set('sentiment', value)}
-          onClear={() => set('sentiment', null)}
-        />
-      </FormField>
 
       <FormField
         label="Notes"

@@ -21,7 +21,6 @@ import {
   type MealReviewFormState,
 } from '@/features/logging/mealReviewFormModel';
 import { useAllEntries } from '@/features/logging/useEntries';
-import { SentimentSelector } from '@/features/sentiment/SentimentSelector';
 import { useWatchlistStore } from '@/features/watchlist/watchlistStore';
 import { useTheme } from '@/hooks/use-theme';
 import { tallyDailyNutrition } from '@/lib/dailyTally';
@@ -180,14 +179,6 @@ export default function MealReviewScreen() {
         onTimeChange={(v) => set('timeInput', v)}
         error={errors.loggedAt}
       />
-
-      <FormField label="How did it sit with you?">
-        <SentimentSelector
-          value={state.sentiment}
-          onChange={(value) => set('sentiment', value)}
-          onClear={() => set('sentiment', null)}
-        />
-      </FormField>
 
       <FormField label="Notes" error={errors.notes} hint={`${noteCount}/${MAX_NOTES_LENGTH}`}>
         <ThemedTextInput

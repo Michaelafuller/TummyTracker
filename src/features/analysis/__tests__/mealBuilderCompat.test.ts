@@ -172,7 +172,6 @@ describe('meal-collation tag-granularity invariant (Phase 4)', () => {
       mealSlot: 'dinner',
       dateInput: '2026-07-19',
       timeInput: '18:00',
-      sentiment: null,
       notes: '',
     };
     const result = buildMealEntry(mealState, drafts);

@@ -5,7 +5,6 @@
 // persists as one logEntry row + N mealComponent rows.
 
 import type { LogEntryType, MealSlot } from '@/db/schema';
-import type { SentimentValue } from '@/features/sentiment/scale';
 import { formatDateInput, formatTimeInput, parseDateTime } from '@/lib/datetime';
 import {
   aggregateComponents,
@@ -24,7 +23,6 @@ export interface MealReviewFormState {
   mealSlot: MealSlot | null;
   dateInput: string; // YYYY-MM-DD
   timeInput: string; // HH:MM
-  sentiment: SentimentValue | null;
   notes: string;
 }
 
@@ -49,7 +47,6 @@ export function defaultMealReviewState(components: readonly MealComponentDraft[]
     mealSlot: null,
     dateInput: formatDateInput(now),
     timeInput: formatTimeInput(now),
-    sentiment: null,
     notes: '',
   };
 }
@@ -98,7 +95,6 @@ export function buildMealEntry(
     mealSlot: state.mealSlot,
     barcode: components.length === 1 ? (components[0].barcode ?? null) : null,
     loggedAt: parsedDate.ms as number,
-    sentiment: state.sentiment,
     notes: trimmedNotes.length > 0 ? trimmedNotes : null,
     calories: aggregate.calories,
     fatG: aggregate.fatG,

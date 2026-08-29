@@ -29,7 +29,6 @@ function baseState(overrides: Partial<MealReviewFormState> = {}): MealReviewForm
     mealSlot: 'lunch',
     dateInput: '2026-06-27',
     timeInput: '12:30',
-    sentiment: 4,
     notes: '',
     ...overrides,
   };
@@ -41,7 +40,6 @@ describe('defaultMealReviewState', () => {
     expect(state.name).toBe('Peas + 1 more');
     expect(state.type).toBe('meal');
     expect(state.mealSlot).toBeNull();
-    expect(state.sentiment).toBeNull();
   });
 });
 
@@ -57,7 +55,6 @@ describe('buildMealEntry', () => {
       type: 'meal',
       name: 'Lunch',
       mealSlot: 'lunch',
-      sentiment: 4,
       calories: 300,
       ingredientsText: 'Peas, Rice',
     });
@@ -129,9 +126,12 @@ describe('buildMealEntry', () => {
     expect(result.entry?.fatG).toBe(2);
   });
 
-  it('allows a null sentiment (set later)', () => {
-    const result = buildMealEntry(baseState({ sentiment: null }), [draft('Peas')]);
+  it('never emits a sentiment key — omits it so an edit never clobbers a stored rating', () => {
+    // Regression guard (Milestone B4): see the matching test in
+    // formModel.test.ts for the full rationale (sentiment column retained,
+    // updateLogEntry spreads the built entry, absent key = untouched column).
+    const result = buildMealEntry(baseState(), [draft('Peas')]);
     expect(result.valid).toBe(true);
-    expect(result.entry?.sentiment).toBeNull();
+    expect(result.entry && 'sentiment' in result.entry).toBe(false);
   });
 });

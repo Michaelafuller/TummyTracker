@@ -13,7 +13,6 @@ function baseState(overrides: Partial<LogEntryFormState> = {}): LogEntryFormStat
     mealSlot: 'breakfast',
     dateInput: '2026-06-27',
     timeInput: '08:30',
-    sentiment: 4,
     notes: 'tasty',
     nutrition: emptyNutritionInputs(),
     barcode: null,
@@ -33,7 +32,6 @@ describe('buildLogEntry', () => {
       type: 'meal',
       name: 'Oatmeal',
       mealSlot: 'breakfast',
-      sentiment: 4,
       notes: 'tasty',
       calories: 150,
       fatG: 3,
@@ -68,11 +66,22 @@ describe('buildLogEntry', () => {
     expect(result.errors.nutrition.fatG).toBeDefined();
   });
 
-  it('allows a null sentiment (rate later) and a barcode passthrough', () => {
-    const result = buildLogEntry(baseState({ sentiment: null, barcode: '0123456789012' }));
+  it('allows a barcode passthrough', () => {
+    const result = buildLogEntry(baseState({ barcode: '0123456789012' }));
     expect(result.valid).toBe(true);
-    expect(result.entry?.sentiment).toBeNull();
     expect(result.entry?.barcode).toBe('0123456789012');
+  });
+
+  it('never emits a sentiment key — omits it so an edit never clobbers a stored rating', () => {
+    // Regression guard (Milestone B4): the sentiment DB column stays and holds
+    // historical ratings from before meal-sentiment capture was removed.
+    // updateLogEntry does `db.update(logEntry).set({ ...patch, updatedAt })`,
+    // so an absent key leaves the column untouched — but only if buildLogEntry
+    // never writes the key (not even as `sentiment: null`), which would
+    // instead null out a rated historical meal on save.
+    const result = buildLogEntry(baseState());
+    expect(result.valid).toBe(true);
+    expect(result.entry && 'sentiment' in result.entry).toBe(false);
   });
 
   it('parses a valid servingG and persists it', () => {
@@ -121,7 +130,6 @@ describe('logEntryToFormState (edit round-trip)', () => {
     expect(state.dateInput).toBe('2026-06-27');
     expect(state.timeInput).toBe('15:05');
     expect(state.nutrition.calories).toBe('160');
-    expect(state.sentiment).toBe(3);
 
     const rebuilt = buildLogEntry(state);
     expect(rebuilt.valid).toBe(true);
@@ -130,7 +138,6 @@ describe('logEntryToFormState (edit round-trip)', () => {
       name: 'Almonds',
       barcode: '0123456789012',
       loggedAt: entry.loggedAt,
-      sentiment: 3,
       notes: 'a handful',
       calories: 160,
       sodiumMg: 0,
@@ -143,9 +150,17 @@ describe('logEntryToFormState (edit round-trip)', () => {
     expect(state.tagsJson).toBe('["oats","water"]');
   });
 
-  it('coerces an out-of-range stored sentiment to null', () => {
-    const state = logEntryToFormState({ ...entry, sentiment: 9 });
-    expect(state.sentiment).toBeNull();
+  it('editing a historical entry with a stored sentiment never writes the key back — the column keeps its value', () => {
+    // CRITICAL data-preservation guard (Milestone B4): `entry` above carries a
+    // stored sentiment (3) from before meal-sentiment capture was removed.
+    // updateLogEntry persists via `db.update(logEntry).set({ ...patch, updatedAt })`
+    // (src/db/repository.ts) — an absent key leaves that column untouched, but
+    // only if the rebuilt entry never includes `sentiment` at all (not even as
+    // `null`, which would erase the historical rating on save).
+    const state = logEntryToFormState(entry);
+    const rebuilt = buildLogEntry(state);
+    expect(rebuilt.valid).toBe(true);
+    expect(rebuilt.entry && 'sentiment' in rebuilt.entry).toBe(false);
   });
 
   it('hydrates servingG from the persisted entry', () => {
