@@ -1,5 +1,6 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { StyleSheet } from 'react-native';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 
 import { fetchOffSearchResults } from '@/features/barcode/api';
@@ -26,6 +27,20 @@ function renderForm(props: Partial<React.ComponentProps<typeof ComponentForm>> =
 beforeEach(() => {
   mockedFetchOffSearchResults.mockReset().mockResolvedValue([]);
 });
+
+function offProduct(name: string, calories: number | null = 89) {
+  return {
+    barcode: null,
+    brand: null,
+    found: true,
+    name,
+    nutrition: { calories },
+    servingG: null,
+    ingredientsText: null,
+    tags: [],
+    categoriesTags: [],
+  };
+}
 
 // RNTL v14 renders asynchronously: `render` and `fireEvent.*` both return promises.
 describe('ComponentForm', () => {
@@ -220,6 +235,31 @@ describe('ComponentForm', () => {
       expect(await findByText("Couldn't find nutrition for that — you can still fill it in manually.")).toBeTruthy();
       await fireEvent.changeText(getByLabelText('Component name'), 'zzzznotfood2');
       expect(queryByText("Couldn't find nutrition for that — you can still fill it in manually.")).toBeNull();
+    });
+
+    // Regression (on-device QA 2026-08-29): the search UI must not change height
+    // between its loading and results states — the keyboard-aware scroll anchors
+    // a focused input once, at focus time, and content growing above it later
+    // pushes the field under the keyboard with nothing re-anchoring it. Both
+    // states therefore render inside one fixed-height box.
+    it('renders the loading state inside the fixed-height search box', async () => {
+      mockedFetchOffSearchResults.mockReturnValue(new Promise(() => {})); // never settles
+      const { getByLabelText, findByTestId, findByLabelText } = await renderForm();
+      await fireEvent.changeText(getByLabelText('Component name'), 'banana');
+      await fireEvent(getByLabelText('Component name'), 'blur');
+      expect(await findByLabelText('Looking up nutrition')).toBeTruthy();
+      const box = await findByTestId('off-search-box');
+      expect(StyleSheet.flatten(box.props.style).height).toBe(184);
+    });
+
+    it('renders results inside the same fixed-height box regardless of result count', async () => {
+      mockedFetchOffSearchResults.mockResolvedValue([offProduct('Banana, raw')]);
+      const { getByLabelText, findByTestId, findByLabelText } = await renderForm();
+      await fireEvent.changeText(getByLabelText('Component name'), 'banana');
+      await fireEvent(getByLabelText('Component name'), 'blur');
+      expect(await findByLabelText('Use Banana, raw')).toBeTruthy();
+      const box = await findByTestId('off-search-box');
+      expect(StyleSheet.flatten(box.props.style).height).toBe(184);
     });
   });
 });

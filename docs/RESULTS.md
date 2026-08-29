@@ -174,6 +174,16 @@ of the nutrition grid instead of the focused field. An isolating re-run that
 skips typing a Name (no search fires) scrolls correctly. Full writeup in
 `docs/E2E.md`'s new finding. Not fixed here (QA guardrail: flows/docs only).
 
+**→ FIXED same day** (follow-up execute session): fixed-height search box in
+`ComponentForm.tsx` + `COMPONENT_FORM_BOTTOM_OFFSET` padding on both hosting
+screens' `FormScrollView` (the blur that fires the search is the same tap
+that focuses the lower field, so the keyboard anchor measures pre-insert —
+the constant-height box makes the shift exact and the offset absorbs it).
+Rungs green (74 suites / 651 tests, +3), on-device re-verified with the
+exact failing sequence (Sodium fully visible above the keyboard), targeted
+flow re-runs green. All 10 keyboard QA screens now pass. Details in
+`docs/E2E.md`'s finding (FIXED addendum).
+
 ### onBlur OFF search (E2E.md manual item #7)
 
 Typed "banana" into the Name field on `/meal/component`, tapped Ingredients

@@ -12,7 +12,7 @@ import {
   getMealComponent,
   updateMealComponentAndReaggregate,
 } from '@/db/repository';
-import { ComponentForm } from '@/features/logging/ComponentForm';
+import { ComponentForm, COMPONENT_FORM_BOTTOM_OFFSET } from '@/features/logging/ComponentForm';
 import { mealComponentToFormState } from '@/features/logging/componentFormModel';
 import { tapFeedback } from '@/lib/haptics';
 import type { MealComponentDraft } from '@/lib/mealAggregate';
@@ -112,7 +112,7 @@ export default function EditComponentScreen() {
   }
 
   return (
-    <FormScrollView>
+    <FormScrollView bottomOffset={COMPONENT_FORM_BOTTOM_OFFSET}>
       <ComponentForm
         initial={mealComponentToFormState(component)}
         sortOrder={component.sortOrder}

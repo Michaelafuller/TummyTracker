@@ -417,6 +417,26 @@ drill-down editor (`entry/component/[componentId]`), so the same interaction
 drill-down screen too, though that specific combination wasn't separately
 re-driven this session.
 
+**FIXED 2026-08-29 (same day, follow-up execute session), on-device
+verified.** Root cause confirmed and sharpened: the name-field blur that
+fires the search is often the *same tap* that focuses the lower field, so
+`KeyboardAwareScrollView` measures its scroll target *before* React commits
+the search UI's height above the field — and nothing re-anchors on layout
+growth. Two-part fix in `ComponentForm.tsx` + the two hosting screens:
+(1) the search status/results render inside one **fixed-height box**
+(`SEARCH_BOX_HEIGHT`, results scroll internally) so the post-anchor shift is
+a known constant instead of a variable result-list height; (2) both screens
+pass `FormScrollView` a `bottomOffset` padded by exactly that constant
+(`COMPONENT_FORM_BOTTOM_OFFSET`) so the stale anchor still leaves the
+focused field above the keyboard (a field focused with *no* search pending
+simply sits a bit higher — harmless). No-op on the non-KC fallback. Verified
+with a scratch flow reproducing the exact QA sequence (type "banana" → tap
+Sodium → search settles → screenshot: full grid + Sodium visible above the
+keyboard). Lesson for future async-UI-above-form designs: content that can
+appear ABOVE a focusable field after focus must either reserve its space up
+front or be compensated in `bottomOffset` — the keyboard-aware scroll will
+not save you.
+
 **Finding — Android share-sheet's stable selector is "Sharing N file(s)"
 (2026-08-29):** the OS share sheet Maestro needs to assert on for
 `n-doctor-report.yaml` has no fixed app-specific text (the shared file's name

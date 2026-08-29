@@ -490,11 +490,13 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
       on-screen keyboard instead of it being covered. · manual — verified
       2026-08-29 on the new EAS `development` build via Maestro-driven
       screenshots (`docs/RESULTS.md` addendum, `.qa-shots/` uncommitted).
-      **9 of 10 pass.** `meal/component`'s Sodium field fails under one
-      specific condition (Name field triggers the OFF onBlur search, then
-      Sodium is focused later) — a real app bug, not a flow gap; see the
-      `docs/E2E.md` finding. Left `[x]` here since the checklist item itself
-      (on-device verification) is done; the bug is tracked separately.
+      **9 of 10 passed initially; the 10th (`meal/component`'s Sodium field
+      after the OFF onBlur search fires) was a real app bug, FIXED + on-device
+      re-verified the same day** — fixed-height search box +
+      `COMPONENT_FORM_BOTTOM_OFFSET` padding; see the `docs/E2E.md` finding
+      (root cause: the blur that fires the search is the same tap that
+      focuses the lower field, so the keyboard anchor measured pre-insert).
+      All 10 screens now verified.
 - [x] `ComponentForm`'s name-field `onBlur` OFF search still fires exactly
       once when tapping between fields on the new build (focus/blur timing
       risk from the keyboard-aware wrapper). · manual — verified 2026-08-29:

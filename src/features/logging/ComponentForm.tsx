@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { FormField, ThemedTextInput } from '@/components/form-fields';
 import { PrimaryButton } from '@/components/primary-button';
@@ -19,6 +19,28 @@ import {
 } from './componentFormModel';
 
 const SEARCH_NOTICE_MS = 3000;
+
+// The search-status/results box keeps ONE fixed height across its loading and
+// results states. This form lives inside a keyboard-aware scroll view that
+// anchors the focused input once, at focus time — and the name-field blur that
+// starts a search is often the very tap that focuses a field further down the
+// form. The box inserts in that same tap's commit, AFTER the scroll target is
+// measured, so content below it lands exactly SEARCH_BOX_HEIGHT lower than
+// where the anchor put it — and nothing re-anchors on layout growth
+// (on-device QA finding 2026-08-29, .qa-shots/meal-component-keyboard.png).
+// Two-part fix: the fixed height makes the shift a known constant (results
+// scroll inside the box instead of growing it), and the screens hosting this
+// form pass FormScrollView a bottomOffset padded by that constant (see
+// COMPONENT_FORM_BOTTOM_OFFSET) so the stale anchor still leaves the focused
+// field above the keyboard.
+const SEARCH_BOX_HEIGHT = 184; // ~3 result rows + gaps
+
+/**
+ * bottomOffset for the FormScrollView of any screen hosting a ComponentForm:
+ * the default gap plus the exact height the search box can insert above the
+ * focused field after the anchor is measured. No-op on the non-KC fallback.
+ */
+export const COMPONENT_FORM_BOTTOM_OFFSET = SEARCH_BOX_HEIGHT + Spacing.six;
 
 export interface ComponentFormProps {
   initial?: Partial<ComponentFormState>;
@@ -157,40 +179,45 @@ export function ComponentForm({
         />
       </FormField>
 
-      {showSearchUi && search.isLoading ? (
-        <View style={styles.searchStatusRow} accessibilityLabel="Looking up nutrition">
-          <ActivityIndicator size="small" />
-          <ThemedText type="small" themeColor="textSecondary">
-            Looking up nutrition…
-          </ThemedText>
-        </View>
-      ) : null}
-
-      {showSearchUi && search.isSuccess && search.data.length > 0 ? (
-        <View style={styles.searchResults}>
-          {search.data.map((product, index) => {
-            const secondary = [product.brand, product.nutrition.calories != null ? `${product.nutrition.calories} kcal` : null]
-              .filter(Boolean)
-              .join(' · ');
-            return (
-              <Pressable
-                key={`${product.barcode ?? 'no-code'}-${index}`}
-                testID={`off-search-${index}`}
-                accessibilityRole="button"
-                accessibilityLabel={`Use ${product.name}${product.brand ? ` by ${product.brand}` : ''}`}
-                onPress={() => handleSelectSearchResult(product)}
-                style={[styles.searchRow, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
-                <ThemedText type="small" numberOfLines={1}>
-                  {product.name}
-                </ThemedText>
-                {secondary ? (
-                  <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-                    {secondary}
-                  </ThemedText>
-                ) : null}
-              </Pressable>
-            );
-          })}
+      {showSearchUi && (search.isLoading || (search.isSuccess && search.data.length > 0)) ? (
+        <View style={styles.searchBox} testID="off-search-box">
+          {!search.isSuccess ? (
+            <View style={styles.searchStatusRow} accessibilityLabel="Looking up nutrition">
+              <ActivityIndicator size="small" />
+              <ThemedText type="small" themeColor="textSecondary">
+                Looking up nutrition…
+              </ThemedText>
+            </View>
+          ) : (
+            <ScrollView
+              nestedScrollEnabled
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={styles.searchResults}>
+              {search.data.map((product, index) => {
+                const secondary = [product.brand, product.nutrition.calories != null ? `${product.nutrition.calories} kcal` : null]
+                  .filter(Boolean)
+                  .join(' · ');
+                return (
+                  <Pressable
+                    key={`${product.barcode ?? 'no-code'}-${index}`}
+                    testID={`off-search-${index}`}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Use ${product.name}${product.brand ? ` by ${product.brand}` : ''}`}
+                    onPress={() => handleSelectSearchResult(product)}
+                    style={[styles.searchRow, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+                    <ThemedText type="small" numberOfLines={1}>
+                      {product.name}
+                    </ThemedText>
+                    {secondary ? (
+                      <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+                        {secondary}
+                      </ThemedText>
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          )}
         </View>
       ) : null}
 
@@ -298,15 +325,17 @@ const styles = StyleSheet.create({
   sectionHeading: {
     marginBottom: -Spacing.two,
   },
+  searchBox: {
+    height: SEARCH_BOX_HEIGHT,
+    marginTop: -Spacing.two,
+  },
   searchStatusRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.two,
-    marginTop: -Spacing.two,
   },
   searchResults: {
     gap: Spacing.two,
-    marginTop: -Spacing.two,
   },
   searchRow: {
     paddingHorizontal: Spacing.three,

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 
 import { FormScrollView } from '@/components/keyboard-aware-screen';
 import { ThemedText } from '@/components/themed-text';
-import { ComponentForm } from '@/features/logging/ComponentForm';
+import { ComponentForm, COMPONENT_FORM_BOTTOM_OFFSET } from '@/features/logging/ComponentForm';
 import { useComponentPrefillStore } from '@/features/logging/componentPrefillStore';
 import { useMealBuilderStore } from '@/features/logging/mealBuilderStore';
 import type { MealComponentDraft } from '@/lib/mealAggregate';
@@ -37,7 +37,7 @@ export default function MealComponentScreen() {
   }
 
   return (
-    <FormScrollView>
+    <FormScrollView bottomOffset={COMPONENT_FORM_BOTTOM_OFFSET}>
       <ThemedText type="small" themeColor="textSecondary">
         {componentCount > 0
           ? `${componentCount} item${componentCount === 1 ? '' : 's'} added so far`
