@@ -8,22 +8,25 @@
 // (they all stay "today", which DateTimeField already defaults to on a fresh
 // entry). Callers use as many of triggerMinute1..5 as they need.
 //
-// Never crosses midnight backward, and nudges the offset so the target
-// minute-of-hour is >= 4 (room to subtract 1-4 for the other trigger times
-// without wrapping to the previous hour). A flow run in the first ~24
-// minutes after local midnight can't fully satisfy that nudge — at worst
-// some of the five collapse onto the same minute in that rare window; every
-// other run of the day gets five genuinely distinct minutes.
+// Never crosses midnight backward: the target is clamped to today's 00:00,
+// because the flows only set the TIME chip — the date chip stays "today", so
+// a target that slipped into yesterday would come out as a FUTURE time today
+// and the outcome (logged "now") would no longer follow the meals at all.
+// (Exactly this bit the 2026-08-29 00:xx full-regression run: the minute>=4
+// nudge pushed the target across midnight and m-finding-drilldown seeded
+// future meals.) In the first minutes after midnight the five minutes may
+// collapse toward 00:00 — harmless: the outcome is still strictly after,
+// only meal-vs-meal minute distinctness degrades, which no assertion needs.
 const now = new Date();
+const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
 const minutesSinceMidnight = now.getHours() * 60 + now.getMinutes();
 
 let backOffset = Math.min(180, minutesSinceMidnight - 20);
 if (backOffset < 20) backOffset = Math.max(5, minutesSinceMidnight - 1);
 
-let target = new Date(now.getTime() - backOffset * 60000);
-if (target.getMinutes() < 4) {
-  backOffset += 4;
-  target = new Date(Math.max(now.getTime() - backOffset * 60000, 0));
+let target = new Date(Math.max(now.getTime() - backOffset * 60000, startOfToday));
+if (target.getMinutes() < 4 && target.getTime() - 4 * 60000 >= startOfToday) {
+  target = new Date(target.getTime() - 4 * 60000);
 }
 
 const hour24 = target.getHours();

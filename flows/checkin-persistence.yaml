@@ -67,6 +67,7 @@ tags: [goals]
     element:
       text: "Daily check-in"
     direction: DOWN
+    centerElement: true
 - tapOn:
     text: "Daily check-in"
     checked: false
@@ -85,6 +86,7 @@ tags: [goals]
     element:
       text: "Daily check-in"
     direction: DOWN
+    centerElement: true
 - assertVisible:
     text: "Daily check-in"
     checked: true
@@ -110,6 +112,7 @@ tags: [goals]
     element:
       text: "Daily check-in"
     direction: DOWN
+    centerElement: true
 - tapOn:
     text: "Daily check-in"
     checked: false

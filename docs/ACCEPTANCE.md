@@ -30,7 +30,9 @@ notification timing, visual contrast). They stay `[ ]` until you verify them.
 ```bash
 npm install
 npm run bundle:check       # expo export — catches Metro/Babel bugs the rungs miss
-eas login                  # set NODE_EXTRA_CA_CERTS if behind a corporate proxy
+eas login                  # corporate TLS interception: set NODE_OPTIONS=--use-system-ca
+                           # (Node 22.15+; reads the Windows cert store) or point
+                           # NODE_EXTRA_CA_CERTS at the exported corporate root CA
 eas build --profile preview --platform android   # standalone APK, runs offline
 adb install -r path/to/app.apk                   # over USB — no Wi-Fi needed
 ```
@@ -75,8 +77,8 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
 - [x] Add a meal manually (now a two-screen flow: component confirm → meal review):
       name, ingredients, nutrition, then slot, time, notes, sentiment. · auto
       `flows/01b-manual-entry.yaml` **(superseded 2026-08-28 — the meal-review
-      screen no longer shows a sentiment step at all; the flow still asserts
-      the old field and is owed a rework, see docs/E2E.md)**
+      screen no longer shows a sentiment step; flow reworked + verified
+      2026-08-29, now covers the same chain without a rating)**
 - [x] The Notes field's live char counter tracks what's typed (e.g. "67/500").
       · auto `flows/01b-manual-entry.yaml` — the 500-char maxLength clamp
       itself is Jest-covered (`src/lib/__tests__/validation.test.ts`
@@ -95,7 +97,7 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
 ## Phase 1d — Browse & edit
 - [x] Entries are grouped by day. · auto `flows/01d-browse-edit.yaml`
 - [x] Day / week / month calendar toggle works. · auto `flows/01d-browse-edit.yaml` · auto `flows/journal-calendar.yaml` (toggle + collapse/expand)
-- [x] Open a past entry, add/change its sentiment, save; the change sticks. · auto `flows/01d-browse-edit.yaml` **(superseded 2026-08-28 — meal/snack entries no longer expose a sentiment field to edit; this flow's purpose is owed a repurpose to a different edit field, see docs/E2E.md)**
+- [x] Open a past entry, add/change its sentiment, save; the change sticks. · auto `flows/01d-browse-edit.yaml` **(superseded 2026-08-28 — meal/snack entries no longer expose a sentiment field; flow repurposed 2026-08-29 to edit the Notes field instead, reopen-verified, green)**
 
 ## Phase 1e — Reminders
 - [x] Configure a reminder time; the OS permission prompt appears. · auto `flows/01e-reminders.yaml`
@@ -139,7 +141,7 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
 - [x] Existing meal/BM entries unaffected. · auto `flows/c-symptom-logging.yaml`
 
 ### D · Ingredient → sentiment correlation **(superseded 2026-08-28 — see the outcome-based section below; kept for history)**
-- [x] "Ingredients you react to" section appears in Insights when threshold is met. · auto `flows/d-ingredient-insights.yaml` **(renamed "Ingredients linked to rough outcomes"; flow assertions owed a rework, see docs/E2E.md)**
+- [x] "Ingredients you react to" section appears in Insights when threshold is met. · auto `flows/d-ingredient-insights.yaml` **(renamed "Ingredients linked to rough outcomes"; flow reworked + verified 2026-08-29 against the outcome-based section)**
 - [x] Cards cite average sentiment and number of meals. · auto `flows/d-ingredient-insights.yaml` **(superseded — cards now cite an outcome rate vs. baseline, not average sentiment)**
 - [x] Well-rated tags do not appear. **(superseded — suppression is now baseline-margin-relative on outcome rate, not a sentiment cutoff)**
 
@@ -441,9 +443,9 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
       opens the entry editor. Pair/nutrient cards are not tappable
       (deferred). · auto `flows/m-finding-drilldown.yaml` (recorded green,
       `flows/results-m.xml`) **(superseded 2026-08-28 — the summary line is
-      now `{count, outcomes}` and per-row sentiment is gone; the detail
-      screen reads "N logs · M followed by a rough outcome within 24 h".
-      Flow assertions owed a rework, see docs/E2E.md)**
+      now `{count, outcomes}` and per-row sentiment is gone; flow reworked
+      2026-08-29 with deterministic picker-set seed times, asserting the
+      exact "3 logs · 3 followed by a rough outcome within 24 h" summary)**
 - [x] Matching parity with the findings (food-entries-only for both kinds —
       review-pass remediation `9478e90`), case-insensitive food names, exact
       tag tokens, outcome-window edges. · Jest
@@ -472,10 +474,11 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
 
 ## Post-MVP · 2026-08-28 release (keyboard + outcome-based insights)
 
-> Code-complete, rungs green (74 suites / 648 tests) + `bundle:check`; not yet
-> re-run on-device (see `docs/PROGRESS.md` Status and `docs/E2E.md` for the
-> owed Maestro rework). All rows below need the owner's next EAS
-> `development` build unless noted otherwise.
+> Code-complete, rungs green (74 suites / 648 tests) + `bundle:check`.
+> **Maestro rework done + full regression re-run 2026-08-29: 28/28 — the new
+> clean baseline** (`docs/RESULTS.md`), on the old (2026-08-21) dev client
+> over Metro. Remaining `[ ]` rows need the owner's next EAS `development`
+> build unless noted otherwise.
 
 ### Keyboard
 - [ ] On each of the 10 input screens (the 7 form screens + Home + Insights +
@@ -487,21 +490,35 @@ The test-execute session reads `flows/results.xml`. Each passing `<testcase>` fl
       risk from the keyboard-aware wrapper). · manual (EAS build)
 
 ### Outcome-based insights, meal sentiment removed
-- [ ] Meal and snack forms (component confirm + meal review) show no rating
-      selector anywhere in the flow. · manual (no build needed — already
-      true on the current JS)
-- [ ] The bowel-movement form still shows "How did it feel?" (1–5) and saving
-      it feeds `isOutcome`. · manual (no build needed)
-- [ ] Insights renders the new section set (Disclaimer · summary line ·
+- [x] Meal and snack forms (component confirm + meal review) show no rating
+      selector anywhere in the flow. · auto `flows/01b-manual-entry.yaml` +
+      `flows/03-insights.yaml` (both drive the full entry chain end-to-end
+      with no sentiment step; verified 2026-08-29)
+- [x] The bowel-movement form still shows "How did it feel?" (1–5) and saving
+      it feeds `isOutcome`. · auto `flows/02-bm-tracking.yaml` (rating UI +
+      save); the `isOutcome` wiring itself is Jest-covered
+      (`src/features/analysis/__tests__/temporal.test.ts`) and the outcome
+      counts it produces are asserted in `flows/e-temporal-insights.yaml`
+- [x] Insights renders the new section set (Disclaimer · summary line ·
       "Rough outcomes" weekly bars · Digestion · Intake · Watchlist ·
       "Ingredients linked to rough outcomes" · "Combinations" · "Foods linked
-      to rough outcomes" · Nutrients · empty state "Keep logging meals — and
-      log symptoms and bowel movements when they happen…"). · manual (no
-      build needed)
+      to rough outcomes" · Nutrients). · auto — collectively:
+      `flows/03-insights.yaml` (foods + summary),
+      `flows/d-ingredient-insights.yaml` (ingredients + outcome sentence),
+      `flows/e-temporal-insights.yaml` (summary counts),
+      `flows/k-bm-trends.yaml` (Digestion), `flows/l-intake-charts.yaml`
+      (Intake), `flows/watchlist.yaml`; empty-state copy not flow-asserted
+      (needs a no-data launch — covered by Jest screen tests)
 - [ ] Doctor PDF report renders outcome-based finding sentences and prints
       "Felt <label>" only for BM rows in the journal table (never for
-      meals/snacks). · manual (also gated on the PDF/EAS-build item above)
+      meals/snacks). · manual (gated on the EAS build — `expo-print` native
+      absent on the current client). **Old-client guard spot-checked
+      2026-08-29:** the "Doctor report" section renders and "Create PDF
+      report" shows the Update-required alert (plus a dev-only LogBox
+      redbox on top — see `docs/RESULTS.md` findings)
 - [ ] A meal logged before 2026-08-28 that already has a stored sentiment:
       open it, edit an unrelated field, save — its stored rating is
       unchanged (spot-check via Settings → Export data and inspect the JSON).
-      · manual
+      · manual — the update-path mechanism (no `sentiment` key ever emitted)
+      is Jest-regression-tested in `formModel.test.ts`; this row is the
+      real-data double-check

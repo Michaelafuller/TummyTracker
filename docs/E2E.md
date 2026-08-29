@@ -255,7 +255,32 @@ occurred:**
    followed-by-outcome flag) correctly skips same-instant pairs. Whether two
    back-to-back seeded saves straddle a minute boundary is run-dependent —
    assert the stable parts (totals, at-least-one marker), not exact
-   order-dependent counts.
+   order-dependent counts. **Partially superseded 2026-08-28:** the seed
+   helpers now set exact, distinct-minute times via the native picker
+   (`_helpers/trigger-times.js`), so flows built on those seeds MAY assert
+   exact outcome counts; the rule still applies to any entry saved at "now".
+7. **Maestro 2.x treats a barely-peeking element as "visible" — always
+   `centerElement: true` on a `scrollUntilVisible` whose target (or whose
+   target's sibling control) you're about to tap or assert-with-state**
+   (2026-08-29, first full run on Maestro 2.9.0 after the old host's 1.x):
+   `01e-reminders` and `checkin-persistence` both failed exactly where a
+   heading had just crested the bottom edge while the actionable control
+   below it (TimeField chip, check-in Switch) was still off-screen — the
+   scroll stopped at first-pixel visibility, then the tap/assert targeted a
+   clipped or absent node. Both fixed by `centerElement: true` (and
+   `01e-reminders` additionally needed a scroll at all — the Doctor-report
+   section added 2026-08-24 grew the Settings page past the fold *after*
+   that flow's last green run). Related: gotcha #4's dead-zone rule.
+8. **Time-of-day-dependent `runScript` seeds must clamp to today's midnight**
+   (2026-08-29): the first full run crossed local midnight and
+   `_helpers/trigger-times.js`'s minute-nudge pushed the computed time into
+   *yesterday* — but the flows only set the TIME chip (date stays "today"),
+   so the meals landed ~24h in the FUTURE, the outcome no longer followed
+   anything, and `m-finding-drilldown` found no "See all logs: onion"
+   button. Fixed by clamping the target to `startOfToday` (worst case in
+   the first minutes after midnight: trigger minutes collapse toward 00:00,
+   which no assertion depends on). Any future seed script computing times
+   from `new Date()` must keep this property.
 
 **Finding — wide blast radius from the 2026-08-28 sentiment removal (resolved
 2026-08-28):** meal/snack sentiment was deleted in favor of outcome-based

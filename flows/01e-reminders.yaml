@@ -30,7 +30,13 @@ appId: com.tummytracker.app.dev
     text: "breakfast reminder"
 
 # Verify time field opens the native picker (now a chip showing 12h time,
-# e.g. "8:00 AM" — HANDOFF 1.2/1.3, replaces the old raw HH:MM text input)
+# e.g. "8:00 AM" — HANDOFF 1.2/1.3, replaces the old raw HH:MM text input).
+# The chip sits below the fold since the Doctor report section (2026-08-24)
+# grew the Settings page — scroll to it first (gotcha #3).
+- scrollUntilVisible:
+    element:
+      text: "breakfast reminder time"
+    centerElement: true
 - tapOn:
     text: "breakfast reminder time"
 - waitForAnimationToEnd

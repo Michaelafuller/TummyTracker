@@ -1,196 +1,131 @@
-# RESULTS.md — Maestro run 2026-08-24 (test-execute: c2 authoring + FULL regression, first full run on the dev variant)
+# RESULTS.md — Maestro run 2026-08-29 (test-execute: sentiment-era flow rework + FULL regression, first run on the new host)
 
 ## Summary
 
-- **Flows run: 24. Passed: 24. Failed: 0.** (`flows/results.xml`: `tests="24"
-  failures="0"`, total wall time 40m 21s.) **This is the new clean baseline**,
-  replacing the 23/23 of 2026-08-16/17 — it adds `c2-multi-symptom.yaml` and is
-  the **first full-suite run against the dev variant**
-  (`com.tummytracker.app.dev`), closing the shared-infra debt from the
-  2026-08-21 variant split (appId/scheme had moved under every flow; only 5 had
-  been re-run until now).
-- **Scope: full** — `npm run e2e:ci` over `flows/`, plus individual authoring
-  verification of the new `c2-multi-symptom.yaml` beforehand (also passed,
-  48s in the recorded run).
-- **Rungs: green at HEAD** (63 suites / 551 tests) — unchanged this session;
-  only `flows/` + docs touched (test sessions don't change features).
-- **Device + build:** Pixel 5 (`0A131FDD4006VE`), `com.tummytracker.app.dev`
-  re-verified `DEBUGGABLE` before the run. The owner's real journal app was
-  never launched, cleared, or installed over.
-- **Metro:** cold host (post-reboot; adb daemon started fresh) — Metro started
-  for this worktree with `npx expo start --dev-client --port 8081 --clear`
-  (clean cache → fresh watcher, per the 2026-08-21 watcher finding), `adb
-  reverse tcp:8081 tcp:8081`. Freshness confirmed by a real bundling line
-  (`Android Bundled 8731ms … (2494 modules)`) on the first launch. **Left
-  running on port 8081 at session end.**
+- **Flows run: 28. Passed: 28. Failed: 0.** (`flows/results.xml`, full re-run,
+  57m 46s wall time.) **This is the new clean baseline**, replacing 24/24 of
+  2026-08-24 — the first full run against the 2026-08-28 keyboard +
+  outcome-insights cycle, and the first on this host (new work laptop) and
+  on **Maestro 2.9.0** (the old host ran 1.x — see root cause #2).
+- **Scope: full** (twice — the first full pass went 25/28; all three failures
+  were triaged as flow-bugs, fixed, individually re-verified, then the whole
+  suite was re-run clean).
+- **Rungs: green at HEAD** (74 suites / 648 tests) — flows + docs only this
+  session (test sessions don't change features; `src/**` untouched).
+- **Device + build:** Pixel 5 (`0A131FDD4006VE`), `com.tummytracker.app.dev`,
+  `DEBUGGABLE` re-verified. **The installed client is still the 2026-08-21
+  build** (`lastUpdateTime=2026-08-21`) — the owner's EAS `development` build
+  has NOT landed yet, so `expo-print`/`expo-haptics`/
+  `react-native-keyboard-controller` natives are absent and every graceful
+  seam is on its fallback path. All 28 greens are valid for the fallback
+  behavior; the keyboard QA checklist and the real-PDF flow stay owed to the
+  new build.
+- **Metro:** fresh `--clear` start on **8081** (new host — no orphaned-Metro
+  debt; reconnect helper updated to 8081). Freshness confirmed by the
+  bundling line (`Android Bundled 15809ms … (2565 modules)`) before any flow
+  ran. Left running at session end.
+- **Toolchain installed this session (new machine):** Maestro 2.9.0 to
+  `~\.maestro` (owner-approved download), driven with the Microsoft JDK 17 at
+  `C:\Program Files\Microsoft\jdk-17.0.20.101-hotspot` (set `JAVA_HOME` —
+  the PATH default is a JRE 1.8 that Maestro rejects). adb lives at
+  `~\platform-tools` (pre-existing, not on PATH).
 
-## New flow — `flows/c2-multi-symptom.yaml` (passed first try, no fixes needed)
+## Sentiment-era flow rework (the session's main deliverable, commit `5d24d9a`)
 
-Covers the 2026-08-24 multi-symptom feature end-to-end on a real SQLite
-round-trip: tap **two** symptom chips (Nausea + Bloating) + Severity 3, save
-**once** → Journal shows two distinct rows (`entry-row-nausea`,
-`entry-row-bloating`) → opening the Nausea row reloads its edit screen with
-the shared "Severity 3: Significant". No seeds needed (two entries fit above
-the fold in clearState). The companion single-tap flow
-(`c-symptom-logging.yaml`) also passed unmodified — one tap still selects on
-the multi-select picker, as designed.
+All six stale flows/helpers from the 2026-08-28 blast-radius list reworked and
+individually verified, plus two dependents:
 
-## Root causes
+- **Seeds** (`seed-ingredient-reactions`, `seed-meals-for-insights`,
+  `seed-two-meals`): sentiment taps removed. The first two now build the
+  *temporal* structure the outcome engine needs — trigger meals with exact,
+  distinct-minute times set via the native time picker, tag-carrying control
+  meals dated 8 days back via the calendar picker (they must carry a tag or
+  they don't count toward the base rate), and one severity-3 symptom logged
+  at "now" as the outcome. Times/dates are computed at runtime by two new
+  `runScript` helpers (`_helpers/trigger-times.js`, `_helpers/control-date.js`)
+  — the native-picker driving technique is documented in `docs/E2E.md`.
+- **`01b-manual-entry`**: sentiment step removed.
+  **`01d-browse-edit`**: repurposed from sentiment editing to Notes editing
+  (edit → save → reopen → assert), calendar-view coverage intact.
+  **`03-insights` / `d-ingredient-insights`**: retargeted to "Foods/Ingredients
+  linked to rough outcomes" + the outcome sentence.
+  **`e-temporal-insights`**: new 5-part summary-line assertions; the standalone
+  "Timing patterns" section is gone (merged into Ingredients).
+  **`m-finding-drilldown`**: now asserts the exact
+  "3 logs · 3 followed by a rough outcome within 24 h" (deterministic thanks
+  to picker-set seed times — supersedes the gotcha-#6 workaround for
+  seed-driven flows).
 
-None. **Zero flow-bugs and zero app-bugs this run** — every flow passed on its
-first recorded attempt, including the 19 flows that had never run against the
-dev variant's appId/scheme, and `h-recent-foods.yaml`'s owed re-run on the
-2026-08-21 Home nested-scroll layout.
+## Root causes (first full pass 25/28 → all flow-bugs, zero app regressions)
+
+1. **Settings page growth pushed the reminder time chip below the fold** →
+   class `flow-bug` → `01e-reminders`. The Doctor-report section shipped
+   2026-08-24 *after* that day's full run (the Pixel had dropped off adb), so
+   this was the flow's first run against the taller page; it tapped
+   "breakfast reminder time" with no scroll. Fix: `scrollUntilVisible` +
+   `centerElement: true` before the tap. Verified green.
+2. **Maestro 2.9.0 counts a barely-peeking element as "visible"** → class
+   `flow-bug` → `checkin-persistence` (and a contributor to #1). Scrolls that
+   stopped the moment the "Daily check-in" heading crested the screen edge
+   left the actual Switch below the fold under 2.9.0, where 1.x had scrolled
+   further. Fix: `centerElement: true` on all three "Daily check-in"
+   scrolls. Now **E2E.md gotcha #7** — center anything you're about to tap
+   or assert-with-state.
+3. **Midnight-crossing seed times** → class `flow-bug` → `m-finding-drilldown`.
+   The full run crossed local midnight; `trigger-times.js`'s minute-nudge
+   pushed the computed time into *yesterday*, but flows only set the TIME
+   chip (date stays "today"), so the seeded meals landed ~24 h in the future
+   and no finding rendered. Fix: clamp the target to today's 00:00 (worst
+   case right after midnight: trigger minutes collapse toward 00:00, which no
+   assertion depends on). Now **E2E.md gotcha #8**. Verified green.
 
 ## Per-flow
 
-All 24 passed — timings from the recorded run: 00-launch 17s ·
-01b-manual-entry 2m4s · 01c-barcode-fallback 34s · 01d-browse-edit 2m4s ·
-01e-reminders 30s · 02-bm-tracking 2m11s · 03-insights 4m5s ·
-ab-satfat-ingredients 2m18s · c-symptom-logging 2m14s · **c2-multi-symptom
-48s (new)** · checkin-persistence 2m7s · d-ingredient-insights 3m7s ·
-e-temporal-insights 1m42s · f-serving-size 1m49s · g-datetime-picker 1m16s ·
-goal-editor 2m46s · goals-tally 1m37s · h-recent-foods 2m4s · i-backup 1m42s ·
-journal-calendar 1m57s · nav-tabs 37s · settings-smoke 31s · ux3-scan-screen
-29s · watchlist 1m32s.
+All 28 passed in the final run — timings in `flows/results.xml` and the run
+log. Notables: `03-insights` 6m41s and `d-ingredient-insights` 5m09s (the
+picker-driven seeds are slower than the old sentiment taps — the price of
+deterministic temporal data), `m-finding-drilldown` 5m22s. Suite wall time
+57m46s for 28 flows.
 
-## Addendum — same-day targeted run: `j-component-drilldown.yaml` authored (2026-08-24, later session)
+## Owed old-client checks (2026-08-24 debt) — CLEARED
 
-**1/1 passed (recorded, `flows/results-j.xml`) + one confirmation re-run, also
-green.** The last unauthored owed flow now exists and covers the whole
-meal-component surface in one pass: build a 3-component meal (Rice 200 / Beans
-100 / Corn 50 kcal) through the builder's scan-fallback loop → drill into Rice,
-servings 1→2, save → row re-aggregates to "Rice · 2× serving · 400 kcal" (parent
-tally 550) → swipe-delete Beans (confirm) → editor-Delete Corn (confirm) →
-"In this meal" hides at one remaining component, parent Calories 400 → relaunch
-→ 400 + hidden section persist. The `'last'`-component refusal is unreachable
-from UI (the section hides at 1) and stays Jest-covered.
-
-Two **flow-bugs** found and fixed during authoring (no app bugs):
-
-1. **Wrong journal-row selector assumption.** A multi-component meal's name
-   prefills via `defaultMealName` to `"Rice + 2 more"` (first + N more), not
-   the joined component names — so the row testID is `entry-row-rice-2-more`.
-2. **Swipe start point in the gesture-nav dead zone.** `scrollUntilVisible`
-   stopped with the Beans row half-clipped at the bottom screen edge; the
-   swipe "completed" without ever reaching the RNGH swipeable (failed 2 of 3
-   early runs — the first pass had luckier scroll positioning). Fixed with
-   `centerElement: true` + a bounded swipe-repeat; now E2E.md flow-authoring
-   gotcha #4. Two consecutive green runs post-fix.
-
-ACCEPTANCE flip: "Meal-component drill-down" → drill-down row `[ ]` → `[x]`
-(row text extended to name the delete coverage). **No owed flows remain.**
-
-## Addendum 2 — BM-trends cycle flow (`k-bm-trends.yaml`, 2026-08-24 evening)
-
-**1/1 passed (recorded, `flows/results-k.xml`)** after one review-pass
-remediation. Seeds two BMs (Type 4 typical, Type 6 loose) → Insights
-"Digestion" section: asserts the exact regularity line ("≈0.1 BMs/day … 1
-typical · 0 hard (1–2) · 1 loose (6–7)."), the CountBars a11y summary
-(".*2 BMs \\(1 irregular\\).*"), and the fully deterministic BristolHistogram
-summary. Screenshot confirmed the stacked bad-portion rendering and both
-histogram bars.
-
-**App bug found on-device (class: app-bug, a11y): chart summaries were not
-real accessibility nodes.** Both summary assertions failed with the labels
-absent from the hierarchy — a plain `View`'s `accessibilityLabel` needs
-`accessible` on Android; without it the summaries were inert for TalkBack
-too. Fixed at `8872c4e` (the two new charts); the flow re-run passing is
-itself proof the fix landed (the assertion only passes with the new code).
-The same gap exists in TrendBars/MiniHistogram/BarMeter — spun off as a
-follow-up task. Now E2E.md flow-authoring gotcha #5.
-
-**Infra note:** the session's Metro on 8081 became an unkillable orphan
-(taskkill Access-denied even unsandboxed) after a host-side stop; per
-E2E.md's stale-Metro rule a fresh Metro was started on **8082** and the
-reconnect helper's port updated (its documented per-session procedure).
-Metro left running on 8082 at session end.
-
-## Addendum 3 — intake-charts cycle flow (`l-intake-charts.yaml`, 2026-08-24 night)
-
-**1/1 passed first try (recorded, `flows/results-l.xml`), fresh-bundle
-verified.** Seeds one meal (Toast, Calories 210, Fiber 7) → Insights "Intake"
-section: asserts the Calories/Fiber headings and both chart a11y summaries
-with deterministic averages ("about 30 kcal per day", "about 1 g per day").
-No flow-bugs, no app bugs — the gotcha #4 (scroll landmark below nutrition
-fields) and gotcha #5 (`accessible` on chart containers) lessons were baked
-into the flow and the HANDOFF respectively, and both paid off.
-
-**Infra:** the unkillable-orphan Metro pattern repeated on 8082 (taskkill
-Access-denied even unsandboxed) — this host does not release Metro child
-processes; each restart takes the next port (8081, 8082 now both stuck until
-a reboot). Fresh Metro on **8083**, helper port updated. Metro left running
-on 8083 at session end.
-
-## Addendum 4 — finding-drill-down cycle flow (`m-finding-drilldown.yaml`, 2026-08-24 late)
-
-**1/1 passed on the second run (recorded, `flows/results-m.xml`),
-fresh-bundle verified.** Onion seed → tap "See all logs: onion" → detail
-screen: 3 rows with dates/sentiment, ≥1 "Rough outcome within 24 h" marker,
-row tap-through to Edit entry. One **flow-bug** (no app bugs): the first run
-asserted "2 followed by a rough outcome" assuming second-granularity
-timestamps, but the entry forms round `loggedAt` to the **minute** — dishes
-saved in the same minute share an identical timestamp and the strictly-after
-outcome rule correctly skips them, so the exact count is run-dependent. Fixed
-by asserting the stable summary parts + at-least-one marker; now E2E.md
-gotcha #6. The screenshot doubled as visual confirmation the screen renders
-exactly as specced (header = tag, summary, markers, chevron rows).
-
-**Review remediation (before the flow):** tag drill-down matching gated to
-food entries (`9478e90`) — parity with how insights/temporal count a tag
-finding's occurrences. Rungs after: 69 suites / 612 tests.
-
-**Infra:** orphaned-Metro pattern again; fresh Metro on **8084** (helper
-updated; 8081–8083 all held until a host reboot). Left running at session
-end.
-
-## Addendum 5 — doctor-PDF-report cycle review (2026-08-24, final)
-
-**Fable review of Sonnet's execution: no code remediation.** All four rungs
-re-verified independently (typecheck ✅ lint ✅ jest ✅ 72 suites / 630 tests ·
-`bundle:check` ✅) and the static-import discipline confirmed
-(`grep "from 'expo-print'\|from 'expo-haptics'" src` → empty). Accepted
-deviations: (1) a **Jest-only Babel plugin** in `babel.config.js` rewriting
-`import(x)` → `Promise.resolve().then(() => require(x))`, gated on
-`JEST_WORKER_ID` — needed because jest-expo hardcodes the Babel caller to
-Metro, so real dynamic `import()` throws at the VM level under Node 25 Jest
-and mocks never engage; verified inert for real bundles via `bundle:check`.
-(2) separate `reportWorking` state; (3) one-line invalid-params fallback.
-npm audit: 22 pre-existing toolchain advisories; both new packages are leaf
-deps adding zero transitive dependencies.
-
-**Device checks NOT run — the Pixel dropped off adb mid-session** (empty
-`adb devices` after daemon restart; physical reconnect needed). Owed to the
-next device session, in order: (a) old-client safety spot-check — Settings
-renders the "Doctor report" section and "Create PDF report" shows the
-Update-required alert (scratch flow spec preserved in this addendum's
-history); re-run `settings-smoke` + `i-backup`; (b) after the owner's EAS
-`development` build: real PDF share sheet, haptics feel, and an
-`n-doctor-report.yaml` flow. Metro left running on **8085** (helper updated;
-8081–8084 held by unkillable orphans until reboot).
+- **Doctor-report guard**: Settings renders the "Doctor report" section;
+  "Create PDF report" shows the Update-required alert on this old client.
+  Done via scratch flow (not committed to the suite).
+- **`settings-smoke` + `i-backup` re-runs**: both green, unmodified.
 
 ## Findings for the next planning session
 
-- No app bugs found. The multi-symptom fan-out (one save → one row per
-  symptom, shared time/severity/notes) behaves as specced on-device.
-- ~~`flows/j-component-drilldown.yaml` remains the only unauthored owed flow~~
-  **Authored + verified same day — see the Addendum above. The flow backlog is
-  fully clear**; the next full `e2e:ci` run will sweep 25 flows.
-- Carried from before (unchanged): root-level React error boundary ·
-  "Insights" subtitle heading · the dev-mode "state update on a component that
-  hasn't mounted yet" warning (repro with LogBox open still owed).
-- Remaining manual/owner rows: `clearState` wipes only `.dev` (owner opens the
-  real app after this session and confirms entries intact) · preview-build
-  reclaim of `com.tummytracker.app` · the E2E.md manual list (camera,
-  notification timing, dark-mode visuals, export content, import round-trip).
+- **Dev-only LogBox redbox on the caught `expo-print` import failure**
+  (`src/app/(tabs)/settings.tsx:152`): the `try/catch` works — the
+  Update-required alert fires as designed — but the failed dynamic import
+  ALSO throws an unhandled "Cannot find native module 'ExpoPrint'" into
+  LogBox, which draws a redbox over the alert on dev builds. Cosmetic,
+  dev-only (LogBox is stripped in release), and it disappears once the new
+  build ships the native — but if the pattern recurs for future
+  gated natives, consider swallowing the module-level rejection explicitly.
+  Not fixed here (test sessions don't change features).
+- **The EAS `development` build is still the gating item** for: keyboard QA
+  checklist (E2E.md manual items #6–7), the real PDF share-sheet flow
+  (`n-doctor-report.yaml`, still unauthored — needs the native), haptics
+  feel, and removing the ~45 `hideKeyboard` workarounds. The owner's
+  `eas login` was blocked by corporate TLS interception — fix documented in
+  ACCEPTANCE.md's build section (`NODE_OPTIONS=--use-system-ca` or
+  `NODE_EXTRA_CA_CERTS`).
+- Carried (unchanged): root-level React error boundary (📌 pinned) ·
+  "Insights" subtitle heading · dev-mode mount warning repro · chart
+  `accessible` gap on BarMeter (TrendBars/MiniHistogram were deleted
+  2026-08-28, shrinking that follow-up to BarMeter only).
 
 ## ACCEPTANCE.md changes made
 
-- "Post-MVP · 2026-08-24 release" → "Multi-symptom logging in one instance" →
-  all 3 rows `[ ]` → `[x]` (c2 flow, c single-tap regression, Jest
-  deselect/empty-selection coverage).
-- "Post-MVP · 2026-08-21 release" → "Build-variant split" → "Full Maestro
-  suite passes against the dev variant" `[ ]` → `[x]`; "Home tab" →
-  `h-recent-foods.yaml` nested-scroll re-run `[ ]` → `[x]`.
-- Left `[ ]`: `clearState`-scope + preview-reclaim (manual/owner),
-  `j-component-drilldown.yaml` (unauthored), Home visual row (manual).
+- 2026-08-28 release section: header updated (28/28 baseline); flipped
+  `[ ]`→`[x]`: no-rating-selector-on-meal-forms (01b + 03-insights), BM
+  "How did it feel?" + isOutcome wiring (02-bm-tracking + Jest + e-temporal),
+  new Insights section set (03/d/e/k/l/watchlist collectively). Doctor-PDF
+  row annotated with the old-client guard result; historical-rating row
+  annotated with its Jest regression coverage. Keyboard rows stay `[ ]`
+  (EAS build).
+- Superseded 2026-08-28 annotations on 01b / 01d / D-section /
+  finding-drilldown rows updated from "owed a rework" to "reworked +
+  verified 2026-08-29".
