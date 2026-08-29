@@ -210,3 +210,18 @@ graceful-degradation fallback.
 - Docs: `docs/E2E.md`, `docs/RESULTS.md` (this addendum),
   `docs/ACCEPTANCE.md`, `.gitignore` (`.qa-shots/`).
 - No `src/**` changes (guardrail honored).
+
+### Full regression on the new build — 29/29 ✅ (the standing baseline)
+
+The natives change is a dependency bump = full blast radius
+(TEST_STRATEGY §6), so the whole suite was re-run against the new build:
+**29/29 passed in 1h 1m 18s** (`flows/results.xml`) — all 28 prior flows
+plus `n-doctor-report`, now with `KeyboardAwareScrollView` actually driving
+scroll physics under every form flow and the real print/share pipeline in
+the loop. Zero flow-bugs, zero app regressions surfaced by the suite (the
+`meal/component` scroll mis-anchor above is real but off the flows' paths —
+no flow types a searchable name and then targets a deep nutrition field).
+**This run supersedes the same-day 28/28 old-client run above as the
+baseline.** The ~45 `hideKeyboard` workarounds ran harmlessly against the
+new keyboard behavior; whether they can now be *removed* is a cleanup for a
+future test session, not a correctness issue.
