@@ -136,9 +136,11 @@ Completed tiers are collapsed to a single line; their detail lives in git.
 
 ## 📌 Pinned — next up
 
-_(none currently — the fifth pin, error boundary + watchlist follow-ons,
-**shipped + on-device verified 2026-08-29** — see below. Next plan session
-picks from the tiers.)_
+1. **Re-log a past meal + add items (GitHub #1, planned 2026-09-26)** —
+   Recent tap seeds the meal builder (copy, never edit) → meal review gains
+   an "Add item" button into the existing scan/manual flow. Pure JS/TS, S–M.
+   Spec: `docs/HANDOFF.md`. Follow-up candidates: servings stepper on
+   review; retire `entry/new` + `prefillStore` once unused.
 
 **✅ Shipped 2026-08-29 (error boundary + watchlist cycle — Sonnet executed,
 Fable reviewed, on-device verified same day):**

@@ -1,167 +1,209 @@
-# HANDOFF.md — Execute session: doctor PDF report (+ haptics rider)
+# HANDOFF.md — Execute session: re-log a past meal + add items to it (GitHub #1)
 
 > **Read first:** this file only. `CLAUDE.md` is auto-loaded (§4 rungs, §8
-> conventions, §9 guardrails). This cycle touches `package.json` (**two
-> owner-approved deps: `expo-print`, `expo-haptics`** — already added to the
-> §3 table), new `src/lib/report.ts` + `src/lib/haptics.ts`,
-> `src/app/(tabs)/settings.tsx`, `src/app/entry/[id].tsx`,
-> `src/app/entry/component/[componentId].tsx`,
-> `src/features/logging/ComponentForm.tsx` (haptic hooks only), and tests.
+> conventions, §9 guardrails). This cycle is **pure JS/TS** — no new
+> dependency, no schema change, no native/config change, no EAS build. It
+> touches `src/lib/mealAggregate.ts`, `src/features/logging/mealBuilderStore.ts`,
+> `src/app/(tabs)/index.tsx`, `src/app/meal/review.tsx`,
+> `src/app/meal/component.tsx`, and their tests.
 
-**Planned 2026-08-24 (Fable plan session), owner-requested and pinned:**
-share a date range + insights with a doctor/dietitian as a PDF. This is also
-the long-planned **native-build cycle**, so the owner-approved `expo-haptics`
-(deferred since the swipe-delete cycle) rides along.
+**Planned 2026-09-26 (Opus plan session), owner-requested — GitHub issue
+Michaelafuller/TummyTracker#1:**
+
+> As a User, I want to be able to add new food items when selecting an
+> existing meal item from my history, so that I can update similar, but not
+> exact, meals for faster meal entry.
+>
+> Done when there is an "Add item" button that follows the existing
+> add-food-item-to-a-meal process.
+
+**Owner decisions (2026-09-26):**
+1. **Copy, never edit.** Picking a past meal starts a *new* draft meal
+   (date/time = now) pre-loaded with that meal's items. The original entry is
+   never modified. (Edit-in-place of a saved meal stays on `entry/[id]`, out
+   of scope.)
+2. **Every Recent tap goes to the meal review screen** — single foods and
+   multi-item meals alike. A single food becomes a one-item draft meal.
+3. **After adding an item the user lands back on the review screen** with the
+   new item listed and totals updated, then taps the existing "Save meal".
 
 ---
 
-## 0. THE constraint — read twice
+## 0. How it works today (so you don't re-derive it)
 
-**The installed dev client predates both new native modules.** A static
-`import * as Print from 'expo-print'` in any eagerly-loaded module crashes
-the Metro-served client on the owner's Pixel and breaks every Maestro flow
-until a new EAS build exists. Therefore:
+- **"History" = Home's Recent list** (`RecentFoodPicker`). `handleRecentTap`
+  in `src/app/(tabs)/index.tsx` flattens the entry into the single-item
+  `LogEntryForm` via `usePrefillStore` → `/entry/new`. A multi-item meal is
+  squashed to one flat entry and **its components are lost** — this cycle
+  fixes that as a side effect.
+- **The existing add-food process is the meal builder:** `/scan` (or its
+  "Enter manually" hatch) → `router.replace('/meal/component')` → "Add & scan
+  next" (`replace('/scan')`) or "Finish meal" (`replace('/meal/review')`) →
+  `/meal/review` → "Save meal" (`createMealWithComponents`, then
+  `clearBuilder()` + `router.dismissAll()`).
+- **`/meal/review` already does most of the story:** item list with a
+  per-item **Remove**, live aggregate, cap/watchlist notices, and a save that
+  always *creates* a new entry. Its name/type/slot/date/notes live in local
+  `useState` seeded once by `defaultMealReviewState(components)`.
+- **`useMealBuilderStore` is only cleared on save.** Abandoning the builder
+  midway leaves stale components that leak into the next meal (latent bug —
+  fixed here in §1.5 because seeding from history makes it worse).
 
-- **Never import `expo-print` or `expo-haptics` statically anywhere.** Only
-  dynamic `await import('expo-print')` inside the user-triggered handler
-  (report) and inside the `src/lib/haptics.ts` wrapper (haptics), each in a
-  try/catch with a graceful fallback. Jest still intercepts dynamic imports
-  via `jest.mock`, so tests are unaffected.
-- **`npm run bundle:check` is a mandatory 4th rung this cycle** (new deps →
-  bundler risk; this cycle precedes an EAS build).
-- Install with `npx expo install expo-print expo-haptics` (SDK-matched
-  versions), then run `npm audit --omit=dev` and report the result in your
-  execute summary (Decision 1 CVE inventory).
-- Do NOT run EAS/eas build (owner-driven), Metro, or Maestro.
+## 1. Changes
 
-## 1. Part A — PDF report
+### 1.1 `src/lib/mealAggregate.ts` — pure seed helper
 
-### 1.1 New `src/lib/report.ts` — pure HTML builder (no React, `now` passed in)
-
-```
-export const REPORT_RANGES = [14, 30, 90] as const;
-export type ReportRangeDays = (typeof REPORT_RANGES)[number];
-export function escapeHtml(text: string): string
-export function buildReportHtml(
-  entries: readonly LogEntry[], now: number, rangeDays: ReportRangeDays,
-): string
-```
-
-- Range: entries with `loggedAt` in the `rangeDays` calendar days ending
-  today inclusive (same `startOfDay` windowing as `bmRegularity`).
-- Returns a complete printable HTML document (inline `<style>`, system font
-  stack, black-on-white — this is for paper/PDF, not the app theme):
-  1. Header: "TummyTracker report", the range ("July 26 – August 24, 2026"
-     via `formatLongDate`), generated date.
-  2. Summary line from `computeInsights(rangedEntries).summary` (entries ·
-     food · BM · rated · avg sentiment — mirror the Insights screen's
-     phrasing).
-  3. Findings sections (ingredients / combinations / foods / timing /
-     nutrients) from the same `computeInsights` result, each finding as one
-     compact sentence with its confidence tier and n. Write the sentences in
-     report.ts (don't import from the insights screen module). Skip empty
-     sections; if no findings at all, one line: "No patterns stand out yet."
-  4. Journal table grouped by day (newest day first): time, name, detail
-     (sentiment label · Bristol n · severity n as applicable), notes.
-  5. Footer disclaimer: exactly the Insights screen's observation framing
-     ("These are observations from the user's own logs — patterns, not
-     medical advice.").
-- **Every user-authored string (names, notes, ingredient tags) goes through
-  `escapeHtml`** — names like `Rice<script>` must render inert.
-
-### 1.2 `src/app/(tabs)/settings.tsx` — "Doctor report" section
-
-After the backup/export section: heading "Doctor report", small
-textSecondary line "A printable summary of your logs and patterns to share
-with a professional.", three range chips (Pressables styled like existing
-chips/segments; labels "2 weeks", "30 days", "90 days";
-`accessibilityState.selected`; default **30 days**), and a "Create PDF
-report" button (existing button styling, `accessibilityLabel="Create PDF
-report"`, disabled while working — reuse `dataWorking` or a sibling state).
-
-Handler: `listLogEntries()` → `buildReportHtml(entries, Date.now(), range)`
-→ `const Print = await import('expo-print')` →
-`Print.printToFileAsync({ html })` → `Sharing.shareAsync(uri, { mimeType:
-'application/pdf', dialogTitle: 'Share report' })`. Wrap the whole handler in
-try/catch; on failure: `Alert.alert('Update required', 'Creating a PDF needs
-the app build that includes printing — install the next dev build, then try
-again.')`. (On the owner's current client this alert IS the expected
-behavior; after the next EAS build the share sheet appears.)
-
-## 2. Part B — haptics rider (spec from the swipe-delete cycle's §B.6)
-
-### 2.1 New `src/lib/haptics.ts`
-
-```
-export type FeedbackKind = 'impact' | 'success';
-export async function tapFeedback(kind: FeedbackKind): Promise<void>
+```ts
+/**
+ * Turn a saved food entry into builder drafts for a "re-log with changes"
+ * session. Uses the entry's saved component rows when there are any; a flat
+ * entry (legacy / single-item, no component rows) becomes one draft built
+ * from the entry's own fields with servings = 1 (logEntry nutrition is the
+ * as-eaten total, so ×1 reproduces it exactly).
+ */
+export function entryToComponentDrafts(
+  entry: LogEntry,
+  components: readonly MealComponent[],
+): MealComponentDraft[]
 ```
 
-Dynamic `await import('expo-haptics')`; `impact` →
-`impactAsync(ImpactFeedbackStyle.Medium)`, `success` →
-`notificationAsync(NotificationFeedbackType.Success)`. **Swallow every
-error** (missing native module → silent no-op). Fire-and-forget at call
-sites — never `await` it in UI flow, never let it reject unhandled.
+- Component rows → drop `id`, `entryId`, `createdAt`; keep everything else
+  (servings, servingG, per-serving nutrition, `ingredientsText`, `tagsJson`),
+  ordered by `sortOrder`.
+- Flat entry → `name`, `barcode`, `servings: 1`, `servingG`, every
+  `NUTRITION_FIELDS` value, `ingredientsText`, `tagsJson`, `sortOrder: 0`.
+- Must round-trip: `aggregateComponents(entryToComponentDrafts(e, rows))`
+  equals the entry's saved nutrition for both shapes (assert it in tests).
 
-### 2.2 Wiring (all fire-and-forget `tapFeedback(...)`)
+### 1.2 `src/features/logging/mealBuilderStore.ts` — load + review prefill
 
-- `src/app/entry/[id].tsx`: swipe action reveal
-  (`ReanimatedSwipeable`'s `onSwipeableWillOpen`) → `'impact'`; confirmed
-  component delete (the Remove press, before the repository call) →
-  `'impact'`.
-- `src/app/entry/component/[componentId].tsx`: confirmed delete →
-  `'impact'`; successful save (after `updateMealComponentAndReaggregate`,
-  before `router.back()`) → `'success'`.
-- `src/features/logging/ComponentForm.tsx`: no changes beyond what the two
-  screens need — if the cleanest hook is in the screens alone, leave the
-  form untouched (preferred).
+Add to the store:
+
+```ts
+reviewPrefill: Partial<MealReviewFormState> | null;
+/** Replace the whole builder (never append) — used when seeding from history. */
+load: (components: MealComponentDraft[], reviewPrefill: Partial<MealReviewFormState>) => void;
+```
+
+- `load` **replaces** `components` and sets `reviewPrefill`.
+- `clear()` resets **both** `components: []` and `reviewPrefill: null`.
+- Import `MealReviewFormState` as a type only (avoid a runtime cycle).
+
+### 1.3 `src/app/(tabs)/index.tsx` — Recent tap seeds the builder
+
+Replace `handleRecentTap`'s body:
+
+1. `const rows = await getMealComponents(entry.id)` (already exported from
+   `@/db/repository`; returns `[]` for flat entries).
+2. `load(entryToComponentDrafts(entry, rows), { name: entry.name, type:
+   entry.type, mealSlot: entry.mealSlot })` — **notes are not copied**
+   (they describe that occasion), date/time is left to default to now.
+3. `router.push('/meal/review')`.
+
+Drop the now-unused `usePrefillStore` / `logEntryToFormState` / datetime
+imports from this file. Leave `src/app/entry/new.tsx` and `prefillStore.ts`
+in place (see §5 — owner decides on removal).
+
+### 1.4 `src/app/meal/review.tsx` — "Add item" button + prefill
+
+- Initial state: `{ ...defaultMealReviewState(components), ...reviewPrefill }`
+  read once inside the existing `useState` initializer (read via
+  `useMealBuilderStore.getState()` like `meal/component.tsx` reads its prefill).
+- **"Add item" button** directly **below the "In this meal" list** (above
+  the aggregate line): secondary style consistent with the screen,
+  `accessibilityLabel="Add item to this meal"`, `testID="review-add-item"`,
+  label "Add item". `onPress={() => router.push('/scan')}`.
+  - `push`, **not** `replace`: the review screen stays mounted underneath,
+    so any name/slot/notes edits the user already made survive the round
+    trip, and hardware-back from the scanner returns to the draft instead of
+    abandoning it.
+- Everything else (Remove, aggregate, notices, Save) is unchanged — it
+  already reacts to store changes.
+
+### 1.5 `src/app/meal/component.tsx` — return to the existing review
+
+- "Finish meal": `router.replace('/meal/review')` →
+  **`router.dismissTo('/meal/review')`** (expo-router 56.2 exports it). If a
+  review screen is already in the stack (the Add-item path) it pops back to
+  that mounted instance; if not (the normal Home → Scan path) it replaces —
+  identical to today's behavior, so existing flows are unaffected.
+- "Add & scan next" keeps `router.replace('/scan')`.
+
+### 1.6 Clean start for a new meal (latent-bug fix)
+
+Home's "Scan barcode" and "Add an entry manually" CTAs start a *new* meal,
+so they must call `useMealBuilderStore.getState().clear()` before
+navigating. They are `<Link asChild>` today — add an `onPress` that clears
+on the inner `Pressable` (Link still navigates), or convert to
+`router.push` in a handler — whichever keeps the existing `testID`s /
+labels / flattened styles intact (Maestro flows depend on them).
+
+## 2. Out of scope (do not build)
+
+- Changing an item's servings on the review screen (store's
+  `updateComponent` exists but has no UI) — **candidate follow-up story**.
+- Adding items to a saved entry in place from `entry/[id]` (owner chose copy
+  semantics).
+- Badging Home recents with watched ingredients (already a separate
+  optional follow-on).
 
 ## 3. Tests (same change, CLAUDE.md §4)
 
-- **New `src/lib/__tests__/report.test.ts`**: range filtering (in/out
-  edges); `escapeHtml` (`<`, `>`, `&`, quotes) and that a malicious entry
-  name appears only escaped in the output; summary numbers present; a
-  seeded low-sentiment recurring food produces its finding sentence; empty
-  range → "No patterns stand out yet." + empty journal handled; disclaimer
-  present.
-- **New `src/lib/__tests__/haptics.test.ts`**: `jest.mock('expo-haptics')`
-  → right function per kind; mock that throws / mock module absent →
-  resolves without throwing.
-- **Settings screen test** (extend `src/app/(tabs)/__tests__/` settings
-  coverage if present, else add one following its siblings): section
-  renders; range chip select updates `accessibilityState`; pressing "Create
-  PDF report" with `jest.mock('expo-print')` + mocked repository calls
-  `printToFileAsync` with HTML containing the report title, then
-  `shareAsync`; a rejecting `printToFileAsync` shows the Update-required
-  alert (mock `Alert.alert`).
-- Existing entry/component screen tests must stay green (haptics wrapper is
-  mocked or no-ops harmlessly — it must not need mocking to pass, by
-  design).
+- **`src/lib/__tests__/mealAggregate.test.ts`** — `entryToComponentDrafts`:
+  multi-component entry → drafts in `sortOrder` with ids stripped; flat
+  entry → one draft, `servings: 1`, all nutrition/tags/ingredients carried;
+  entry with `componentCount` set but zero rows → falls back to the flat
+  draft; round-trip `aggregateComponents(...)` equals the entry's nutrition
+  for both shapes.
+- **`src/features/logging/__tests__/mealBuilderStore.test.ts`** — `load`
+  replaces (not appends) pre-existing components; `clear` resets
+  `reviewPrefill` too.
+- **`src/app/(tabs)/__tests__/index.test.tsx`** — tapping a recent row
+  calls `getMealComponents(entry.id)`, loads the store with the expected
+  drafts + prefill (name/type/slot, no notes), and pushes `/meal/review`;
+  Scan / manual CTAs clear a pre-populated builder. Add `getMealComponents`
+  to the existing `@/db/repository` mock.
+- **`src/app/meal/__tests__/review.test.tsx`** — `reviewPrefill` populates
+  the name field (and slot); "Add item to this meal" pushes `/scan` (add
+  `push` to the router mock); saving a loaded draft calls
+  `createMealWithComponents` once with all components (original + added) —
+  i.e. it creates, never updates.
+- **`src/app/meal/__tests__/component.test.tsx`** — "Finish meal" now calls
+  `dismissTo('/meal/review')` (update the router mock + the existing test at
+  line ~65).
 
 ## 4. Definition of done
 
-- `npm run typecheck` && `npm run lint` && `npm test` green, **plus
-  `npm run bundle:check`** — run all four.
-- No `// @ts-ignore`, no lint disables, no schema change, no static imports
-  of the two new modules (grep yourself before committing:
-  `grep -rn "from 'expo-print'\|from 'expo-haptics'" src` must return
-  nothing).
+- `npm run typecheck` && `npm run lint` && `npm test` green — run all three.
+  (`bundle:check` not required: no deps/config/Babel change.)
+- No `// @ts-ignore`, no lint disables, no schema change, no new dependency.
+- Every new interactive element has an `accessibilityLabel` (§8).
+- Do NOT run EAS, Metro, or Maestro.
 - Commits (imperative, scoped), suggested split:
-  `chore(deps): add expo-print + expo-haptics (owner-approved)` ·
-  `feat(report): doctor PDF report — range picker + printable summary` ·
-  `feat(haptics): tactile feedback on delete + save (graceful no-op)` ·
-  `test(report): report builder + settings + haptics coverage`.
-- Execute summary: files, commits, rung + bundle:check results, npm audit
-  result, deviations with reasons.
+  `feat(logging): seed meal builder from a history entry` (lib helper +
+  store + tests) ·
+  `feat(logging): re-log recents through meal review with an Add item button`
+  (index, review, component + tests) ·
+  `fix(logging): clear stale meal-builder state when starting a new meal`.
+- Execute summary: files, commits, rung results (suite/test counts),
+  deviations with reasons.
 
-## 5. After this (review pass + owner action + test session)
+## 5. After this (review pass + test session + owner decisions)
 
-Fable reviews the diff, re-runs the four rungs, then device-checks that the
-**new JS on the OLD client does not crash**: re-run `settings-smoke` and
-`i-backup` flows, plus a scratch check that "Create PDF report" shows the
-Update-required alert. Full PDF + haptics verification and a
-`n-doctor-report.yaml` flow are **owed until the owner runs the next EAS
-`development`-profile build** (which delivers both native modules; CLAUDE.md
-§0 signing caveat applies — never install over the real app). **Metro for
-this worktree is on port 8084**; a restart takes 8085 (orphaned-Metro
-quirk).
+- **Opus review** of the diff; re-run the three rungs.
+- **Test session (on-device, Metro-served — no new build needed):**
+  - **Update `flows/h-recent-foods.yaml`** — after tapping `recent-oatmeal`
+    it now lands on meal review ("In this meal" / "Save meal", not "Save
+    entry"). Extend it: tap `review-add-item` → "Enter manually" → fill a
+    name (e.g. "Banana") → "Finish meal" → assert back on review with both
+    "Oatmeal" and "Banana" listed → "Save meal" → Journal shows the new
+    entry and the original Oatmeal entry is still present and unchanged.
+  - Scratch-check hardware-back from the scanner during Add item returns to
+    the draft with the name edit intact.
+  - **Full regression** — every flow that taps "Finish meal" now goes
+    through `dismissTo` (behavior should be identical; prove it).
+- **Owner decisions owed:**
+  - `src/app/entry/new.tsx` + `prefillStore.ts` lose their only entry point
+    (Recent tap). Delete them in a follow-up cleanup, or keep for a future
+    use?
+  - Pin "adjust servings on the review screen" as the next story?
