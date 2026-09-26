@@ -1,6 +1,6 @@
 import { useFocusEffect, Link, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet } from 'react-native';
+import { useCallback, useRef, useState } from 'react';
+import { Alert, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { KeyboardShiftView } from '@/components/keyboard-aware-screen';
@@ -20,6 +20,7 @@ export default function HomeScreen() {
   const loadBuilder = useMealBuilderStore((s) => s.load);
   const clearBuilder = useMealBuilderStore((s) => s.clear);
   const [recents, setRecents] = useState<LogEntry[]>([]);
+  const recentTapInFlight = useRef(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -29,15 +30,27 @@ export default function HomeScreen() {
 
   const handleRecentTap = useCallback(
     async (entry: LogEntry) => {
-      // Copy, never edit (owner decision): re-loading a past entry starts a
-      // new draft meal seeded with its items, never touches the saved row.
-      const rows = await getMealComponents(entry.id);
-      loadBuilder(entryToComponentDrafts(entry, rows), {
-        name: entry.name,
-        type: entry.type,
-        mealSlot: entry.mealSlot,
-      });
-      router.push('/meal/review');
+      // Guard against a fast second tap (same row or another) while the first
+      // is still loading — without this, both taps race to loadBuilder/push.
+      if (recentTapInFlight.current) {
+        return;
+      }
+      recentTapInFlight.current = true;
+      try {
+        // Copy, never edit (owner decision): re-loading a past entry starts a
+        // new draft meal seeded with its items, never touches the saved row.
+        const rows = await getMealComponents(entry.id);
+        loadBuilder(entryToComponentDrafts(entry, rows), {
+          name: entry.name,
+          type: entry.type,
+          mealSlot: entry.mealSlot,
+        });
+        router.push('/meal/review');
+      } catch {
+        Alert.alert("Couldn't open that meal", 'Something went wrong loading it — try again.');
+      } finally {
+        recentTapInFlight.current = false;
+      }
     },
     [loadBuilder, router],
   );
