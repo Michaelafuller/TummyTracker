@@ -154,8 +154,9 @@ regression not yet re-run (owner asked for targeted runs only).
 - **Add item needs the camera screen:** "Enter manually" is only reachable
   after camera permission is granted, so a user who denied camera can't add
   a manual item from review. Home has a separate manual CTA; review doesn't.
-- **Recent tap is async and unguarded:** a fast double tap can push review
-  twice, and a rejected `getMealComponents` is unhandled (`index.tsx`).
+- ~~Recent tap double-tap / unhandled load failure~~ — fixed 2026-09-26
+  (`b02acc9` + `f7035bd`: in-flight ref guard, "Couldn't open that meal"
+  alert, mutation-checked test).
 - Retire `entry/new` + `prefillStore` — no callers left (owner decision).
 
 **✅ Shipped 2026-08-29 (error boundary + watchlist cycle — Sonnet executed,
