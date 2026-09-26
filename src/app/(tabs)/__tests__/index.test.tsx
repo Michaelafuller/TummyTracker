@@ -1,36 +1,12 @@
-import { useEffect as mockUseEffect } from 'react';
+import { createElement as mockCreateElement, useEffect as mockUseEffect } from 'react';
 import { Alert } from 'react-native';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
-import type { TestInstance } from 'test-renderer';
 
 import { getMealComponents, listRecentFoodEntries } from '@/db/repository';
 import type { LogEntry, MealComponent } from '@/db/schema';
 import { useMealBuilderStore } from '@/features/logging/mealBuilderStore';
 import type { MealComponentDraft } from '@/lib/mealAggregate';
 import HomeScreen from '../index';
-
-/**
- * Walks up from a host element to find the nearest ancestor fiber's `onPress`
- * prop and returns it. Used only to simulate a double tap arriving while the
- * first tap's async handler is still pending (see the "guards against a
- * double tap" test below) — `fireEvent.press` can't be used there because it
- * wraps every dispatch in RNTL's `act()`, which waits for an async handler's
- * promise chain to settle before returning, deadlocking on a promise the test
- * itself hasn't resolved yet.
- */
-function getOnPressHandler(instance: TestInstance): () => void {
-  // reason: RNTL's TestInstance doesn't type `unstable_fiber`, and fiber
-  // internals (`memoizedProps`, `return`) aren't part of any public type.
-  let fiber = (instance as any).unstable_fiber;
-  while (fiber) {
-    const onPress = fiber.memoizedProps?.onPress;
-    if (typeof onPress === 'function') {
-      return onPress;
-    }
-    fiber = fiber.return;
-  }
-  throw new Error('No onPress handler found in ancestor fibers');
-}
 
 const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
@@ -41,6 +17,22 @@ jest.mock('expo-router', () => ({
   // mount" — sufficient to exercise the initial fetch this screen does.
   useFocusEffect: (effect: () => void | (() => void)) => mockUseEffect(effect, []),
 }));
+
+// Pass-through spy on the real picker: renders it unchanged (the other tests
+// tap its rows) and records the latest `onSelect` HomeScreen handed it. The
+// double-tap test calls that handler directly, because `fireEvent.press`
+// wraps each dispatch in act(), which waits for an async handler to settle —
+// so it can't land a second tap while the first load is still pending.
+let mockPickerOnSelect: ((entry: LogEntry) => void) | undefined;
+jest.mock('@/features/logging/RecentFoodPicker', () => {
+  const actual = jest.requireActual('@/features/logging/RecentFoodPicker');
+  return {
+    RecentFoodPicker: (props: { onSelect: (entry: LogEntry) => void }) => {
+      mockPickerOnSelect = props.onSelect;
+      return mockCreateElement(actual.RecentFoodPicker, props);
+    },
+  };
+});
 
 jest.mock('@/db/repository', () => ({
   listRecentFoodEntries: jest.fn(),
@@ -219,25 +211,15 @@ describe('HomeScreen', () => {
     );
 
     const { findByLabelText } = await render(<HomeScreen />);
-    const oatmealRow = await findByLabelText('Re-log Oatmeal');
-    const toastRow = await findByLabelText('Re-log Toast');
-    const pressOatmeal = getOnPressHandler(oatmealRow);
-    const pressToast = getOnPressHandler(toastRow);
+    await findByLabelText('Re-log Toast'); // both rows rendered → onSelect captured
+    const onSelect = mockPickerOnSelect!;
 
-    // Fire off a fast flurry of taps — same row twice, then a different row —
-    // all before the first getMealComponents call has resolved. `fireEvent.press`
-    // wraps every dispatch in RNTL's `act()`, which (given an async handler)
-    // waits for the handler's own promise chain to settle before returning —
-    // so it can't be used here to simulate a second tap arriving *while the
-    // first is still pending*: awaiting it would deadlock on the very
-    // getMealComponents call this test hasn't resolved yet. Calling the
-    // Pressable's onPress prop directly sidesteps that, since it doesn't
-    // trigger any React state update in this component (the in-flight guard
-    // is a plain ref, and loadBuilder/router are called only after the load
-    // succeeds) — nothing here needs `act()` to observe it.
-    pressOatmeal();
-    pressOatmeal();
-    pressToast();
+    // A fast flurry — same row twice, then a different row — all before the
+    // first getMealComponents call resolves (see the picker spy above for why
+    // this calls the handler rather than fireEvent.press).
+    onSelect(BASE_ENTRY);
+    onSelect(BASE_ENTRY);
+    onSelect(SECOND_ENTRY);
 
     expect(getMealComponents).toHaveBeenCalledTimes(1);
     expect(getMealComponents).toHaveBeenCalledWith('e1');
