@@ -1,0 +1,95 @@
+appId: com.tummytracker.app.dev
+# Q — Re-use a saved meal, then adjust it before saving (GitHub #1 follow-up,
+# 2026-09-26). Covers the servings stepper AND Remove on items copied from
+# history, which h-recent-foods (add) and p-review-servings (fresh meal) don't:
+#   - Seed one saved meal: Rice 200 + Beans 100 = 300 kcal (two items)
+#   - Recent tap → review seeded with both items (Aggregate 300)
+#   - Rice 1× → 2× rescales the row (400) and aggregate (500)
+#   - Remove Beans → one item left, aggregate 400
+#   - Save → journal holds the new 400 kcal entry AND the untouched 300 kcal
+#     two-item original (copy, never edit)
+---
+- launchApp:
+    clearState: true
+- runFlow: _helpers/reconnect-dev-client.yaml
+# Seed: one saved meal, Rice 200 + Beans 100 = 300 kcal
+- tapOn: "Add an entry manually"
+- tapOn: "Component name"
+- inputText: "Rice"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Calories"
+    direction: DOWN
+- tapOn: "Calories"
+- inputText: "200"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Add & scan next"
+    direction: DOWN
+- tapOn: "Add & scan next"
+- tapOn: "Enter product manually"
+- tapOn: "Component name"
+- inputText: "Beans"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Calories"
+    direction: DOWN
+- tapOn: "Calories"
+- inputText: "100"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Finish meal"
+    direction: DOWN
+- tapOn: "Finish meal"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "Save meal"
+    direction: DOWN
+- tapOn: "Save meal"
+- waitForAnimationToEnd
+# Re-use it from Recent
+- tapOn:
+    id: "tab-journal"
+- tapOn:
+    id: "tab-home"
+- scrollUntilVisible:
+    element:
+      id: "recent-rice-1-more"
+    direction: DOWN
+- tapOn:
+    id: "recent-rice-1-more"
+- waitForAnimationToEnd
+- assertVisible:
+    id: "component-1"
+- assertVisible: "Aggregate: 300 kcal"
+# Adjust servings on a re-used item: Rice 1x -> 2x
+- tapOn:
+    id: "component-0-servings-inc"
+- tapOn:
+    id: "component-0-servings-inc"
+- assertVisible:
+    id: "component-0-kcal"
+    text: "400 kcal"
+- assertVisible: "Aggregate: 500 kcal"
+# Remove the other re-used item
+- tapOn: "Remove Beans from meal"
+- assertNotVisible:
+    id: "component-1"
+- assertVisible: "Aggregate: 400 kcal"
+- scrollUntilVisible:
+    element:
+      text: "Save meal"
+    direction: DOWN
+- tapOn: "Save meal"
+- waitForAnimationToEnd
+# Journal: new 400 kcal entry + untouched 300 kcal original
+- tapOn:
+    id: "tab-journal"
+- waitForAnimationToEnd
+- assertVisible: ".*400 kcal.*"
+- assertVisible: ".*300 kcal.*"

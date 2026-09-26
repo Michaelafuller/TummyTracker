@@ -157,6 +157,16 @@ regression not yet re-run (owner asked for targeted runs only).
 - ~~Recent tap double-tap / unhandled load failure~~ — fixed 2026-09-26
   (`b02acc9` + `f7035bd`: in-flight ref guard, "Couldn't open that meal"
   alert, mutation-checked test).
+- **Stale auto-generated meal name (owner-approved for backlog, S):** the
+  review screen's name is set once at mount (`defaultMealReviewState` /
+  copied `reviewPrefill`) and never follows the item list, so re-using
+  "Rice + 1 more" and removing Beans saves a 1-item meal still called
+  "Rice + 1 more" (seen in `q-reuse-adjust`). Pre-existing on the normal
+  scan path too; re-use makes it common. Fix: while the name still equals
+  the auto-default for the *current or original* items (i.e. the user
+  hasn't typed their own), recompute it via `defaultMealName` as items are
+  added/removed; a user-typed name is never overwritten. Pure helper +
+  review test; update `q-reuse-adjust` to assert the saved name.
 - Retire `entry/new` + `prefillStore` — no callers left (owner decision).
 
 **✅ Shipped 2026-08-29 (error boundary + watchlist cycle — Sonnet executed,
