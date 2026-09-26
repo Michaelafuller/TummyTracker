@@ -23,7 +23,7 @@ function draft(name: string, overrides: Partial<MealComponentDraft> = {}): MealC
 }
 
 beforeEach(() => {
-  useMealBuilderStore.setState({ components: [] });
+  useMealBuilderStore.setState({ components: [], reviewPrefill: null });
 });
 
 describe('mealBuilderStore', () => {
@@ -62,5 +62,25 @@ describe('mealBuilderStore', () => {
     useMealBuilderStore.getState().addComponent(draft('Peas'));
     useMealBuilderStore.getState().clear();
     expect(useMealBuilderStore.getState().components).toEqual([]);
+  });
+
+  it('clear resets reviewPrefill too', () => {
+    useMealBuilderStore.getState().load([draft('Peas')], { name: 'Peas' });
+    useMealBuilderStore.getState().clear();
+    expect(useMealBuilderStore.getState().reviewPrefill).toBeNull();
+  });
+
+  describe('load', () => {
+    it('replaces (not appends) pre-existing components', () => {
+      useMealBuilderStore.getState().addComponent(draft('Stale'));
+      useMealBuilderStore.getState().load([draft('Peas'), draft('Rice')], { name: 'Peas + 1 more' });
+      const { components } = useMealBuilderStore.getState();
+      expect(components.map((c) => c.name)).toEqual(['Peas', 'Rice']);
+    });
+
+    it('sets reviewPrefill', () => {
+      useMealBuilderStore.getState().load([draft('Peas')], { name: 'Peas', mealSlot: 'breakfast' });
+      expect(useMealBuilderStore.getState().reviewPrefill).toEqual({ name: 'Peas', mealSlot: 'breakfast' });
+    });
   });
 });

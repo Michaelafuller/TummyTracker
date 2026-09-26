@@ -3,7 +3,7 @@
 // aggregate `logEntry` row (nutrition sums + tag union) that every other screen,
 // backup, and analyzer already knows how to consume.
 
-import type { MealComponent, NewMealComponent } from '@/db/schema';
+import type { LogEntry, MealComponent, NewMealComponent } from '@/db/schema';
 import { mergeTags, normalizeTag, parseTagsJson, serializeTags } from '@/lib/ingredients';
 import type { NutritionValues } from '@/lib/nutrition';
 import { NUTRITION_FIELDS } from '@/lib/validation';
@@ -113,6 +113,64 @@ export function reaggregateEntryPatch(
   const nutrition = aggregateComponents(components);
   const tags = mergeTags(parseTagsJson(existingEntryTagsJson), unionComponentTags(components));
   return { nutrition, tagsJson: tags.length > 0 ? serializeTags(tags) : null };
+}
+
+/**
+ * Turn a saved food entry into builder drafts for a "re-log with changes"
+ * session (HANDOFF.md GitHub #1). Uses the entry's saved component rows when
+ * there are any; a flat entry (legacy / single-item, no component rows —
+ * including a stale `componentCount` with zero actual rows) becomes one draft
+ * built from the entry's own fields with servings = 1 (logEntry nutrition is
+ * the as-eaten total, so ×1 reproduces it exactly). Round-trips through
+ * `aggregateComponents` back to the entry's saved nutrition for both shapes.
+ */
+export function entryToComponentDrafts(
+  entry: LogEntry,
+  components: readonly MealComponent[],
+): MealComponentDraft[] {
+  if (components.length > 0) {
+    return [...components]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map(
+        (component): MealComponentDraft => ({
+          name: component.name,
+          barcode: component.barcode,
+          servings: component.servings,
+          servingG: component.servingG,
+          calories: component.calories,
+          fatG: component.fatG,
+          saturatedFatG: component.saturatedFatG,
+          carbsG: component.carbsG,
+          proteinG: component.proteinG,
+          fiberG: component.fiberG,
+          sugarG: component.sugarG,
+          sodiumMg: component.sodiumMg,
+          ingredientsText: component.ingredientsText,
+          tagsJson: component.tagsJson,
+          sortOrder: component.sortOrder,
+        }),
+      );
+  }
+
+  return [
+    {
+      name: entry.name,
+      barcode: entry.barcode,
+      servings: 1,
+      servingG: entry.servingG,
+      calories: entry.calories,
+      fatG: entry.fatG,
+      saturatedFatG: entry.saturatedFatG,
+      carbsG: entry.carbsG,
+      proteinG: entry.proteinG,
+      fiberG: entry.fiberG,
+      sugarG: entry.sugarG,
+      sodiumMg: entry.sodiumMg,
+      ingredientsText: entry.ingredientsText,
+      tagsJson: entry.tagsJson,
+      sortOrder: 0,
+    },
+  ];
 }
 
 /** Re-export so callers building the review screen don't need a second import for saved rows. */
