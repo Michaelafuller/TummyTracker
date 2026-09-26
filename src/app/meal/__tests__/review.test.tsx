@@ -91,6 +91,34 @@ describe('MealReviewScreen', () => {
     expect(mockDismissAll).toHaveBeenCalled();
   });
 
+  it('stepping servings up rescales the row and the aggregate', async () => {
+    const { getByLabelText, getByTestId, getByText } = await render(<MealReviewScreen />);
+    expect(getByTestId('component-1-kcal')).toHaveTextContent('200 kcal');
+    await fireEvent.press(getByLabelText('Increase servings of Rice'));
+    expect(getByTestId('component-1-servings-value')).toHaveTextContent('1.5×');
+    expect(getByTestId('component-1-kcal')).toHaveTextContent('300 kcal');
+    expect(getByText('Aggregate: 400 kcal')).toBeTruthy();
+  });
+
+  it('stops stepping down at half a serving', async () => {
+    const { getByLabelText, getByTestId } = await render(<MealReviewScreen />);
+    const decrease = getByLabelText('Decrease servings of Peas');
+    await fireEvent.press(decrease);
+    expect(getByTestId('component-0-servings-value')).toHaveTextContent('0.5×');
+    expect(getByLabelText('Decrease servings of Peas')).toBeDisabled();
+  });
+
+  it('saves the adjusted servings on the component rows', async () => {
+    const { getByLabelText } = await render(<MealReviewScreen />);
+    await fireEvent.press(getByLabelText('Increase servings of Rice'));
+    await fireEvent.press(getByLabelText('Increase servings of Rice'));
+    await fireEvent.press(getByLabelText('Save meal'));
+    expect(createMealWithComponents).toHaveBeenCalledWith(
+      expect.anything(),
+      [expect.objectContaining({ name: 'Peas', servings: 1 }), expect.objectContaining({ name: 'Rice', servings: 2 })],
+    );
+  });
+
   it('does not save when the meal name is cleared', async () => {
     const { getByLabelText } = await render(<MealReviewScreen />);
     await fireEvent.changeText(getByLabelText('Meal name'), '');

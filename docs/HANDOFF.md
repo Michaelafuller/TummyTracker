@@ -140,8 +140,10 @@ labels / flattened styles intact (Maestro flows depend on them).
 
 ## 2. Out of scope (do not build)
 
-- Changing an item's servings on the review screen (store's
-  `updateComponent` exists but has no UI) — **candidate follow-up story**.
+- Changing an item's servings on the review screen — **already built
+  (2026-09-26)**: `ServingsStepper` (`src/components/servings-stepper.tsx`,
+  math in `src/lib/servings.ts`) on every review row. Rows copied from
+  history get it for free; don't rebuild it.
 - Adding items to a saved entry in place from `entry/[id]` (owner chose copy
   semantics).
 - Badging Home recents with watched ingredients (already a separate
@@ -206,4 +208,3 @@ labels / flattened styles intact (Maestro flows depend on them).
   - `src/app/entry/new.tsx` + `prefillStore.ts` lose their only entry point
     (Recent tap). Delete them in a follow-up cleanup, or keep for a future
     use?
-  - Pin "adjust servings on the review screen" as the next story?

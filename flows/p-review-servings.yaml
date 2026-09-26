@@ -1,0 +1,85 @@
+appId: com.tummytracker.app.dev
+# P — Servings stepper on the meal review screen (2026-09-26).
+#   - Each review row has a − / value / + stepper (half-serving steps)
+#   - Stepping rescales the row's kcal and the meal aggregate live
+#   - Decrease disables at 0.5×
+#   - The saved entry carries the stepped total (100 kcal = 200 × 0.5)
+---
+- launchApp:
+    clearState: true
+- runFlow: _helpers/reconnect-dev-client.yaml
+
+- tapOn:
+    text: "Add an entry manually"
+- tapOn:
+    text: "Component name"
+- inputText: "Rice"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Calories"
+    direction: DOWN
+- tapOn:
+    text: "Calories"
+- inputText: "200"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Finish meal"
+    direction: DOWN
+- tapOn:
+    text: "Finish meal"
+- waitForAnimationToEnd
+
+# Review screen starts at 1×
+- assertVisible:
+    id: "component-0-servings-value"
+    text: "1×"
+- assertVisible:
+    id: "component-0-kcal"
+    text: "200 kcal"
+- assertVisible: "Aggregate: 200 kcal"
+
+# Up twice → 2×, totals double
+- tapOn:
+    id: "component-0-servings-inc"
+- tapOn:
+    id: "component-0-servings-inc"
+- assertVisible:
+    id: "component-0-servings-value"
+    text: "2×"
+- assertVisible:
+    id: "component-0-kcal"
+    text: "400 kcal"
+- assertVisible: "Aggregate: 400 kcal"
+
+# Down three times → floor at 0.5×, decrease disabled
+- tapOn:
+    id: "component-0-servings-dec"
+- tapOn:
+    id: "component-0-servings-dec"
+- tapOn:
+    id: "component-0-servings-dec"
+- assertVisible:
+    id: "component-0-servings-value"
+    text: "0.5×"
+- assertVisible:
+    id: "component-0-kcal"
+    text: "100 kcal"
+- assertVisible:
+    id: "component-0-servings-dec"
+    enabled: false
+
+# Save → the journal row carries the stepped total
+- scrollUntilVisible:
+    element:
+      text: "Save meal"
+    direction: DOWN
+- tapOn:
+    text: "Save meal"
+- waitForAnimationToEnd
+- tapOn:
+    id: "tab-journal"
+- waitForAnimationToEnd
+- assertVisible: "Rice"
+- assertVisible: ".*100 kcal.*"

@@ -139,8 +139,9 @@ Completed tiers are collapsed to a single line; their detail lives in git.
 1. **Re-log a past meal + add items (GitHub #1, planned 2026-09-26)** —
    Recent tap seeds the meal builder (copy, never edit) → meal review gains
    an "Add item" button into the existing scan/manual flow. Pure JS/TS, S–M.
-   Spec: `docs/HANDOFF.md`. Follow-up candidates: servings stepper on
-   review; retire `entry/new` + `prefillStore` once unused.
+   Spec: `docs/HANDOFF.md`. Servings stepper on review already built
+   2026-09-26 (Jest-verified; on-device check owed). Follow-up candidate:
+   retire `entry/new` + `prefillStore` once unused.
 
 **✅ Shipped 2026-08-29 (error boundary + watchlist cycle — Sonnet executed,
 Fable reviewed, on-device verified same day):**

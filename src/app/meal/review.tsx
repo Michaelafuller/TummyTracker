@@ -7,6 +7,7 @@ import { FormField, ThemedTextInput } from '@/components/form-fields';
 import { FormScrollView } from '@/components/keyboard-aware-screen';
 import { PrimaryButton } from '@/components/primary-button';
 import { SegmentedControl } from '@/components/segmented-control';
+import { ServingsStepper } from '@/components/servings-stepper';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { FOOD_TYPES, MEAL_SLOTS, type MealSlot } from '@/db/schema';
@@ -59,6 +60,7 @@ export default function MealReviewScreen() {
   const theme = useTheme();
   const router = useRouter();
   const components = useMealBuilderStore((state) => state.components);
+  const updateComponent = useMealBuilderStore((state) => state.updateComponent);
   const removeComponent = useMealBuilderStore((state) => state.removeComponent);
   const clearBuilder = useMealBuilderStore((state) => state.clear);
 
@@ -126,9 +128,20 @@ export default function MealReviewScreen() {
             style={[styles.componentRow, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
             <View style={styles.componentBody}>
               <ThemedText type="small" numberOfLines={1}>
-                {`${component.name} · ${component.servings ?? 1}× serving${component.calories != null ? ` · ${Math.round(component.calories * (component.servings ?? 1))} kcal` : ''}`}
+                {component.name}
               </ThemedText>
+              {component.calories != null ? (
+                <ThemedText type="small" themeColor="textSecondary" testID={`component-${index}-kcal`}>
+                  {`${Math.round(component.calories * (component.servings ?? 1))} kcal`}
+                </ThemedText>
+              ) : null}
             </View>
+            <ServingsStepper
+              itemName={component.name}
+              value={component.servings ?? 1}
+              onChange={(servings) => updateComponent(index, { servings })}
+              testID={`component-${index}-servings`}
+            />
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`Remove ${component.name} from meal`}
