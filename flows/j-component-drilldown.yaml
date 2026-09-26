@@ -96,7 +96,18 @@ appId: com.tummytracker.app.dev
 # --- Review: components listed, save (defaultMealName prefills "Rice + 2 more",
 #     which slugs to the entry-row-rice-2-more testID used below; the entry name
 #     is user-owned and unchanged by later component deletes) ---
-- assertVisible: "Rice · 1× serving · 200 kcal"
+# Review rows are name / kcal / servings stepper since 2026-09-26 (p-review-
+# servings) — the one-line "Rice · 1× serving · 200 kcal" form now lives only
+# on the entry edit screen, asserted further below.
+- assertVisible: "Rice"
+- assertVisible:
+    id: "component-0-kcal"
+    text: "200 kcal"
+- assertVisible:
+    id: "component-0-servings-value"
+    text: "1×"
+- assertVisible:
+    id: "component-2"
 - scrollUntilVisible:
     element:
       text: "Save meal"

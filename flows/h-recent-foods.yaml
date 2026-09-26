@@ -1,12 +1,16 @@
 appId: com.tummytracker.app.dev
-# Tier-0 H — Recent foods searchable quick-add (HANDOFF 1.4).
+# Tier-0 H — Recent foods searchable quick-add (HANDOFF 1.4), reworked
+# 2026-09-26 for GitHub #1 (re-log a past meal + add items to it):
 #   - After logging meals, the "Recent" section appears on the Home screen
 #   - Typing in the search field filters the suggestion rows
-#   - Tapping a row (id: recent-<slug>) opens the new-entry form pre-filled
-#     with that food's data
-#   - The date/time defaults to now (not the original log time)
-#   - Saving creates a new distinct entry
-#   - At most 6 rows shown at a time (no duplicate names)
+#   - Tapping a row (id: recent-<slug>) opens the MEAL REVIEW screen seeded
+#     with that entry's items + name (copy, never edit)
+#   - "Add item" (id: review-add-item) runs the existing scan/manual flow and
+#     "Finish meal" pops back to the same review screen — a name edit made
+#     before Add item survives the round trip (router.dismissTo)
+#   - Saving creates a new distinct entry with both items; the original entry
+#     is unchanged (still a single item)
+#   - Abandoning a seeded draft never leaks into the next manual meal
 ---
 - launchApp:
     clearState: true
@@ -46,29 +50,124 @@ appId: com.tummytracker.app.dev
 - assertVisible:
     id: "recent-oatmeal"
 
-# Tap the Oatmeal row — opens prefilled new-entry form
+# Tap the Oatmeal row — opens meal review seeded with the Oatmeal item
 - tapOn:
     id: "recent-oatmeal"
 - waitForAnimationToEnd
+- assertVisible: "In this meal"
+- assertVisible:
+    id: "component-0"
+- assertNotVisible:
+    id: "component-1"
 
-# Form is open and pre-filled with the food's name (above fold confirms open)
-- assertVisible: "Oatmeal"
+# Rename before adding — proves the review screen stays mounted across Add item
+# Per-key Backspace, NOT eraseText: on this Pixel 5, eraseText's rapid
+# delete burst moves focus into the multiline Notes field after ~2 chars
+# (verified 2026-09-26 — human-paced backspaces keep focus; env, not app).
+- tapOn: "Meal name"
+- repeat:
+    times: 7
+    commands:
+      - pressKey: Backspace
+- inputText: "Oatmeal with banana"
+- hideKeyboard
+
+# Add item → existing scan flow → manual hatch → Finish meal
+- tapOn:
+    id: "review-add-item"
+- tapOn: "Enter manually"
+- tapOn: "Component name"
+- inputText: "Banana"
+- hideKeyboard
 - scrollUntilVisible:
     element:
-      text: "Save entry"
+      text: "Finish meal"
     direction: DOWN
-- assertVisible: "Save entry"
-
-# Save the re-logged entry
-- tapOn:
-    text: "Save entry"
+- tapOn: "Finish meal"
 - waitForAnimationToEnd
 
-# Journal now has two "Oatmeal" entries (original + the re-log)
+# Back on the SAME review screen: both items, name edit intact. The screen
+# stayed mounted, so it keeps its scroll position — scroll up to the list.
+- scrollUntilVisible:
+    element:
+      id: "component-1"
+    direction: UP
+- assertVisible:
+    id: "component-1"
+- assertVisible: "Banana"
+- assertVisible: "Oatmeal with banana"
+
+- scrollUntilVisible:
+    element:
+      text: "Save meal"
+    direction: DOWN
+- tapOn: "Save meal"
+- waitForAnimationToEnd
+
+# Journal: the new two-item entry AND the untouched original
 - tapOn:
     id: "tab-journal"
 - scrollUntilVisible:
     element:
+      text: "Oatmeal with banana"
+    direction: DOWN
+- tapOn: "Oatmeal with banana"
+- waitForAnimationToEnd
+# "In this meal" sits below the full edit form — scroll to it
+- scrollUntilVisible:
+    element:
+      text: "In this meal"
+    direction: DOWN
+- scrollUntilVisible:
+    element:
+      text: ".*Banana · 1× serving.*"
+    direction: DOWN
+- back
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
       text: "Oatmeal"
     direction: DOWN
-- assertVisible: "Oatmeal"
+- tapOn: "Oatmeal"
+- waitForAnimationToEnd
+# Original is still a single item: scroll to the bottom — no "In this meal"
+- scrollUntilVisible:
+    element:
+      text: "Delete entry"
+    direction: DOWN
+- assertNotVisible: "In this meal"
+- back
+
+# Abandon a seeded draft, then start a new manual meal: no leftover items
+- tapOn:
+    id: "tab-home"
+# Home stays mounted, so the "Oatmeal" search filter is still applied — clear it
+- tapOn: "Search past foods"
+- eraseText
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "recent-pizza-slice"
+    direction: DOWN
+- tapOn:
+    id: "recent-pizza-slice"
+- waitForAnimationToEnd
+- assertVisible:
+    id: "component-0"
+- back
+- waitForAnimationToEnd
+- tapOn: "Add an entry manually"
+- tapOn: "Component name"
+- inputText: "Tea"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Finish meal"
+    direction: DOWN
+- tapOn: "Finish meal"
+- waitForAnimationToEnd
+- assertVisible:
+    id: "component-0"
+- assertNotVisible:
+    id: "component-1"
+- assertNotVisible: "Pizza slice"

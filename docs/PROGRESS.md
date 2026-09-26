@@ -136,12 +136,27 @@ Completed tiers are collapsed to a single line; their detail lives in git.
 
 ## 📌 Pinned — next up
 
-1. **Re-log a past meal + add items (GitHub #1, planned 2026-09-26)** —
-   Recent tap seeds the meal builder (copy, never edit) → meal review gains
-   an "Add item" button into the existing scan/manual flow. Pure JS/TS, S–M.
-   Spec: `docs/HANDOFF.md`. Servings stepper on review already built
-   2026-09-26 (Jest-verified; on-device check owed). Follow-up candidate:
-   retire `entry/new` + `prefillStore` once unused.
+_(none — GitHub #1 shipped, below. Next plan session picks from the
+follow-ups or the tiers.)_
+
+**✅ Shipped 2026-09-26 (GitHub #1 re-log + Add item, + servings stepper —
+Opus planned/reviewed, Sonnet executed, on-device verified same day):**
+Recent tap seeds the meal builder (copy, never edit) → meal review with an
+"Add item" button into the scan/manual flow; "Finish meal" uses
+`router.dismissTo` so the mounted review keeps its edits; Home CTAs clear a
+stale builder; ± servings stepper on every review row. Targeted Jest 7
+suites / 78 tests + typecheck + lint green. Maestro green on the Pixel 5:
+`h-recent-foods` (reworked), `p-review-servings` (new), `j-component-drilldown`
+(review assertion updated), `01b-manual-entry`, `f-serving-size`. Full
+regression not yet re-run (owner asked for targeted runs only).
+
+**Follow-ups from review (unranked):**
+- **Add item needs the camera screen:** "Enter manually" is only reachable
+  after camera permission is granted, so a user who denied camera can't add
+  a manual item from review. Home has a separate manual CTA; review doesn't.
+- **Recent tap is async and unguarded:** a fast double tap can push review
+  twice, and a rejected `getMealComponents` is unhandled (`index.tsx`).
+- Retire `entry/new` + `prefillStore` — no callers left (owner decision).
 
 **✅ Shipped 2026-08-29 (error boundary + watchlist cycle — Sonnet executed,
 Fable reviewed, on-device verified same day):**

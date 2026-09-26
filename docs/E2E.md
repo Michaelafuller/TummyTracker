@@ -98,7 +98,7 @@ maestro test flows/ --format junit --output flows/results.xml
 | UX-3 — scan screen buttons visible | `flows/ux3-scan-screen.yaml` | ✅ Automated |
 | F — serving size saves, 0 doesn't crash | `flows/f-serving-size.yaml` | ⚠️ Partial (rescaling: barcode required) |
 | G — native date/time picker opens | `flows/g-datetime-picker.yaml` | ✅ Automated |
-| H — recent foods quick-add | `flows/h-recent-foods.yaml` | ✅ Automated |
+| H — recent foods → re-log through meal review (GitHub #1): seeded review, name edit survives Add item round trip (`dismissTo`), save creates a new 2-item entry, original untouched, abandoned seed never leaks into the next manual meal | `flows/h-recent-foods.yaml` | ✅ Automated (reworked + verified green 2026-09-26; uses per-key `pressKey: Backspace` — `eraseText`'s burst moves focus to Notes on the Pixel 5) |
 | I — export/import buttons, no crash | `flows/i-backup.yaml` · `flows/settings-smoke.yaml` | ⚠️ Partial (file content + import round-trip: manual) |
 | A — saturated fat persists (manual path) | `flows/ab-satfat-ingredients.yaml` | ✅ Automated |
 | B — ingredient capture persists on reopen | `flows/ab-satfat-ingredients.yaml` | ✅ Automated |
@@ -112,7 +112,7 @@ maestro test flows/ --format junit --output flows/results.xml
 | Settings — offline toggle + sections render | `flows/settings-smoke.yaml` | ✅ Automated (offline-mode switch value is not assertable in Maestro → manual regardless) |
 | Watchlist — add term, non-blocking flag on review + entry view | `flows/watchlist.yaml` | ✅ Automated — targets the **Insights** tab, not Settings (`WatchlistSection` renders in `src/app/(tabs)/insights.tsx`) |
 | Goals tab — daily tally, missing-data disclosure, tally-row drill-down (expand/collapse, "no data" sub-rows, tap-through to edit screen), "Today" + long-date header | `flows/goals-tally.yaml` | ✅ Automated (verified 2026-08-21 on the dev variant, `com.tummytracker.app.dev`) |
-| J — meal-component drill-down: servings edit re-aggregates totals, swipe-delete + editor Delete (confirms), section hides at 1 component, relaunch persistence | `flows/j-component-drilldown.yaml` | ✅ Automated (authored 2026-08-24; recorded green + confirmation re-run) |
+| J — meal-component drill-down: servings edit re-aggregates totals, swipe-delete + editor Delete (confirms), section hides at 1 component, relaunch persistence | `flows/j-component-drilldown.yaml` | ✅ Automated (authored 2026-08-24; recorded green + confirmation re-run) · review-row assertion updated 2026-09-26 for the servings-stepper row layout, re-verified green |
 | K — BM trends: Insights "Digestion" section (regularity line, weekly count bars, Bristol histogram) with 2 seeded BMs; chart a11y summaries asserted | `flows/k-bm-trends.yaml` | ✅ Automated (authored 2026-08-24; caught the missing-`accessible` a11y bug, gotcha #5) |
 | L — intake charts: Insights "Intake" section (Calories + Fiber weekly avg/day) from one 210 kcal / 7 g-fiber meal; summaries asserted | `flows/l-intake-charts.yaml` | ✅ Automated (authored 2026-08-24; passed first try) |
 | M — finding drill-down: tap "See all logs: onion" → detail summary, outcome marker, row → Edit entry | `flows/m-finding-drilldown.yaml` | ✅ Automated (authored 2026-08-24; reworked + verified 2026-08-28 for the outcome-based detail summary — the outcome count is now fully deterministic, not just "at least one" as gotcha #6 previously required, since each onion meal's time is set explicitly via the native picker rather than relying on same-minute form-save timing) |
