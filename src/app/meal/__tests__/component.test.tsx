@@ -7,8 +7,9 @@ import { useMealBuilderStore } from '@/features/logging/mealBuilderStore';
 import MealComponentScreen from '../component';
 
 const mockReplace = jest.fn();
+const mockDismissTo = jest.fn();
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ replace: mockReplace }),
+  useRouter: () => ({ replace: mockReplace, dismissTo: mockDismissTo }),
 }));
 
 // Capture FormScrollView props: the screen must pad bottomOffset by the search
@@ -62,12 +63,12 @@ describe('MealComponentScreen', () => {
     expect(mockReplace).toHaveBeenCalledWith('/scan');
   });
 
-  it('"Finish meal" pushes the draft and navigates to /meal/review', async () => {
+  it('"Finish meal" pushes the draft and dismisses to /meal/review', async () => {
     const { getByLabelText } = await render(<MealComponentScreen />, { wrapper });
     await fireEvent.changeText(getByLabelText('Component name'), 'Rice');
     await fireEvent.press(getByLabelText('Finish meal'));
     expect(useMealBuilderStore.getState().components).toHaveLength(1);
-    expect(mockReplace).toHaveBeenCalledWith('/meal/review');
+    expect(mockDismissTo).toHaveBeenCalledWith('/meal/review');
   });
 
   it('prefills from the component prefill store (e.g. an OFF scan result)', async () => {

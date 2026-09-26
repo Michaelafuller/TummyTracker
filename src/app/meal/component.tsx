@@ -33,7 +33,11 @@ export default function MealComponentScreen() {
 
   function handleFinishMeal(draft: MealComponentDraft) {
     addComponent(draft);
-    router.replace('/meal/review');
+    // If a review screen is already in the stack (the Add-item path, HANDOFF
+    // §1.5) this pops back to that mounted instance so in-progress name/slot/
+    // notes edits survive; otherwise (normal Home → Scan path) it behaves like
+    // `replace` — no review screen to pop to.
+    router.dismissTo('/meal/review');
   }
 
   return (
