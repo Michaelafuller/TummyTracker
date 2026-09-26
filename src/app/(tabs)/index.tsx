@@ -8,17 +8,17 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import type { LogEntry } from '@/db/schema';
-import { listRecentFoodEntries } from '@/db/repository';
-import { logEntryToFormState } from '@/features/logging/formModel';
-import { usePrefillStore } from '@/features/logging/prefillStore';
+import { getMealComponents, listRecentFoodEntries } from '@/db/repository';
+import { useMealBuilderStore } from '@/features/logging/mealBuilderStore';
 import { RecentFoodPicker } from '@/features/logging/RecentFoodPicker';
 import { useTheme } from '@/hooks/use-theme';
-import { formatDateInput, formatTimeInput } from '@/lib/datetime';
+import { entryToComponentDrafts } from '@/lib/mealAggregate';
 
 export default function HomeScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const setPrefill = usePrefillStore((s) => s.setPrefill);
+  const loadBuilder = useMealBuilderStore((s) => s.load);
+  const clearBuilder = useMealBuilderStore((s) => s.clear);
   const [recents, setRecents] = useState<LogEntry[]>([]);
 
   useFocusEffect(
@@ -28,19 +28,26 @@ export default function HomeScreen() {
   );
 
   const handleRecentTap = useCallback(
-    (entry: LogEntry) => {
-      const now = Date.now();
-      const prefill = {
-        ...logEntryToFormState(entry),
-        // Reset so the new entry defaults to now, not the original log time.
-        dateInput: formatDateInput(now),
-        timeInput: formatTimeInput(now),
-      };
-      setPrefill(prefill);
-      router.push('/entry/new');
+    async (entry: LogEntry) => {
+      // Copy, never edit (owner decision): re-loading a past entry starts a
+      // new draft meal seeded with its items, never touches the saved row.
+      const rows = await getMealComponents(entry.id);
+      loadBuilder(entryToComponentDrafts(entry, rows), {
+        name: entry.name,
+        type: entry.type,
+        mealSlot: entry.mealSlot,
+      });
+      router.push('/meal/review');
     },
-    [setPrefill, router],
+    [loadBuilder, router],
   );
+
+  const handleStartNewMeal = useCallback(() => {
+    // Latent-bug fix (HANDOFF.md §1.6): abandoning the builder mid-flow left
+    // stale components that leaked into the next meal. Starting fresh from
+    // Home must always begin from an empty builder.
+    clearBuilder();
+  }, [clearBuilder]);
 
   return (
     <ThemedView style={styles.container}>
@@ -60,6 +67,7 @@ export default function HomeScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Scan a barcode"
+                onPress={handleStartNewMeal}
                 // expo-router's <Link asChild> rejects array styles on its direct
                 // child in dev mode — keep these flattened.
                 style={StyleSheet.flatten([styles.cta, { backgroundColor: theme.primary }])}>
@@ -73,6 +81,7 @@ export default function HomeScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Add an entry manually"
+                onPress={handleStartNewMeal}
                 style={StyleSheet.flatten([
                   styles.secondaryCta,
                   { backgroundColor: theme.backgroundElement, borderColor: theme.border },

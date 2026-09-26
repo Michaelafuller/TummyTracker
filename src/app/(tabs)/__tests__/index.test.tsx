@@ -1,8 +1,10 @@
 import { useEffect as mockUseEffect } from 'react';
-import { render } from '@testing-library/react-native';
+import { fireEvent, render, waitFor } from '@testing-library/react-native';
 
-import { listRecentFoodEntries } from '@/db/repository';
-import type { LogEntry } from '@/db/schema';
+import { getMealComponents, listRecentFoodEntries } from '@/db/repository';
+import type { LogEntry, MealComponent } from '@/db/schema';
+import { useMealBuilderStore } from '@/features/logging/mealBuilderStore';
+import type { MealComponentDraft } from '@/lib/mealAggregate';
 import HomeScreen from '../index';
 
 const mockPush = jest.fn();
@@ -17,6 +19,7 @@ jest.mock('expo-router', () => ({
 
 jest.mock('@/db/repository', () => ({
   listRecentFoodEntries: jest.fn(),
+  getMealComponents: jest.fn(),
 }));
 
 const BASE_ENTRY: LogEntry = {
@@ -30,7 +33,7 @@ const BASE_ENTRY: LogEntry = {
   bristolScale: null,
   symptomType: null,
   severity: null,
-  notes: null,
+  notes: 'occasion notes',
   ingredientsText: null,
   tagsJson: null,
   calories: 150,
@@ -47,8 +50,31 @@ const BASE_ENTRY: LogEntry = {
   updatedAt: 1,
 };
 
+function draft(name: string, overrides: Partial<MealComponentDraft> = {}): MealComponentDraft {
+  return {
+    name,
+    barcode: null,
+    servings: 1,
+    servingG: null,
+    calories: null,
+    fatG: null,
+    saturatedFatG: null,
+    carbsG: null,
+    proteinG: null,
+    fiberG: null,
+    sugarG: null,
+    sodiumMg: null,
+    ingredientsText: null,
+    tagsJson: null,
+    sortOrder: 0,
+    ...overrides,
+  };
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
+  (getMealComponents as jest.Mock).mockResolvedValue([]);
+  useMealBuilderStore.setState({ components: [], reviewPrefill: null });
 });
 
 describe('HomeScreen', () => {
@@ -69,5 +95,85 @@ describe('HomeScreen', () => {
     // keyboard-shift wrapper so the keyboard-avoiding padding actually covers
     // it (Milestone A3 — the Home search field used to sit under the keyboard).
     expect(shiftView).toContainElement(searchInput);
+  });
+
+  it('tapping a recent row seeds the builder from its components and pushes /meal/review', async () => {
+    (listRecentFoodEntries as jest.Mock).mockResolvedValue([BASE_ENTRY]);
+    const rows: MealComponent[] = [
+      {
+        id: 'c1',
+        entryId: 'e1',
+        name: 'Oatmeal',
+        barcode: null,
+        servings: 1,
+        servingG: null,
+        calories: 150,
+        fatG: null,
+        saturatedFatG: null,
+        carbsG: null,
+        proteinG: null,
+        fiberG: null,
+        sugarG: null,
+        sodiumMg: null,
+        ingredientsText: null,
+        tagsJson: null,
+        sortOrder: 0,
+        createdAt: 1,
+      },
+    ];
+    (getMealComponents as jest.Mock).mockResolvedValue(rows);
+
+    const { findByLabelText } = await render(<HomeScreen />);
+    await fireEvent.press(await findByLabelText('Re-log Oatmeal'));
+
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/meal/review'));
+    expect(getMealComponents).toHaveBeenCalledWith('e1');
+
+    const { components, reviewPrefill } = useMealBuilderStore.getState();
+    expect(components).toHaveLength(1);
+    expect(components[0].name).toBe('Oatmeal');
+    // Notes describe the original occasion, not the redo — never copied.
+    expect(reviewPrefill).toEqual({ name: 'Oatmeal', type: 'meal', mealSlot: 'breakfast' });
+  });
+
+  it('re-logging a flat (single-item) entry seeds one draft with servings 1', async () => {
+    (listRecentFoodEntries as jest.Mock).mockResolvedValue([BASE_ENTRY]);
+    (getMealComponents as jest.Mock).mockResolvedValue([]);
+
+    const { findByLabelText } = await render(<HomeScreen />);
+    await fireEvent.press(await findByLabelText('Re-log Oatmeal'));
+
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/meal/review'));
+    const { components } = useMealBuilderStore.getState();
+    expect(components).toHaveLength(1);
+    expect(components[0]).toMatchObject({ name: 'Oatmeal', servings: 1, calories: 150 });
+  });
+
+  it('"Scan a barcode" clears a pre-populated builder before navigating', async () => {
+    (listRecentFoodEntries as jest.Mock).mockResolvedValue([]);
+    useMealBuilderStore.setState({
+      components: [draft('Stale')],
+      reviewPrefill: { name: 'Stale' },
+    });
+
+    const { getByLabelText } = await render(<HomeScreen />);
+    await fireEvent.press(getByLabelText('Scan a barcode'));
+
+    expect(useMealBuilderStore.getState().components).toEqual([]);
+    expect(useMealBuilderStore.getState().reviewPrefill).toBeNull();
+  });
+
+  it('"Add an entry manually" clears a pre-populated builder before navigating', async () => {
+    (listRecentFoodEntries as jest.Mock).mockResolvedValue([]);
+    useMealBuilderStore.setState({
+      components: [draft('Stale')],
+      reviewPrefill: { name: 'Stale' },
+    });
+
+    const { getByLabelText } = await render(<HomeScreen />);
+    await fireEvent.press(getByLabelText('Add an entry manually'));
+
+    expect(useMealBuilderStore.getState().components).toEqual([]);
+    expect(useMealBuilderStore.getState().reviewPrefill).toBeNull();
   });
 });

@@ -10,8 +10,9 @@ import type { MealComponentDraft } from '@/lib/mealAggregate';
 import MealReviewScreen from '../review';
 
 const mockDismissAll = jest.fn();
+const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ dismissAll: mockDismissAll }),
+  useRouter: () => ({ dismissAll: mockDismissAll, push: mockPush }),
 }));
 
 jest.mock('@/db/repository', () => ({
@@ -55,7 +56,10 @@ function draft(name: string, overrides: Partial<MealComponentDraft> = {}): MealC
 
 beforeEach(() => {
   jest.clearAllMocks();
-  useMealBuilderStore.setState({ components: [draft('Peas', { calories: 100 }), draft('Rice', { calories: 200 })] });
+  useMealBuilderStore.setState({
+    components: [draft('Peas', { calories: 100 }), draft('Rice', { calories: 200 })],
+    reviewPrefill: null,
+  });
   useWatchlistStore.setState({ items: [], loaded: false });
   useGoalsStore.setState({ goals: [], loaded: false });
   mockAllEntries = [];
@@ -124,6 +128,41 @@ describe('MealReviewScreen', () => {
     await fireEvent.changeText(getByLabelText('Meal name'), '');
     await fireEvent.press(getByLabelText('Save meal'));
     expect(createMealWithComponents).not.toHaveBeenCalled();
+  });
+
+  it('"Add item to this meal" pushes /scan', async () => {
+    const { getByLabelText } = await render(<MealReviewScreen />);
+    await fireEvent.press(getByLabelText('Add item to this meal'));
+    expect(mockPush).toHaveBeenCalledWith('/scan');
+  });
+});
+
+describe('MealReviewScreen reviewPrefill (re-log from history)', () => {
+  it('populates the name field and meal slot from reviewPrefill', async () => {
+    useMealBuilderStore.setState({
+      components: [draft('Oatmeal', { calories: 150 })],
+      reviewPrefill: { name: 'Oatmeal', type: 'meal', mealSlot: 'breakfast' },
+    });
+    const { getByDisplayValue, getByLabelText } = await render(<MealReviewScreen />);
+    expect(getByDisplayValue('Oatmeal')).toBeTruthy();
+    expect(getByLabelText('Breakfast').props.accessibilityState.selected).toBe(true);
+  });
+
+  it('saving a loaded draft (original + an added item) calls createMealWithComponents once, creating never updating', async () => {
+    useMealBuilderStore.setState({
+      components: [draft('Oatmeal', { calories: 150 }), draft('Banana', { calories: 90 })],
+      reviewPrefill: { name: 'Oatmeal', type: 'meal', mealSlot: 'breakfast' },
+    });
+    const { getByLabelText } = await render(<MealReviewScreen />);
+    await fireEvent.press(getByLabelText('Save meal'));
+    expect(createMealWithComponents).toHaveBeenCalledTimes(1);
+    expect(createMealWithComponents).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Oatmeal' }),
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'Oatmeal' }),
+        expect.objectContaining({ name: 'Banana' }),
+      ]),
+    );
   });
 });
 

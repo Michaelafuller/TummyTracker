@@ -64,7 +64,10 @@ export default function MealReviewScreen() {
   const removeComponent = useMealBuilderStore((state) => state.removeComponent);
   const clearBuilder = useMealBuilderStore((state) => state.clear);
 
-  const [state, setState] = useState<MealReviewFormState>(() => defaultMealReviewState(components));
+  const [state, setState] = useState<MealReviewFormState>(() => ({
+    ...defaultMealReviewState(components),
+    ...useMealBuilderStore.getState().reviewPrefill,
+  }));
   const [errors, setErrors] = useState<MealReviewErrors>({});
   const [submitting, setSubmitting] = useState(false);
 
@@ -153,6 +156,15 @@ export default function MealReviewScreen() {
           </View>
         ))}
       </View>
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Add item to this meal"
+        testID="review-add-item"
+        onPress={() => router.push('/scan')}
+        style={[styles.addItemButton, { borderColor: theme.border }]}>
+        <ThemedText style={styles.addItemLabel}>Add item</ThemedText>
+      </Pressable>
 
       <ThemedText type="small" themeColor="textSecondary">
         {`Aggregate: ${aggregate.calories != null ? `${aggregate.calories} kcal` : 'no calorie data'}`}
@@ -257,6 +269,16 @@ const styles = StyleSheet.create({
   },
   componentBody: {
     flex: 1,
+  },
+  addItemButton: {
+    borderRadius: Spacing.three,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingVertical: Spacing.two + Spacing.one,
+    alignItems: 'center',
+  },
+  addItemLabel: {
+    fontSize: 16,
+    fontWeight: 600,
   },
   watchNotice: {
     gap: Spacing.half,
