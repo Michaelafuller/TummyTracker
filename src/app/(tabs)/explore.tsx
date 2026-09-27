@@ -7,8 +7,9 @@ import { SegmentedControl } from '@/components/segmented-control';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
-import { useAllEntries } from '@/features/logging/useEntries';
 import { EntryList } from '@/features/logging/EntryList';
+import { useAllEntries } from '@/features/logging/useEntries';
+import { useMedicationDoses, useMedicationEvents, useMedications } from '@/features/medications/useMedicationData';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDateInput } from '@/lib/datetime';
 import {
@@ -16,10 +17,12 @@ import {
   type CalendarMode,
   entryDateKeys,
   type EntryTypeFilter,
-  filterByEntryType,
   filterEntriesInRange,
+  filterJournalItems,
   formatPeriodLabel,
   getPeriodRange,
+  logEntriesToJournalItems,
+  medicationEventsToJournalItems,
 } from '@/lib/journal';
 
 const MODE_OPTIONS = [
@@ -33,12 +36,16 @@ const FILTER_OPTIONS = [
   { value: 'food' as const, label: 'Food' },
   { value: 'bm' as const, label: 'BM' },
   { value: 'symptom' as const, label: 'Symptom' },
+  { value: 'meds' as const, label: 'Meds' },
 ];
 
 export default function BrowseScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const entries = useAllEntries();
+  const medications = useMedications();
+  const medicationEvents = useMedicationEvents();
+  const medicationDoses = useMedicationDoses();
 
   const [mode, setMode] = useState<CalendarMode>('day');
   const [filter, setFilter] = useState<EntryTypeFilter>('all');
@@ -47,7 +54,19 @@ export default function BrowseScreen() {
 
   const anchorMs = useMemo(() => new Date(`${selectedDate}T00:00:00`).getTime(), [selectedDate]);
 
-  const typeFiltered = useMemo(() => filterByEntryType(entries, filter), [entries, filter]);
+  // Merge log entries (food/BM/symptom, unchanged) with medication events
+  // (HANDOFF.md §5) before filtering/ranging/grouping — every downstream
+  // helper (filterEntriesInRange, groupEntriesByDay, entryDateKeys) already
+  // works on `{ loggedAt }`, so the merged list reuses them without a fork.
+  const journalItems = useMemo(
+    () => [
+      ...logEntriesToJournalItems(entries),
+      ...medicationEventsToJournalItems(medicationEvents, medicationDoses, medications),
+    ],
+    [entries, medicationEvents, medicationDoses, medications],
+  );
+
+  const typeFiltered = useMemo(() => filterJournalItems(journalItems, filter), [journalItems, filter]);
 
   const visibleEntries = useMemo(
     () => filterEntriesInRange(typeFiltered, getPeriodRange(anchorMs, mode)),
@@ -161,7 +180,7 @@ export default function BrowseScreen() {
               {visibleEntries.length} {visibleEntries.length === 1 ? 'entry' : 'entries'}
             </ThemedText>
           </View>
-          <EntryList entries={visibleEntries} />
+          <EntryList items={visibleEntries} />
         </View>
       </ScrollView>
     </ThemedView>
