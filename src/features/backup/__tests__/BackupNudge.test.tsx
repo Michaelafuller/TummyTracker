@@ -105,4 +105,30 @@ describe('BackupNudge', () => {
     await waitFor(() => expect(Alert.alert).toHaveBeenCalledWith("Backup didn't complete", 'nope'));
     (Alert.alert as jest.Mock).mockRestore();
   });
+
+  it('shows an alert (instead of an unhandled rejection) when the share export fails', async () => {
+    Platform.OS = 'ios';
+    (exportBackupViaShare as jest.Mock).mockRejectedValue(new Error('share sheet crashed'));
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+
+    const { findByLabelText } = await render(<BackupNudge hasData now={NOW} />);
+    await fireEvent.press(await findByLabelText('Back up now'));
+
+    await waitFor(() => expect(Alert.alert).toHaveBeenCalledWith('Export failed', 'share sheet crashed'));
+    (Alert.alert as jest.Mock).mockRestore();
+  });
+
+  it('says so when sharing is unavailable', async () => {
+    Platform.OS = 'ios';
+    (exportBackupViaShare as jest.Mock).mockResolvedValue(false);
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+
+    const { findByLabelText } = await render(<BackupNudge hasData now={NOW} />);
+    await fireEvent.press(await findByLabelText('Back up now'));
+
+    await waitFor(() =>
+      expect(Alert.alert).toHaveBeenCalledWith('Sharing not available', 'Cannot share files on this device.'),
+    );
+    (Alert.alert as jest.Mock).mockRestore();
+  });
 });

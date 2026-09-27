@@ -37,8 +37,13 @@ export function BackupNudge({ hasData, now }: BackupNudgeProps) {
           Alert.alert("Backup didn't complete", result.error);
         }
       } else {
-        await exportBackupViaShare();
+        const shared = await exportBackupViaShare();
+        if (!shared) {
+          Alert.alert('Sharing not available', 'Cannot share files on this device.');
+        }
       }
+    } catch (e) {
+      Alert.alert('Export failed', e instanceof Error ? e.message : String(e));
     } finally {
       setWorking(false);
     }
