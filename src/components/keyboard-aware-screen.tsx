@@ -1,7 +1,9 @@
 import { type ReactNode } from 'react';
 import {
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   type StyleProp,
@@ -26,6 +28,33 @@ import { getKeyboardController } from '@/lib/keyboard';
 // owner's next EAS build ships the native module — this file only adds the
 // keyboard-aware upside on top once it does.
 const kc = getKeyboardController();
+
+/**
+ * iOS: drag the form down to dismiss the keyboard, following the finger
+ * (GitHub #2 — iOS has no Back key). Android keeps 'none': it has Back, and
+ * drag-dismiss would also fire on every Maestro scroll with a field focused.
+ */
+const FORM_KEYBOARD_DISMISS_MODE = Platform.OS === 'ios' ? 'interactive' : 'none';
+
+/**
+ * Tapping empty space dismisses the keyboard (GitHub #2). FormScrollView gets
+ * this from its ScrollView (`keyboardShouldPersistTaps="handled"` still
+ * dismisses on taps no child handles); the non-scrolling KeyboardShiftView
+ * (Home) has no ScrollView, so it wraps its content in this instead. Not an
+ * accessibility element — it's background, not a control; children keep
+ * their own touch handling since a child Pressable claims the tap first.
+ */
+function DismissKeyboardArea({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
+  return (
+    <Pressable
+      accessible={false}
+      onPress={Keyboard.dismiss}
+      style={[styles.flex, style]}
+      testID="dismiss-keyboard-area">
+      {children}
+    </Pressable>
+  );
+}
 
 const formContent = {
   padding: Spacing.four,
@@ -54,6 +83,7 @@ export const FormScrollView = kc
           bottomOffset={bottomOffset ?? Spacing.six}
           contentContainerStyle={contentContainerStyle ?? styles.formContent}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={FORM_KEYBOARD_DISMISS_MODE}
           testID={testID}>
           {children}
         </kc.KeyboardAwareScrollView>
@@ -65,6 +95,7 @@ export const FormScrollView = kc
           <ScrollView
             contentContainerStyle={contentContainerStyle ?? styles.formContent}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={FORM_KEYBOARD_DISMISS_MODE}
             testID={testID}>
             {children}
           </ScrollView>
@@ -85,8 +116,10 @@ export interface KeyboardShiftViewProps {
 export const KeyboardShiftView = kc
   ? function KeyboardShiftView({ children, style, testID }: KeyboardShiftViewProps) {
       return (
-        <kc.KeyboardAvoidingView behavior="padding" style={[styles.flex, style]} testID={testID}>
-          {children}
+        <kc.KeyboardAvoidingView behavior="padding" style={styles.flex} testID={testID}>
+          {/* The caller's layout style (padding, gap) goes on the inner area so
+              gap still spaces the caller's children, not this one wrapper. */}
+          <DismissKeyboardArea style={style}>{children}</DismissKeyboardArea>
         </kc.KeyboardAvoidingView>
       );
     }
@@ -94,9 +127,9 @@ export const KeyboardShiftView = kc
       return (
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={[styles.flex, style]}
+          style={styles.flex}
           testID={testID}>
-          {children}
+          <DismissKeyboardArea style={style}>{children}</DismissKeyboardArea>
         </KeyboardAvoidingView>
       );
     };

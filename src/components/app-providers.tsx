@@ -11,6 +11,7 @@ import { configureNotificationHandler } from '@/features/notifications/service';
 import { usePrefsStore } from '@/features/prefs/prefsStore';
 import { useWatchlistStore } from '@/features/watchlist/watchlistStore';
 import { getKeyboardController } from '@/lib/keyboard';
+import { KeyboardDoneToolbar } from './keyboard-done-toolbar';
 import { ThemedText } from './themed-text';
 
 // One QueryClient for the app lifetime (react-query is used for the barcode lookup).
@@ -91,6 +92,8 @@ export function AppProviders({ children }: { children: ReactNode }) {
       <QueryClientProvider client={queryClient}>
         <MigrationGate>{children}</MigrationGate>
       </QueryClientProvider>
+      {/* Previous / next / Done bar above any keyboard (GitHub #2). */}
+      <KeyboardDoneToolbar />
     </KeyboardProviderOrIdentity>
   );
 }

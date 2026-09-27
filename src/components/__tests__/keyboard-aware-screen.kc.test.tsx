@@ -80,3 +80,27 @@ describe('KeyboardShiftView (KC path)', () => {
     expect(getByText('shifted')).toBeTruthy();
   });
 });
+
+describe('keyboard dismissal (GitHub #2, KC path)', () => {
+  it('KeyboardAwareScrollView gets the platform dismiss mode', async () => {
+    const { getByTestId } = await render(
+      <FormScrollView>
+        <Text>content</Text>
+      </FormScrollView>,
+    );
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- read Platform inside the test, matching the module-scope constant.
+    const { Platform } = require('react-native');
+    expect(getByTestId('kc-aware-scroll-view').props.keyboardDismissMode).toBe(
+      Platform.OS === 'ios' ? 'interactive' : 'none',
+    );
+  });
+
+  it('KeyboardShiftView wraps its children in the tap-to-dismiss area', async () => {
+    const { getByTestId } = await render(
+      <KeyboardShiftView style={{ gap: 12 }}>
+        <Text>content</Text>
+      </KeyboardShiftView>,
+    );
+    expect(getByTestId('dismiss-keyboard-area')).toHaveStyle({ gap: 12 });
+  });
+});
