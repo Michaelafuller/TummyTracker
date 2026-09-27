@@ -106,6 +106,16 @@
   entries are never outcomes. The `sentiment` DB column is RETAINED (additive-
   migrations rule, §9): history and old backups import unchanged, and it still
   stores the BM feel-afterward rating. See §1, §6, §7.
+- **Day check-in is coverage, not an outcome (owner-decided 2026-09-27,
+  GitHub #13).** A one-tap "fine day / rough day" answer per local day
+  (`day_check_in`, §6). It feeds only the Insights "days covered" line; the
+  correlation engine and `isOutcome` do not read it, and Rough only prompts
+  "add a symptom". It has its own opt-in notification (Settings, separate
+  from the Goals check-in, which only fires for unmet floor goals). The
+  Fine/Rough buttons use `opensAppToForeground: true` because there is no
+  background task runner (`expo-task-manager` is not approved) — our JS only
+  runs once the app opens. An answer is always recorded for the day the
+  notification asked about (`content.data.date`), never "now".
 
 ## 1. What this project is
 
@@ -224,6 +234,15 @@ MVP entities:
   - nutrition: `calories, fatG, carbsG, proteinG, fiberG, sugarG, sodiumMg`
     (all real, nullable)
   - `createdAt`, `updatedAt` (timestamps)
+
+- **dayCheckIn** (`day_check_in`, since migration 0010 — GitHub #13)
+  - `id` (uuid, pk)
+  - `date` (text `'YYYY-MM-DD'`, local calendar day, **unique** — one row per
+    day; answering again updates `status`)
+  - `status` — `'fine' | 'rough'`
+  - `createdAt`, `updatedAt` (timestamps)
+  - Written only by an explicit tap (Home card / notification button) or a
+    backup restore (device's own row for a day wins). Never an outcome (§0).
 
 Conventions:
 - Timestamps stored as Unix epoch (ms) integers.

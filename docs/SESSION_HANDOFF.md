@@ -5,11 +5,17 @@
 > Written 2026-09-27 at the end of a long Opus session (2026-09-26 → 27) so the
 > next session can continue without the transcript. `docs/HANDOFF.md` is a
 > *different* file: the execute-session spec for Sonnet — it currently holds the
-> finished Medications Cycle B spec and gets overwritten by the next plan.
+> finished day check-in (GH #13) spec and gets overwritten by the next plan.
+> **Updated 2026-09-27 (later session):** GH #13 shipped — see §1/§2.
 
 ## 1. Where things stand
 
 - **`main` is pushed and clean** at `8004134` (plus this file's commit).
+- **Since then, committed but NOT pushed (2026-09-27):** GH #13 day check-in —
+  plan `f905ea1`, Sonnet's five commits `2e77757..42bef65`, three review fixes
+  `dcf96c8..e22cdc3`, then docs + `flows/t-day-check-in.yaml`. Rungs,
+  `bundle:check` and targeted Jest (14 suites / 179 tests) green. **Device
+  check owed** (Android, Metro — no build): see PROGRESS Status.
 - **Test baseline (2026-09-27, GitHub #12):** full Maestro **34/34** on the
   Pixel 5 + full Jest **95 suites / 887 tests**, typecheck, lint,
   `bundle:check` all green. **0 app regressions.** Details: `docs/RESULTS.md`.
@@ -26,13 +32,12 @@
 
 The ranked backlog is `docs/PROGRESS.md` → "📌 Pinned — next up" (#1–7) and
 "Ranked backlog — continued" (#8–19). Each item names its GitHub issue.
-**#1 (GH #12) is done**, so the next item is:
+**#1 (GH #12) and #2 (GH #13) are done** (#13 still owes its device check),
+so the next item is:
 
-- **#2 — Daily "fine day / rough day" check-in (GH #13).** Needs a plan
-  session first (it touches the insights baseline and needs a small **additive
-  schema migration → ask the owner first**, CLAUDE.md §9). Then write
-  `docs/HANDOFF.md` and have Sonnet execute (see §3).
-- Then #3 automatic backups (GH #14), #4 work backwards from a bad day (GH #15), …
+- **#3 — Automatic backups + staleness nudge (GH #14).** Plan session first;
+  note backup is now **v4** (adds `dayCheckIns`).
+- Then #4 work backwards from a bad day (GH #15), #5 quick-win polish (GH #16), …
 
 ## 3. How the owner likes to work (confirmed across the session)
 

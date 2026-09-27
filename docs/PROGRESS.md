@@ -27,8 +27,10 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   "Add item" and a servings stepper; browse/edit with a day/week/month
   Journal; BM + symptom logging; outcome-based insights + drill-downs;
   Goals tally + thresholds + daily check-in; trigger watchlist; reminders;
-  backup/restore (v3); doctor PDF report; **medications** (inventory, dose
-  logging, history, Journal integration); Settings behind a top-right gear;
+  backup/restore (v4); doctor PDF report; **medications** (inventory, dose
+  logging, history, Journal integration); **day check-in** (fine/rough day:
+  Home card, notification buttons, Insights day coverage); Settings behind a
+  top-right gear;
   app-wide keyboard toolbar. Tabs: Home · Journal · Meds · Insights · Goals.
 - **Device + build:** Pixel 5 dev client = the **2026-08-29 EAS development
   build** — `expo-print`, `expo-haptics` and `react-native-keyboard-controller`
@@ -39,6 +41,12 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   887 tests) on 2026-09-27** (GitHub #12, `docs/RESULTS.md`) — the new
   standing baseline, covering the whole 2026-09-26 session. The suite no
   longer uses `hideKeyboard` (86 calls → `_helpers/dismiss-keyboard.yaml`).
+- **Owed device check — day check-in (GH #13, 2026-09-27):** run the new
+  `flows/t-day-check-in.yaml` + the manual notification-button check in its
+  header; targeted regression: Home flows (`h-recent-foods`, `q-reuse-adjust`,
+  `p-review-servings`), `nav-tabs`, `settings-smoke`, `01e-reminders`,
+  `i-backup`, `checkin-persistence`, `03-insights`. JS-only + migration 0010
+  — no new build; Metro into the installed dev client.
 - **Owed device checks:** iOS pass (the #2 keyboard items below + carried: iOS
   app icon, time-picker Done feel), light-mode walkthrough, camera scan loop,
   and the manual items in `docs/E2E.md`. **Owner sequencing from the
@@ -49,21 +57,18 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   warning (`date-time-field.tsx`, `time-field.tsx`) · Insights has no
   "Insights" subtitle heading (label consistency).
 
-### Shipped last cycle — 2026-09-26 (one session: Opus plan/review, Sonnet execute; full history = `git log`)
+### Shipped last cycle — 2026-09-27 (Opus plan/review, Sonnet execute; full history = `git log`)
 
-- **Re-log a past meal + Add item (GitHub #1)**, **servings stepper** on meal
-  review, Recent double-tap guard.
-- **Journal week strip** aligned to its frame (pixel-exact width) + a distinct
-  "today" marker.
-- **Medications epic (GitHub #4–#11)** in two cycles: tables (additive 0009),
-  inventory (never deleted), dose logging with per-dose snapshots, history,
-  Journal "Meds" filter, backup v3 with id-preserving + event-gated restore;
-  Settings moved to a gear (redrawn icon); `generate-icons.mjs` runnable.
-  Invariant: nothing is ever inferred as taken; Insights/Goals stay food-only.
-- **Keyboard dismissal (GitHub #2):** toolbar with Done (the only way to close
-  iOS number pads), tap-outside on Home, iOS drag-to-dismiss.
-- GitHub issues **#1, #2, #4–#11 are done but still open** on GitHub — close
-  them (the owner; this environment can read issues but not update them).
+- **Day check-in, "fine day / rough day" (GitHub #13):** additive table
+  `day_check_in` (migration 0010, one row per local day), a Home card, its own
+  opt-in "How was today?" notification with Fine/Rough buttons (Settings, 21:00
+  default), Insights "Days covered: X of Y · N checked in", backup v4.
+  Coverage only — the correlation engine is unchanged; Rough is never an
+  outcome. Review fixes: serialized notification refreshes (a cold-start
+  answer doubled the horizon), Home card rolls to the new day on resume.
+- Earlier (2026-09-26): re-log + Add item (#1), medications epic (#4–#11),
+  keyboard dismissal (#2), Settings gear, #12 re-baseline. Issues **#1, #2,
+  #4–#11, #13** are done but still open on GitHub — the owner closes them.
 
 ---
 
@@ -86,7 +91,8 @@ analysis.
 1. ~~**Full regression + full `npm test` + `hideKeyboard` audit** (GH #12)~~ —
    **✅ done 2026-09-27**: 34/34 + 95/887, `hideKeyboard` retired from the
    suite, 0 app regressions (`docs/RESULTS.md`).
-2. **Daily "fine day / rough day" check-in** (GH #13) — S–M. Today a day with no
+2. ~~**Daily "fine day / rough day" check-in** (GH #13)~~ — **✅ shipped
+   2026-09-27** (device check owed, see Status). Original rationale: S–M. Today a day with no
    symptom logged is indistinguishable from a day the user didn't open the
    app, so every "no rough outcome" in the engine's baseline is an
    assumption. A one-tap daily confirmation (inside the existing daily

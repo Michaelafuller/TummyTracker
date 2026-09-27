@@ -1,0 +1,67 @@
+appId: com.tummytracker.app.dev
+# T — Day check-in, "fine day / rough day" (GitHub #13, 2026-09-27).
+#   - Home shows "How was today?" with Fine day / Rough day
+#   - Rough → "Rough day noted." + "Add a symptom" (opens the symptom form)
+#   - Fine replaces Rough (one answer per day, never two)
+#   - The answer survives an app restart
+#   - Insights counts the day: "Days covered: 1 of 1 …· 1 checked in"
+#   - Settings has the Day check-in section; its time chip opens the picker
+# MANUAL (not driven here — Maestro can't reliably work the notification
+# shade): switch Day check-in on, set the time 1–2 min ahead, background the
+# app, tap "Rough day" on the notification → the app opens and Home shows
+# "Rough day noted."; the notification is gone from the shade.
+---
+- launchApp:
+    clearState: true
+- runFlow: _helpers/reconnect-dev-client.yaml
+
+- assertVisible: "How was today?"
+
+# --- Rough → prompt to add a symptom ---
+- tapOn: "Mark today as a rough day"
+- waitForAnimationToEnd
+- assertVisible: "Rough day noted."
+- tapOn: "Add a symptom for today"
+- waitForAnimationToEnd
+- assertVisible: "Log symptom"
+- back
+- waitForAnimationToEnd
+- assertVisible: "Rough day noted."
+
+# --- Fine replaces Rough ---
+- tapOn: "Mark today as a fine day"
+- waitForAnimationToEnd
+- assertNotVisible: "Rough day noted."
+
+# --- Back to Rough, then it persists across a restart ---
+- tapOn: "Mark today as a rough day"
+- waitForAnimationToEnd
+- assertVisible: "Rough day noted."
+- stopApp
+- launchApp
+- runFlow: _helpers/reconnect-dev-client.yaml
+- assertVisible: "Rough day noted."
+
+# --- Insights coverage (the check-in is the only activity: 1 of 1) ---
+- tapOn:
+    text: "Insights"
+- waitForAnimationToEnd
+- assertVisible: "Your journal so far"
+- assertVisible: "Days covered: 1 of 1 \\(last 1 day\\) · 1 checked in"
+
+# --- Settings section + time picker ---
+- tapOn:
+    id: "open-settings"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "Day check-in time"
+    centerElement: true
+- assertVisible: ".*fine day or a rough day.*"
+- tapOn:
+    text: "Day check-in time"
+- waitForAnimationToEnd
+- tapOn: "OK"
+- waitForAnimationToEnd
+- assertVisible:
+    text: "Day check-in time"
