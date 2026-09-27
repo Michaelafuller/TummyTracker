@@ -136,6 +136,17 @@ Completed tiers are collapsed to a single line; their detail lives in git.
 
 ## 📌 Pinned — next up
 
+0. **✅ Keyboard dismissal (GitHub #2) shipped 2026-09-26** (Opus, direct):
+   app-wide keyboard toolbar (prev / next / **Done**, themed) — the only way
+   to close iOS number pads (`decimal-pad` has no return key); tap-outside
+   dismiss on Home (the one non-scrolling screen); iOS drag-to-dismiss on
+   forms. Toolbar hidden on Home, where it covered the Recent search box.
+   Jest green; on the Pixel 5: toolbar + Done on text and numeric keyboards,
+   tap-outside on Home, and `h-recent-foods`, `01b-manual-entry`,
+   `s-medication-entry`, `f-serving-size`, `watchlist` green.
+   **Owed: an iOS check** (no iOS device/Mac here) — Done on a number pad,
+   tap-outside on Home, drag-to-dismiss on a form.
+
 1. **Medications (GitHub epic #4, stories #5–#11), two cycles.**
    **✅ Cycle A shipped 2026-09-26** (Opus planned/reviewed, Sonnet executed,
    on-device verified): medication / medication_event / medication_dose

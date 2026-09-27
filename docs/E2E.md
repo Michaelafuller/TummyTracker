@@ -146,6 +146,14 @@ immediately after **every** `launchApp` step, which:
 1. Waits for "Development Build" (confirms the connect screen actually showed).
 2. `openLink`s the explicit deep link `<scheme>://expo-development-client/?url=http://localhost:<metro-port>` — this reconnects regardless of prior state, since the URL is in the intent itself, not read from any remembered preference.
 3. Handles two more wrinkles that show up after the link fires, both harmless no-ops when absent: a one-time "This is the developer menu" tooltip (`tapOn: "Continue", optional: true`) on the very first connection after a data wipe, and the dev-menu sheet (Reload / Go home / Tools) that re-opening the same link while already connecting can pop instead of landing directly on the app (`tapOn: "Close", optional: true` — **not** "Go home", which navigates the dev client itself back to the connect screen, and **not** the hardware Back key, which can exit the app entirely to whatever was behind it).
+**Finding — `hideKeyboard` on the Home tab can exit the app (2026-09-26).**
+On Android `hideKeyboard` is a Back press. If the keyboard has already closed
+(e.g. an `eraseText` burst dropped focus), Back on the Home tab root leaves
+the app to the launcher and every later step fails on the home screen. On
+Home, dismiss by tapping empty space in the hero instead
+(`tapOn: point: "50%,22%"`, GitHub #2's tap-outside) — a no-op when no
+keyboard is up — and clear fields with per-key `pressKey: Backspace`.
+
 **Finding — burst text injection jumps focus in bottom multiline fields
 (2026-09-26).** On the Pixel 5, a multi-character `inputText` (and
 `eraseText`) into a multiline field near the bottom of a keyboard-aware form
