@@ -134,3 +134,82 @@ export const goal = sqliteTable('goal', {
 
 export type Goal = typeof goal.$inferSelect;
 export type NewGoal = typeof goal.$inferInsert;
+
+/** Fixed dose-unit choices offered as chips; the form's "Other" option stores its
+ * own free-text unit in the same `doseUnit` column instead of one of these values. */
+export const DOSE_UNITS = ['mg', 'mcg', 'g', 'mL', 'tablet', 'capsule', 'drop', 'puff', 'unit'] as const;
+export type DoseUnit = (typeof DOSE_UNITS)[number];
+
+/**
+ * Medication inventory (Medications Cycle A, HANDOFF.md #5). Never deleted —
+ * `isActive=false` (Mark inactive) hides it from pickers only; there is no
+ * `deleteMedication` in the repository. `startDate`/`endDate` are optional
+ * date-only fields stored as local-midnight epoch ms (CLAUDE.md §6 timestamp
+ * convention, but date-only here rather than a full instant).
+ */
+export const medication = sqliteTable('medication', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  defaultDose: real('default_dose'),
+  // A DOSE_UNITS value, or the user's own free text when "Other" was chosen.
+  doseUnit: text('dose_unit'),
+  frequency: text('frequency'),
+  startDate: integer('start_date'),
+  endDate: integer('end_date'),
+  isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+  notes: text('notes'),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+export type Medication = typeof medication.$inferSelect;
+export type NewMedication = typeof medication.$inferInsert;
+
+/**
+ * One "I took these" event (Cycle B, #7): several medications logged at one
+ * moment share an event row. `timeKnown=false` means the user only knows the
+ * day, not the time — `takenAt` is then local noon of that date (#10).
+ * Nothing in this schema infers a dose from a medication's frequency/schedule
+ * (invariant, HANDOFF.md §0) — event/dose rows are only ever written by an
+ * explicit user entry.
+ */
+export const medicationEvent = sqliteTable('medication_event', {
+  id: text('id').primaryKey(),
+  takenAt: integer('taken_at').notNull(),
+  timeKnown: integer('time_known', { mode: 'boolean' }).notNull().default(true),
+  // Per-event notes (#8) — separate from a medication's own `notes` above.
+  notes: text('notes'),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+export type MedicationEvent = typeof medicationEvent.$inferSelect;
+export type NewMedicationEvent = typeof medicationEvent.$inferInsert;
+
+/**
+ * One medication within an event (#9, #11). Snapshots `dose`/`doseUnit` at log
+ * time — editing the parent medication later never rewrites these rows, so a
+ * dose stays historically accurate even after a dosage change. References
+ * `medicationId`, never the medication's name, so renaming or deactivating a
+ * medication leaves history valid (#11 invariant).
+ */
+export const medicationDose = sqliteTable(
+  'medication_dose',
+  {
+    id: text('id').primaryKey(),
+    eventId: text('event_id').notNull(),
+    medicationId: text('medication_id').notNull(),
+    // > 0 — partial doses allowed (e.g. 0.5).
+    dose: real('dose').notNull(),
+    doseUnit: text('dose_unit').notNull(),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [
+    index('medication_dose_event_id_idx').on(table.eventId),
+    index('medication_dose_medication_id_idx').on(table.medicationId),
+  ],
+);
+
+export type MedicationDose = typeof medicationDose.$inferSelect;
+export type NewMedicationDose = typeof medicationDose.$inferInsert;

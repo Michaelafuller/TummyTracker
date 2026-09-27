@@ -54,4 +54,13 @@ describe('migrations', () => {
     expect(sql).not.toMatch(/drop table/i);
     expect(sql).not.toMatch(/create table `log_entry`/i);
   });
+
+  it('0009 creates the medication, medication_event, and medication_dose tables additively without dropping data', () => {
+    const sql = readMigration('0009');
+    expect(sql).toMatch(/create table `medication`/i);
+    expect(sql).toMatch(/create table `medication_event`/i);
+    expect(sql).toMatch(/create table `medication_dose`/i);
+    expect(sql).not.toMatch(/drop table/i);
+    expect(sql).not.toMatch(/alter table `log_entry`/i);
+  });
 });
