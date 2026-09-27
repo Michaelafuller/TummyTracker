@@ -5,9 +5,12 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { formatTime12h } from '@/lib/datetime';
-import type { JournalItem } from '@/lib/journal';
+import type { MedicationJournalItem } from '@/lib/journal';
 
-export type MedicationJournalItem = Extract<JournalItem, { kind: 'medication' }>;
+// Re-exported for callers that import the type from this component file
+// (pure logic like lookback.ts imports it from '@/lib/journal' directly, since
+// pure modules must not import from component files).
+export type { MedicationJournalItem };
 
 /**
  * One medication event row in a merged list (the Journal's "Meds" chip,

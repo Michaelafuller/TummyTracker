@@ -159,6 +159,10 @@ export type JournalItem =
       notes: string | null;
     };
 
+/** The `kind: 'medication'` branch of `JournalItem`, named for callers (e.g.
+ * MedicationEventRow, lookback.ts) that only ever handle medication items. */
+export type MedicationJournalItem = Extract<JournalItem, { kind: 'medication' }>;
+
 /** Wraps log entries as Journal items — unchanged, just re-shaped so they merge with medication items. */
 export function logEntriesToJournalItems(entries: readonly LogEntry[]): JournalItem[] {
   return entries.map((entry) => ({ kind: 'log', id: entry.id, loggedAt: entry.loggedAt, entry }));
