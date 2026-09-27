@@ -8,6 +8,7 @@ import { BristolHistogram } from '@/components/charts/BristolHistogram';
 import { CountBars } from '@/components/charts/CountBars';
 import { IntakeBars } from '@/components/charts/IntakeBars';
 import { FormScrollView } from '@/components/keyboard-aware-screen';
+import { SETTINGS_BUTTON_CLEARANCE } from '@/components/settings-button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Spacing } from '@/constants/theme';
@@ -143,7 +144,7 @@ export default function InsightsScreen() {
           styles.content,
           { paddingTop: insets.top + Spacing.three, paddingBottom: insets.bottom + BottomTabInset + Spacing.four },
         ]}>
-        <ThemedText type="small" themeColor="textSecondary">
+        <ThemedText type="small" themeColor="textSecondary" style={styles.disclaimer}>
           These are observations from your own logs — patterns, not medical advice. Talk to a
           professional about anything that concerns you.
         </ThemedText>
@@ -287,6 +288,11 @@ export default function InsightsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  // First thing on the screen, with no title row above it — keep its text out
+  // from under the floating Settings gear (top-right overlay).
+  disclaimer: {
+    paddingRight: SETTINGS_BUTTON_CLEARANCE - Spacing.four,
   },
   content: {
     paddingHorizontal: Spacing.four,

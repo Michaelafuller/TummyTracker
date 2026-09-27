@@ -5,6 +5,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
+const BUTTON_SIZE = 44;
+
+/**
+ * How far from the screen's right edge the gear reaches (its right offset +
+ * width + a small gap). A tab screen whose top content could run under the
+ * gear pads that content's right side by this minus its own horizontal
+ * padding — e.g. Insights' disclaimer, which has no title row above it.
+ */
+export const SETTINGS_BUTTON_CLEARANCE = Spacing.three + BUTTON_SIZE + Spacing.two;
+
 /**
  * Gear button rendered once above every tab (HANDOFF.md §5 — Settings left
  * the tab bar for a top-right overlay). Reuses the existing settings tab
@@ -41,9 +51,9 @@ const styles = StyleSheet.create({
   button: {
     position: 'absolute',
     right: Spacing.three,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: BUTTON_SIZE,
+    height: BUTTON_SIZE,
+    borderRadius: BUTTON_SIZE / 2,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: StyleSheet.hairlineWidth,
