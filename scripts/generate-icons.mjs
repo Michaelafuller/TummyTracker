@@ -47,6 +47,7 @@ const tabIconSizes = [
 for (const { scale, size } of tabIconSizes) {
   rasterize(`assets/icons/tab-insights.svg`, `assets/images/tabIcons/insights${scale}.png`, size);
   rasterize(`assets/icons/tab-settings.svg`, `assets/images/tabIcons/settings${scale}.png`, size);
+  rasterize(`assets/icons/tab-meds.svg`, `assets/images/tabIcons/meds${scale}.png`, size);
 }
 
 console.log('Done.');

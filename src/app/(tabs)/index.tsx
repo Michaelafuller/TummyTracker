@@ -67,6 +67,10 @@ export default function HomeScreen() {
       <SafeAreaView style={styles.safeArea}>
         <KeyboardShiftView testID="home-keyboard-shift" style={styles.content}>
           <ThemedView style={styles.hero}>
+            {/* Reserves room under the gear overlay (SettingsButton, rendered
+             * above every tab in (tabs)/_layout.tsx — HANDOFF.md §5): the
+             * centered title/subtitle would otherwise run under its top-right
+             * corner on narrow screens. */}
             <ThemedText type="title" style={styles.title} numberOfLines={1} adjustsFontSizeToFit>
               TummyTracker
             </ThemedText>
@@ -162,6 +166,10 @@ const styles = StyleSheet.create({
   },
   hero: {
     gap: Spacing.three,
+    // On top of `content`'s own Spacing.four side padding, this keeps the
+    // centered title/subtitle clear of the top-right gear overlay's ~60px
+    // footprint (44 wide + Spacing.three right margin) while staying centered.
+    paddingHorizontal: Spacing.five + Spacing.two,
   },
   title: {
     textAlign: 'center',

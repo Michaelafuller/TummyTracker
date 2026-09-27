@@ -48,6 +48,20 @@ export default function AppTabs() {
         }}
       />
       <Tabs.Screen
+        name="meds"
+        options={{
+          title: 'Meds',
+          tabBarLabel: 'Meds',
+          tabBarButtonTestID: 'tab-meds',
+          tabBarIcon: ({ color }) => (
+            <Image
+              source={require('@/assets/images/tabIcons/meds.png')}
+              style={[styles.icon, { tintColor: color }]}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="insights"
         options={{
           title: 'Insights',
@@ -70,20 +84,6 @@ export default function AppTabs() {
           tabBarIcon: ({ color }) => (
             <Image
               source={require('@/assets/images/tabIcons/goals.png')}
-              style={[styles.icon, { tintColor: color }]}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: 'Settings',
-          tabBarLabel: 'Settings',
-          tabBarButtonTestID: 'tab-settings',
-          tabBarIcon: ({ color }) => (
-            <Image
-              source={require('@/assets/images/tabIcons/settings.png')}
               style={[styles.icon, { tintColor: color }]}
             />
           ),

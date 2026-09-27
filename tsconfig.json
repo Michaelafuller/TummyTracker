@@ -4,11 +4,19 @@
     "strict": true,
     "types": ["jest", "node", "expo/types"],
     "paths": {
-      "@/*": [
-        "./src/*"
-      ],
+      // "@/assets/*" MUST be listed before the catch-all "@/*": tsc/Metro pick
+      // the longest matching prefix regardless of order, but jest-expo's
+      // preset (withTypescriptMapping.js) converts these into a plain
+      // moduleNameMapper object in listing order and Jest takes the FIRST
+      // regex that matches — with "@/*" first, every "@/assets/..." import
+      // was silently misresolved to "src/assets/..." under Jest (never hit
+      // before this cycle: no earlier test rendered a component requiring an
+      // asset by this alias).
       "@/assets/*": [
         "./assets/*"
+      ],
+      "@/*": [
+        "./src/*"
       ]
     }
   },

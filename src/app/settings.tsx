@@ -198,10 +198,11 @@ export default function SettingsScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: insets.top + Spacing.three, paddingBottom: insets.bottom + BottomTabInset + Spacing.four },
+          // The Stack header (src/app/_layout.tsx) now supplies the "Settings"
+          // title and its own safe-area top inset — this screen only needs a
+          // small fixed gap under the header, not insets.top (HANDOFF.md §5).
+          { paddingTop: Spacing.three, paddingBottom: insets.bottom + BottomTabInset + Spacing.four },
         ]}>
-        <ThemedText type="subtitle">Settings</ThemedText>
-
         {/* Data section */}
         <ThemedText type="smallBold">Data</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
