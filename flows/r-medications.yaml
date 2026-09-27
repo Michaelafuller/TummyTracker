@@ -1,0 +1,105 @@
+appId: com.tummytracker.app.dev
+# R — Medications, Cycle A (GitHub #4/#5/#6, 2026-09-26).
+#   - Meds tab starts empty
+#   - Add a medication (name, default dose + unit chip, free-text frequency)
+#   - The list row shows "<dose> <unit> · <frequency>"
+#   - Edit the default dose → the row reflects it
+#   - Mark inactive → active list says "No active medications.", it sits
+#     under "Inactive (1)"
+#   - Mark active again → back in the active list (never deleted)
+#   - Persists across an app restart
+# Backup export/import of medications is Jest-covered (backup v3); the
+# file-picker round trip stays manual, like flow I.
+---
+- launchApp:
+    clearState: true
+- runFlow: _helpers/reconnect-dev-client.yaml
+
+- tapOn:
+    id: "tab-meds"
+- waitForAnimationToEnd
+- assertVisible: "Medications"
+- assertVisible: "No medications yet."
+
+# --- Add ---
+- tapOn: "Add medication"
+- waitForAnimationToEnd
+- tapOn: "Medication name"
+- inputText: "Omeprazole"
+- hideKeyboard
+- tapOn: "Default dose"
+- inputText: "20"
+- hideKeyboard
+- tapOn: "mg"
+- tapOn: "Frequency"
+- inputText: "once daily"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Save"
+    direction: DOWN
+- tapOn: "Save"
+- waitForAnimationToEnd
+- assertVisible: "Omeprazole"
+- assertVisible: "20 mg · once daily"
+
+# --- Edit the default dose (per-key Backspace — see h-recent-foods) ---
+- tapOn: "Edit Omeprazole"
+- waitForAnimationToEnd
+- tapOn: "Default dose"
+- repeat:
+    times: 2
+    commands:
+      - pressKey: Backspace
+- inputText: "40"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Save changes"
+    direction: DOWN
+- tapOn: "Save changes"
+- waitForAnimationToEnd
+- assertVisible: "40 mg · once daily"
+
+# --- Deactivate: leaves the active list, shows under Inactive ---
+- tapOn: "Edit Omeprazole"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "Mark inactive"
+    direction: DOWN
+- tapOn: "Mark inactive"
+- waitForAnimationToEnd
+- assertVisible: "Mark active"
+- back
+- waitForAnimationToEnd
+- assertVisible: "No active medications."
+- assertVisible: "Inactive (1)"
+- tapOn: "Inactive (1)"
+- waitForAnimationToEnd
+- assertVisible: "Omeprazole"
+
+# --- Reactivate ---
+- tapOn: "Edit Omeprazole"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "Mark active"
+    direction: DOWN
+- tapOn: "Mark active"
+- waitForAnimationToEnd
+- assertVisible: "Mark inactive"
+- back
+- waitForAnimationToEnd
+- assertVisible: "40 mg · once daily"
+- assertNotVisible: "Inactive (1)"
+
+# --- Persists across a restart ---
+- stopApp
+- launchApp
+- runFlow: _helpers/reconnect-dev-client.yaml
+- tapOn:
+    id: "tab-meds"
+- waitForAnimationToEnd
+- assertVisible: "Omeprazole"
+- assertVisible: "40 mg · once daily"

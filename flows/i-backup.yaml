@@ -12,9 +12,9 @@ appId: com.tummytracker.app.dev
 # Seed some data so the export is non-trivial
 - runFlow: _helpers/seed-two-meals.yaml
 
-# Navigate to Settings tab
+# Open Settings via the top-right gear (Settings left the tab bar 2026-09-26)
 - tapOn:
-    id: "tab-settings"
+    id: "open-settings"
 - waitForAnimationToEnd
 
 # Both data buttons are present

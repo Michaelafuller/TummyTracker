@@ -29,11 +29,22 @@ tags: [goals]
 # header (goals.tsx header reads "Today" + long date as of 2026-08-21).
 - assertVisible: "Goals"
 
+# Meds tab (Medications epic, Cycle A — 2026-09-26)
 - tapOn:
-    id: "tab-settings"
+    id: "tab-meds"
 - waitForAnimationToEnd
-# "Settings" is the subtitle rendered on the Settings screen (settings.tsx:159)
+- assertVisible: "Medications"
+
+# Settings is no longer a tab: it's the top-right gear, pushed as a Stack
+# screen (header title "Settings"), so go back before tapping a tab again.
+- assertNotVisible:
+    id: "tab-settings"
+- tapOn:
+    id: "open-settings"
+- waitForAnimationToEnd
 - assertVisible: "Settings"
+- back
+- waitForAnimationToEnd
 
 - tapOn:
     id: "tab-home"

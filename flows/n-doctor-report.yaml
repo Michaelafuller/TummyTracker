@@ -19,7 +19,7 @@ appId: com.tummytracker.app.dev
 - runFlow: _helpers/seed-two-meals.yaml
 
 - tapOn:
-    id: "tab-settings"
+    id: "open-settings"
 - waitForAnimationToEnd
 - assertVisible: "Settings"
 - scrollUntilVisible:

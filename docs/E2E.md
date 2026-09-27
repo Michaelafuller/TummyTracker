@@ -108,7 +108,7 @@ maestro test flows/ --format junit --output flows/results.xml
 | D — "Ingredients linked to rough outcomes" insight | `flows/d-ingredient-insights.yaml` | ✅ Automated (reworked + verified 2026-08-28: renamed section, cards now cite an outcome-rate sentence instead of an average sentiment) |
 | E — summary counts (food · BM · symptoms · rough outcomes) | `flows/e-temporal-insights.yaml` | ✅ Automated (reworked + verified 2026-08-28: new 5-field summary line) |
 | E — "Timing patterns" section | — | **Superseded 2026-08-28** — the section no longer exists (merged into the ingredient analysis; `analyzeIngredientOutcomes` *is* the timing analysis now, `src/features/analysis/insights.ts`). What was manual (a 24h windowed join couldn't be constructed deterministically in a `clearState` run) is now fully automated and deterministic — `flows/_helpers/seed-ingredient-reactions.yaml` / `seed-meals-for-insights.yaml` drive the native date/time picker to set exact, distinct-minute meal times instead of relying on real-clock timing, so the outcome join is no longer a race. See `flows/d-ingredient-insights.yaml` and `flows/m-finding-drilldown.yaml` for the coverage this folded into, and the new "driving the native date/time picker" finding below for the mechanism. |
-| Nav — 5 bottom tabs reachable | `flows/nav-tabs.yaml` | ✅ Automated |
+| Nav — 5 bottom tabs (Home · Journal · Meds · Insights · Goals) reachable; Settings via the top-right gear (`open-settings`, a pushed Stack screen — `back` before tapping a tab) and no `tab-settings` | `flows/nav-tabs.yaml` | ✅ Automated (reworked 2026-09-26 for Medications Cycle A) |
 | Settings — offline toggle + sections render | `flows/settings-smoke.yaml` | ✅ Automated (offline-mode switch value is not assertable in Maestro → manual regardless) |
 | Watchlist — add term, non-blocking flag on review + entry view | `flows/watchlist.yaml` | ✅ Automated — targets the **Insights** tab, not Settings (`WatchlistSection` renders in `src/app/(tabs)/insights.tsx`) |
 | Goals tab — daily tally, missing-data disclosure, tally-row drill-down (expand/collapse, "no data" sub-rows, tap-through to edit screen), "Today" + long-date header | `flows/goals-tally.yaml` | ✅ Automated (verified 2026-08-21 on the dev variant, `com.tummytracker.app.dev`) |
@@ -119,6 +119,7 @@ maestro test flows/ --format junit --output flows/results.xml
 | O — watchlist badge on journal rows ("watch" pill + a11y clause, food entries only) + in-place term edit (rename soy→soybean preserves the stats sentence / `createdAt`) | `flows/o-watchlist-edit.yaml` | ✅ Automated (authored + verified ×2 2026-08-29; no seeds — self-contained) |
 | P — servings stepper on meal review: +/− in half steps rescales row kcal + aggregate live, "−" disables at 0.5×, saved journal row carries the stepped total | `flows/p-review-servings.yaml` | ✅ Automated (authored + verified green 2026-09-26 on the Pixel 5, Metro 8081; targeted re-runs `f-serving-size` ✅ and `01b-manual-entry` ✅ — the latter's first run hit the known ADB input truncation at 41/67 chars, green on re-run) |
 | Q — re-use a saved meal then adjust it: Recent tap seeds 2 items, stepper 1×→2× on a copied item rescales row + aggregate, Remove the other, save → new 400 kcal entry + untouched 300 kcal 2-item original | `flows/q-reuse-adjust.yaml` | ✅ Automated (authored + verified green ×2 2026-09-26 on the Pixel 5) |
+| R — Medications Cycle A: empty Meds tab → add (name, dose + unit chip, frequency) → row summary → edit dose → Mark inactive ("No active medications." + "Inactive (1)") → Mark active → persists across restart | `flows/r-medications.yaml` | ✅ Automated (authored 2026-09-26; backup v3 medication round trip is Jest-covered — file-picker import stays manual like I) |
 | Root error boundary — themed fallback + Try again on a screen render error | — | ❌ Jest-only (`src/components/__tests__/root-error-boundary.test.tsx`) — no deterministic way to inject a render error on-device without app code |
 | Goals — floor/cap thresholds, cap notice, removal | `flows/goal-editor.yaml` | ✅ Automated |
 | Check-in persistence + 7-day horizon | `flows/checkin-persistence.yaml` | ✅ Automated |
@@ -144,6 +145,18 @@ immediately after **every** `launchApp` step, which:
 1. Waits for "Development Build" (confirms the connect screen actually showed).
 2. `openLink`s the explicit deep link `<scheme>://expo-development-client/?url=http://localhost:<metro-port>` — this reconnects regardless of prior state, since the URL is in the intent itself, not read from any remembered preference.
 3. Handles two more wrinkles that show up after the link fires, both harmless no-ops when absent: a one-time "This is the developer menu" tooltip (`tapOn: "Continue", optional: true`) on the very first connection after a data wipe, and the dev-menu sheet (Reload / Go home / Tools) that re-opening the same link while already connecting can pop instead of landing directly on the app (`tapOn: "Close", optional: true` — **not** "Go home", which navigates the dev client itself back to the connect screen, and **not** the hardware Back key, which can exit the app entirely to whatever was behind it).
+**Finding — the Expo dev-tools bubble covers the Settings gear (2026-09-26).**
+Since Settings moved to a top-right gear (`open-settings`), the dev client's
+floating "Tools button" bubble sits exactly on top of it on dev builds, so a
+tap opens the dev menu instead of Settings (all five Settings flows failed
+this way on first run). The reconnect helper now switches the bubble OFF, but
+only on the fresh-install onboarding path (the one-time "This is the
+developer menu" + Continue screen), where the switch is known to be at its
+default ON — its on/off state is not readable in the view hierarchy, so it is
+never toggled blind. The preference persists across plain relaunches.
+Production builds have no bubble. Owner on a dev build: drag the bubble aside
+or turn off Tools button in the dev menu once.
+
 See `flows/_helpers/reconnect-dev-client.yaml` for the full step sequence (verified reliable across 3+ consecutive clearState/relaunch cycles) and `docs/RESULTS.md` for the diagnosis. **The Metro port is hardcoded in the helper** — update it once at the top of a session if Metro isn't on the port currently baked in there. Currently **8081** (2026-08-21 targeted Goals run — also the first run of the helper against the dev variant, `com.tummytracker.app.dev` / `tummytracker-dev://`, confirmed working end-to-end on the first try, no diagnosis needed).
 
 **Finding — Maestro's text selector is a FULL regex match, not a substring

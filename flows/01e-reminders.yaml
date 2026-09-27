@@ -12,7 +12,7 @@ appId: com.tummytracker.app.dev
 - runFlow: _helpers/reconnect-dev-client.yaml
 
 - tapOn:
-    id: "tab-settings"
+    id: "open-settings"
 - waitForAnimationToEnd
 
 # Reminder settings screen should be visible

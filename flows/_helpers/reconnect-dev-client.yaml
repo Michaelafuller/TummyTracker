@@ -35,9 +35,21 @@ appId: com.tummytracker.app.dev
 - extendedWaitUntil:
     visible: "TummyTracker"
     timeout: 20000
-- tapOn:
-    text: "Continue"
-    optional: true
+# Fresh install only (the one-time "This is the developer menu" onboarding
+# with Continue): also switch OFF the dev menu's "Tools button". Its floating
+# bubble sits exactly over the app's top-right Settings gear (open-settings,
+# 2026-09-26) and swallows the tap. The switch state isn't readable in the
+# hierarchy, so it's only toggled here, where it is known to be at its
+# default ON; the preference then persists across plain relaunches, so the
+# non-onboarding path never touches it.
+- runFlow:
+    when:
+      visible: "Continue"
+    commands:
+      - tapOn: "Continue"
+      - waitForAnimationToEnd
+      - tapOn: "Tools button"
+      - waitForAnimationToEnd
 - tapOn:
     text: "Close"
     optional: true
