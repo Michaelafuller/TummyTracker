@@ -213,3 +213,31 @@ export const medicationDose = sqliteTable(
 
 export type MedicationDose = typeof medicationDose.$inferSelect;
 export type NewMedicationDose = typeof medicationDose.$inferInsert;
+
+/**
+ * A day check-in answer (GitHub #13, "fine day / rough day"). Invariants:
+ * - One row per local calendar day (`date`, 'YYYY-MM-DD', unique) — answering
+ *   again the same day updates that row's `status`; it never inserts a
+ *   second row, and there is no delete path this cycle.
+ * - `date` is the day the *notification* asked about (its own
+ *   `content.data.date`), never `Date.now()`'s day at write time — tapping
+ *   yesterday's notification after midnight records yesterday.
+ * - Never an outcome and never a log entry — the correlation engine
+ *   (`src/features/analysis/*`, `isOutcome`) does not read this table.
+ *   Rough marks the day covered; it only prompts "add a symptom?" in the UI.
+ * - Nothing is inferred: only an explicit tap (Home card or notification
+ *   action) or a backup restore ever writes a row.
+ */
+export const DAY_STATUSES = ['fine', 'rough'] as const;
+export type DayStatus = (typeof DAY_STATUSES)[number];
+
+export const dayCheckIn = sqliteTable('day_check_in', {
+  id: text('id').primaryKey(),
+  // Local calendar day 'YYYY-MM-DD' (formatDateInput) — one row per day.
+  date: text('date').notNull().unique(),
+  status: text('status', { enum: DAY_STATUSES }).notNull(),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+export type DayCheckIn = typeof dayCheckIn.$inferSelect;
+export type NewDayCheckIn = typeof dayCheckIn.$inferInsert;
