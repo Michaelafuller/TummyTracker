@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { type LayoutChangeEvent, PixelRatio, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Calendar, CalendarProvider, WeekCalendar } from 'react-native-calendars';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -12,6 +12,7 @@ import { EntryList } from '@/features/logging/EntryList';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDateInput } from '@/lib/datetime';
 import {
+  buildCalendarTheme,
   type CalendarMode,
   entryDateKeys,
   type EntryTypeFilter,
@@ -63,21 +64,25 @@ export default function BrowseScreen() {
     return marks;
   }, [typeFiltered, selectedDate, theme.accent]);
 
-  const calendarTheme = {
-    calendarBackground: theme.background,
-    dayTextColor: theme.text,
-    monthTextColor: theme.text,
-    textSectionTitleColor: theme.textSecondary,
-    todayTextColor: theme.text,
-    selectedDayBackgroundColor: theme.accent,
-    selectedDayTextColor: theme.accentText,
-    dotColor: theme.accent,
-    arrowColor: theme.accent,
-  };
+  const calendarTheme = useMemo(() => buildCalendarTheme(theme), [theme]);
 
-  // Key changes on theme or expanded/collapsed toggle so both calendar components
-  // remount with the correct selectedDate when the user switches views.
-  const calendarKey = `${theme.background}-${calendarExpanded ? 'month' : 'week'}`;
+  // WeekCalendar pages by `calendarWidth`, defaulting to the full SCREEN width —
+  // but it sits inside this screen's horizontal padding, so each week page was
+  // wider than its frame: day numbers drifted right of their weekday headers
+  // (Saturday clipped off) and swipes snapped off-grid. Measure the real frame
+  // and hand that over instead; null until the first layout pass.
+  const [weekFrameWidth, setWeekFrameWidth] = useState<number | null>(null);
+  function handleWeekFrameLayout(event: LayoutChangeEvent) {
+    // Pixel-exact, NOT whole-dp: the list snaps to multiples of its own
+    // viewport width, so a page even 0.3dp wider (344.73 → 345 on the Pixel 5)
+    // leaves every swipe resting between pages.
+    const width = PixelRatio.roundToNearestPixel(event.nativeEvent.layout.width);
+    setWeekFrameWidth((prev) => (prev === width ? prev : width));
+  }
+
+  // Key changes on theme, expanded/collapsed toggle, or frame width so the
+  // calendars remount with the correct selectedDate and page geometry.
+  const calendarKey = `${theme.background}-${calendarExpanded ? 'month' : `week-${weekFrameWidth}`}`;
 
   const monthLabel = new Date(`${selectedDate}T00:00:00`).toLocaleDateString(undefined, {
     month: 'long',
@@ -126,18 +131,27 @@ export default function BrowseScreen() {
             theme={calendarTheme}
           />
         ) : (
-          <CalendarProvider
-            key={`week-provider-${calendarKey}`}
-            date={selectedDate}
-            onDateChanged={(d) => setSelectedDate(d)}>
-            <WeekCalendar
-              current={selectedDate}
-              onDayPress={(day) => setSelectedDate(day.dateString)}
-              markedDates={markedDates}
-              hideDayNames={false}
-              theme={calendarTheme}
-            />
-          </CalendarProvider>
+          <View testID="week-calendar-frame" onLayout={handleWeekFrameLayout}>
+            {/* Mount only once measured: the initial scroll offset is computed
+                from calendarWidth, so a first render at screen width would
+                start the strip misaligned. */}
+            {weekFrameWidth != null ? (
+              <CalendarProvider
+                key={`week-provider-${calendarKey}`}
+                date={selectedDate}
+                onDateChanged={(d) => setSelectedDate(d)}>
+                <WeekCalendar
+                  testID="week-calendar"
+                  calendarWidth={weekFrameWidth}
+                  current={selectedDate}
+                  onDayPress={(day) => setSelectedDate(day.dateString)}
+                  markedDates={markedDates}
+                  hideDayNames={false}
+                  theme={calendarTheme}
+                />
+              </CalendarProvider>
+            ) : null}
+          </View>
         )}
 
         <View style={styles.listWrapper}>

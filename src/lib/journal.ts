@@ -129,3 +129,38 @@ export function filterByEntryType<T extends { type: string }>(
   if (filter === 'symptom') return entries.filter((e) => e.type === 'symptom');
   return entries.filter((e) => FOOD_TYPES_SET.has(e.type));
 }
+
+/** The palette slice the Journal calendars are themed from (both modes share these keys). */
+export type CalendarPalette = Record<
+  | 'background'
+  | 'text'
+  | 'textSecondary'
+  | 'accent'
+  | 'accentText'
+  | 'primary'
+  | 'primaryText',
+  string
+>;
+
+/**
+ * react-native-calendars theme for the Journal's week strip and month grid.
+ * Today and the selected day must never look alike: the selected day keeps
+ * the accent (violet/lavender) fill, today gets the teal primary fill with
+ * primaryText (7.0:1 in both modes, same pair as the CTAs). When today IS the
+ * selected day, the library draws the selected style on top.
+ */
+export function buildCalendarTheme(palette: CalendarPalette) {
+  return {
+    calendarBackground: palette.background,
+    dayTextColor: palette.text,
+    monthTextColor: palette.text,
+    textSectionTitleColor: palette.textSecondary,
+    todayTextColor: palette.primaryText,
+    todayBackgroundColor: palette.primary,
+    todayDotColor: palette.primaryText,
+    selectedDayBackgroundColor: palette.accent,
+    selectedDayTextColor: palette.accentText,
+    dotColor: palette.accent,
+    arrowColor: palette.accent,
+  };
+}

@@ -1,4 +1,5 @@
 import React from 'react';
+import { PixelRatio } from 'react-native';
 import { fireEvent, render } from '@testing-library/react-native';
 
 import { usePrefsStore } from '@/features/prefs/prefsStore';
@@ -43,5 +44,33 @@ describe('BrowseScreen calendar toggle', () => {
     await fireEvent.press(getByLabelText('Expand calendar'));
     await fireEvent.press(getByLabelText('Collapse calendar'));
     expect(getByLabelText('Expand calendar')).toBeTruthy();
+  });
+});
+
+describe('BrowseScreen week strip sizing', () => {
+  it('waits for the frame to be measured before mounting the week strip', async () => {
+    const { queryByTestId, getByTestId } = await render(<BrowseScreen />);
+    expect(getByTestId('week-calendar-frame')).toBeTruthy();
+    expect(queryByTestId('week-calendar')).toBeNull();
+  });
+
+  it('pages the week strip by the measured frame width, not the screen width', async () => {
+    const { getByTestId } = await render(<BrowseScreen />);
+    await fireEvent(getByTestId('week-calendar-frame'), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: 344.6, height: 80 } },
+    });
+    // Pixel-exact, never rounded to whole dp (344.6 → 345 would page off-grid).
+    expect(getByTestId('week-calendar').props.calendarWidth).toBe(PixelRatio.roundToNearestPixel(344.6));
+    expect(getByTestId('week-calendar').props.calendarWidth).not.toBe(345);
+  });
+
+  it('themes today distinctly from the selected day', async () => {
+    const { getByTestId } = await render(<BrowseScreen />);
+    await fireEvent(getByTestId('week-calendar-frame'), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: 345, height: 80 } },
+    });
+    const { theme } = getByTestId('week-calendar').props;
+    expect(theme.todayBackgroundColor).toBeDefined();
+    expect(theme.todayBackgroundColor).not.toBe(theme.selectedDayBackgroundColor);
   });
 });

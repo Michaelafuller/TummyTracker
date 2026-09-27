@@ -1,4 +1,5 @@
 import {
+  buildCalendarTheme,
   entryDateKeys,
   filterByEntryType,
   filterEntriesInRange,
@@ -123,5 +124,32 @@ describe('entryDateKeys', () => {
       { loggedAt: at(2026, 6, 25, 9) },
     ];
     expect(entryDateKeys(entries).sort()).toEqual(['2026-06-24', '2026-06-25']);
+  });
+});
+
+describe('buildCalendarTheme', () => {
+  const palette = {
+    background: '#bg',
+    text: '#text',
+    textSecondary: '#text2',
+    accent: '#accent',
+    accentText: '#accentText',
+    primary: '#primary',
+    primaryText: '#primaryText',
+  };
+
+  it('gives today its own fill so it is visible without being selected', () => {
+    const theme = buildCalendarTheme(palette);
+    expect(theme.todayBackgroundColor).toBe('#primary');
+    expect(theme.todayTextColor).toBe('#primaryText');
+    // Regression: today used to render in plain dayTextColor — indistinguishable.
+    expect(theme.todayTextColor).not.toBe(theme.dayTextColor);
+  });
+
+  it('never styles today like the selected day', () => {
+    const theme = buildCalendarTheme(palette);
+    expect(theme.todayBackgroundColor).not.toBe(theme.selectedDayBackgroundColor);
+    expect(theme.selectedDayBackgroundColor).toBe('#accent');
+    expect(theme.selectedDayTextColor).toBe('#accentText');
   });
 });
