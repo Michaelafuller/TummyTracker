@@ -143,8 +143,19 @@ appId: com.tummytracker.app.dev
     id: "tab-home"
 # Home stays mounted, so the "Oatmeal" search filter is still applied — clear it
 - tapOn: "Search past foods"
-- eraseText
-- hideKeyboard
+# Per-key Backspace ("Oatmeal" = 7), NOT eraseText: the burst erased only
+# "eal" and then dropped focus (docs/E2E.md burst-input finding, 2026-09-26).
+- repeat:
+    times: 7
+    commands:
+      - pressKey: Backspace
+# Dismiss by tapping empty space (GitHub #2's tap-outside), NOT hideKeyboard:
+# on Android hideKeyboard is a Back press, and if the keyboard has already
+# closed, Back on the Home tab root exits the app (seen 2026-09-26). A tap on
+# the hero is a no-op when no keyboard is up.
+- tapOn:
+    point: "50%,22%"
+- waitForAnimationToEnd
 - scrollUntilVisible:
     element:
       id: "recent-pizza-slice"
