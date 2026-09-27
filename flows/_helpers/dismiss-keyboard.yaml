@@ -1,0 +1,26 @@
+appId: com.tummytracker.app.dev
+# Helper — close the keyboard IF it is open, never a blind Back press.
+#
+# Replaces `hideKeyboard`, which on Android is a Back press: when the keyboard
+# is already closed, Back navigates instead — it silently pops a pushed screen,
+# and on a tab root (Home/Journal/Meds/Insights/Goals) it exits the app
+# (docs/E2E.md finding, 2026-09-26). The app-wide keyboard toolbar (GitHub #2)
+# is on screen exactly while a keyboard is open, so its Done button
+# (`keyboard.toolbar.done`, react-native-keyboard-controller's default testID)
+# is a reliable "keyboard is up" signal. No toolbar → no keyboard → no-op.
+#
+# NOT for Home: the toolbar is hidden there (it covered the Recent search), so
+# on Home dismiss with a tap in empty space instead:
+#   - tapOn:
+#       point: "50%,22%"
+#
+# Invoke via: runFlow: _helpers/dismiss-keyboard.yaml
+---
+- runFlow:
+    when:
+      visible:
+        id: "keyboard.toolbar.done"
+    commands:
+      - tapOn:
+          id: "keyboard.toolbar.done"
+      - waitForAnimationToEnd

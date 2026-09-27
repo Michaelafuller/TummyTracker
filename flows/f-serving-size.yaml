@@ -18,7 +18,7 @@ appId: com.tummytracker.app.dev
 - tapOn:
     text: "Component name"
 - inputText: "Avocado toast"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 
 - scrollUntilVisible:
     element:
@@ -43,7 +43,7 @@ appId: com.tummytracker.app.dev
 - tapOn:
     text: "Fat \\(g\\)"
 - inputText: "14"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 
 # Serving size 0 should not crash
 - scrollUntilVisible:
@@ -54,7 +54,7 @@ appId: com.tummytracker.app.dev
     text: "Serving size in grams"
 - eraseText: 20
 - inputText: "0"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 
 - scrollUntilVisible:
     element:

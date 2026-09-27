@@ -18,7 +18,7 @@ tags: [goals]
     text: "Component name"
 - tapOn: "Component name"
 - inputText: "Goal Seed Meal"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 # Scroll target is "Sugar (g)" (one row below Protein), not "Protein (g)"
 # itself — a nutrition-grid label is short enough to satisfy
 # scrollUntilVisible while its taller input box directly below is still
@@ -29,7 +29,7 @@ tags: [goals]
     direction: DOWN
 - tapOn: "Protein \\(g\\)"
 - inputText: "10"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Finish meal"
@@ -64,7 +64,7 @@ tags: [goals]
 - tapOn: "Goal direction: at least"
 - tapOn: "Set protein goal"
 - inputText: "50"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Save protein goal"
@@ -101,7 +101,7 @@ tags: [goals]
 - tapOn: "Goal direction: at most"
 - tapOn: "Set sugar goal"
 - inputText: "5"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Save sugar goal"
@@ -114,7 +114,7 @@ tags: [goals]
 - tapOn: "Add an entry manually"
 - tapOn: "Component name"
 - inputText: "Sugar Bomb"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 # Sugar/Sodium are the last row — scroll to "Finish meal" (below the whole
 # grid) rather than "Sugar (g)" itself, for the same off-screen-input reason.
 - scrollUntilVisible:
@@ -123,7 +123,7 @@ tags: [goals]
     direction: DOWN
 - tapOn: "Sugar \\(g\\)"
 - inputText: "20"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Finish meal"

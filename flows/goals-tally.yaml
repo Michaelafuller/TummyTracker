@@ -24,7 +24,7 @@ tags: [goals]
     text: "Component name"
 - tapOn: "Component name"
 - inputText: "Tally Test Meal"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 
 # Scroll target is "Sat. fat (g)" (one row below Calories), not "Calories"
 # itself — a nutrition-grid label is short enough to satisfy
@@ -36,7 +36,7 @@ tags: [goals]
     direction: DOWN
 - tapOn: "Calories"
 - inputText: "500"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 
 - scrollUntilVisible:
     element:

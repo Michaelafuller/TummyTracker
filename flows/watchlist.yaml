@@ -26,7 +26,7 @@ appId: com.tummytracker.app.dev
     direction: DOWN
 - tapOn: "New watchlist term"
 - inputText: "soy"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - tapOn: "Add to watchlist"
 - waitForAnimationToEnd
 
@@ -45,7 +45,7 @@ appId: com.tummytracker.app.dev
     text: "Component name"
 - tapOn: "Component name"
 - inputText: "Soy Curls"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 
 - scrollUntilVisible:
     element:
@@ -53,7 +53,7 @@ appId: com.tummytracker.app.dev
     direction: DOWN
 - tapOn: "Ingredients"
 - inputText: "soy, water, salt"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - waitForAnimationToEnd
 
 - scrollUntilVisible:

@@ -17,7 +17,7 @@ appId: com.tummytracker.app.dev
 - tapOn:
     text: "Component name"
 - inputText: "Date picker test"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Finish meal"

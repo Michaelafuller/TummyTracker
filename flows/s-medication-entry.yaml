@@ -23,10 +23,10 @@ appId: com.tummytracker.app.dev
 - tapOn: "Add medication"
 - tapOn: "Medication name"
 - inputText: "Omeprazole"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - tapOn: "Default dose"
 - inputText: "20"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - tapOn: "mg"
 - scrollUntilVisible:
     element:
@@ -38,10 +38,10 @@ appId: com.tummytracker.app.dev
 - tapOn: "Add medication"
 - tapOn: "Medication name"
 - inputText: "Ibuprofen"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - tapOn: "Default dose"
 - inputText: "400"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - tapOn: "mg"
 - scrollUntilVisible:
     element:
@@ -62,7 +62,7 @@ appId: com.tummytracker.app.dev
     commands:
       - pressKey: Backspace
 - inputText: "200"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Save"
@@ -116,7 +116,7 @@ appId: com.tummytracker.app.dev
 - inputText: "i"
 - inputText: "n"
 - inputText: "e"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Save changes"

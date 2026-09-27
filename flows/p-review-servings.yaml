@@ -14,7 +14,7 @@ appId: com.tummytracker.app.dev
 - tapOn:
     text: "Component name"
 - inputText: "Rice"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Calories"
@@ -22,7 +22,7 @@ appId: com.tummytracker.app.dev
 - tapOn:
     text: "Calories"
 - inputText: "200"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Finish meal"

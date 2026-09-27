@@ -19,7 +19,7 @@ appId: com.tummytracker.app.dev
 - tapOn:
     text: "Component name"
 - inputText: "Oatmeal"
-- hideKeyboard
+- runFlow: dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Finish meal"
@@ -47,7 +47,7 @@ appId: com.tummytracker.app.dev
 - tapOn:
     text: "Component name"
 - inputText: "Pizza slice"
-- hideKeyboard
+- runFlow: dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Finish meal"

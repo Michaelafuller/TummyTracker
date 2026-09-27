@@ -28,14 +28,14 @@ appId: com.tummytracker.app.dev
     text: "Component name"
 - tapOn: "Component name"
 - inputText: "Onion Dish"
-- hideKeyboard
+- runFlow: dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Ingredients (optional)"
     direction: DOWN
 - tapOn: "Ingredients"
 - inputText: "onion, garlic"
-- hideKeyboard
+- runFlow: dismiss-keyboard.yaml
 - waitForAnimationToEnd
 - scrollUntilVisible:
     element:
@@ -55,7 +55,7 @@ appId: com.tummytracker.app.dev
 - tapOn:
     id: "android:id/input_minute"
 - inputText: "${output.triggerMinute1}"
-- hideKeyboard
+- runFlow: dismiss-keyboard.yaml
 - tapOn:
     id: "android:id/am_pm_spinner"
 - tapOn: "${output.triggerAmPm}"
@@ -73,14 +73,14 @@ appId: com.tummytracker.app.dev
 - tapOn: "Add an entry manually"
 - tapOn: "Component name"
 - inputText: "Onion Dish"
-- hideKeyboard
+- runFlow: dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Ingredients (optional)"
     direction: DOWN
 - tapOn: "Ingredients"
 - inputText: "onion, garlic"
-- hideKeyboard
+- runFlow: dismiss-keyboard.yaml
 - waitForAnimationToEnd
 - scrollUntilVisible:
     element:
@@ -100,7 +100,7 @@ appId: com.tummytracker.app.dev
 - tapOn:
     id: "android:id/input_minute"
 - inputText: "${output.triggerMinute2}"
-- hideKeyboard
+- runFlow: dismiss-keyboard.yaml
 - tapOn:
     id: "android:id/am_pm_spinner"
 - tapOn: "${output.triggerAmPm}"
@@ -118,14 +118,14 @@ appId: com.tummytracker.app.dev
 - tapOn: "Add an entry manually"
 - tapOn: "Component name"
 - inputText: "Onion Dish"
-- hideKeyboard
+- runFlow: dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Ingredients (optional)"
     direction: DOWN
 - tapOn: "Ingredients"
 - inputText: "onion, garlic"
-- hideKeyboard
+- runFlow: dismiss-keyboard.yaml
 - waitForAnimationToEnd
 - scrollUntilVisible:
     element:
@@ -145,7 +145,7 @@ appId: com.tummytracker.app.dev
 - tapOn:
     id: "android:id/input_minute"
 - inputText: "${output.triggerMinute3}"
-- hideKeyboard
+- runFlow: dismiss-keyboard.yaml
 - tapOn:
     id: "android:id/am_pm_spinner"
 - tapOn: "${output.triggerAmPm}"
@@ -165,14 +165,14 @@ appId: com.tummytracker.app.dev
 - tapOn: "Add an entry manually"
 - tapOn: "Component name"
 - inputText: "Rice"
-- hideKeyboard
+- runFlow: dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Ingredients (optional)"
     direction: DOWN
 - tapOn: "Ingredients"
 - inputText: "rice"
-- hideKeyboard
+- runFlow: dismiss-keyboard.yaml
 - waitForAnimationToEnd
 - scrollUntilVisible:
     element:

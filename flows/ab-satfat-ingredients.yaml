@@ -27,7 +27,7 @@ appId: com.tummytracker.app.dev
     text: "Component name"
 - tapOn: "Component name"
 - inputText: "Sat Fat Test"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 
 # Scroll to Ingredients field and fill it
 - scrollUntilVisible:
@@ -36,7 +36,7 @@ appId: com.tummytracker.app.dev
     direction: DOWN
 - tapOn: "Ingredients"
 - inputText: "butter, cream, garlic"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - waitForAnimationToEnd
 
 # Scroll to Sat. fat field and fill it. Scroll target is "Protein (g)" (one
@@ -51,7 +51,7 @@ appId: com.tummytracker.app.dev
     direction: DOWN
 - tapOn: "Sat. fat \\(g\\)"
 - inputText: "12"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 
 # Finish meal -> review screen -> Save
 - scrollUntilVisible:
@@ -100,7 +100,7 @@ appId: com.tummytracker.app.dev
     direction: DOWN
 - tapOn: "New watchlist term"
 - inputText: "garlic"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - tapOn: "Add to watchlist"
 - waitForAnimationToEnd
 # The input field is cleared on a successful add (hideKeyboard above avoids
@@ -125,7 +125,7 @@ appId: com.tummytracker.app.dev
 - tapOn: "Ingredients"
 - eraseText: 40
 - inputText: "butter, cream"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 
 - scrollUntilVisible:
     element:

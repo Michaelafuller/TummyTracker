@@ -26,15 +26,16 @@ appId: com.tummytracker.app.dev
 - tapOn:
     text: "Component name"
 - inputText: "Rice"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Calories"
     direction: DOWN
+    centerElement: true
 - tapOn:
     text: "Calories"
 - inputText: "200"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Add & scan next"
@@ -51,15 +52,16 @@ appId: com.tummytracker.app.dev
 - tapOn:
     text: "Component name"
 - inputText: "Beans"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Calories"
     direction: DOWN
+    centerElement: true
 - tapOn:
     text: "Calories"
 - inputText: "100"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Add & scan next"
@@ -76,15 +78,16 @@ appId: com.tummytracker.app.dev
 - tapOn:
     text: "Component name"
 - inputText: "Corn"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Calories"
     direction: DOWN
+    centerElement: true
 - tapOn:
     text: "Calories"
 - inputText: "50"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Finish meal"
@@ -143,7 +146,7 @@ appId: com.tummytracker.app.dev
     text: "Servings"
 - eraseText
 - inputText: "2"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Save changes"

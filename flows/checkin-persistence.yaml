@@ -26,7 +26,7 @@ tags: [goals]
     text: "Component name"
 - tapOn: "Component name"
 - inputText: "Checkin Seed Meal"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Finish meal"
@@ -54,7 +54,7 @@ tags: [goals]
 - tapOn: "Goal direction: at least"
 - tapOn: "Set calories goal"
 - inputText: "100"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Save calories goal"

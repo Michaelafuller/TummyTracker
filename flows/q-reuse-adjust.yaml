@@ -16,14 +16,15 @@ appId: com.tummytracker.app.dev
 - tapOn: "Add an entry manually"
 - tapOn: "Component name"
 - inputText: "Rice"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Calories"
     direction: DOWN
+    centerElement: true
 - tapOn: "Calories"
 - inputText: "200"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Add & scan next"
@@ -32,14 +33,15 @@ appId: com.tummytracker.app.dev
 - tapOn: "Enter product manually"
 - tapOn: "Component name"
 - inputText: "Beans"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Calories"
     direction: DOWN
+    centerElement: true
 - tapOn: "Calories"
 - inputText: "100"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Finish meal"

@@ -18,7 +18,7 @@ appId: com.tummytracker.app.dev
     centerElement: true
 - tapOn: "New watchlist term"
 - inputText: "soy"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - tapOn: "Add to watchlist"
 - assertVisible: "soy"
 
@@ -28,10 +28,10 @@ appId: com.tummytracker.app.dev
 - tapOn: "+ Add manually"
 - tapOn: "Component name"
 - inputText: "Soy Curls"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - tapOn: "Ingredients"
 - inputText: "soy protein, salt"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Finish meal"
@@ -73,7 +73,7 @@ appId: com.tummytracker.app.dev
 - tapOn: "Edit watchlist term"
 - eraseText
 - inputText: "soybean"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - tapOn: "Save watchlist term"
 - assertVisible: "soybean"
 - assertVisible: ".*since watching.*"

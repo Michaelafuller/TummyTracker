@@ -22,12 +22,12 @@ appId: com.tummytracker.app.dev
 - tapOn:
     text: "Component name"
 - inputText: "Chicken salad"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 
 - tapOn:
     text: "Ingredients"
 - inputText: "chicken, lettuce, tomato, olive oil"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 
 - scrollUntilVisible:
     element:
@@ -52,7 +52,7 @@ appId: com.tummytracker.app.dev
 - tapOn:
     text: "Protein (g)"
 - inputText: "28"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 
 - scrollUntilVisible:
     element:
@@ -87,7 +87,7 @@ appId: com.tummytracker.app.dev
 - tapOn:
     text: "Notes"
 - inputText: "Ate slowly, felt fine for the first hour then mild bloating set in."
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "67/500"

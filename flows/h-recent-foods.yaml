@@ -46,7 +46,10 @@ appId: com.tummytracker.app.dev
 - tapOn:
     text: "Search past foods…"
 - inputText: "Oatmeal"
-- hideKeyboard
+# Home has no keyboard toolbar: dismiss with a tap in empty space.
+- tapOn:
+    point: "50%,22%"
+- waitForAnimationToEnd
 - assertVisible:
     id: "recent-oatmeal"
 
@@ -70,7 +73,7 @@ appId: com.tummytracker.app.dev
     commands:
       - pressKey: Backspace
 - inputText: "Oatmeal with banana"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 
 # Add item → existing scan flow → manual hatch → Finish meal
 - tapOn:
@@ -78,7 +81,7 @@ appId: com.tummytracker.app.dev
 - tapOn: "Enter manually"
 - tapOn: "Component name"
 - inputText: "Banana"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Finish meal"
@@ -170,7 +173,7 @@ appId: com.tummytracker.app.dev
 - tapOn: "Add an entry manually"
 - tapOn: "Component name"
 - inputText: "Tea"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Finish meal"

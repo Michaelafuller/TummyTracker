@@ -52,7 +52,7 @@ appId: com.tummytracker.app.dev
     direction: DOWN
 - tapOn: "Notes"
 - inputText: "Edited via 01d-browse-edit"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 
 - scrollUntilVisible:
     element:

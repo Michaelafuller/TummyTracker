@@ -26,14 +26,14 @@ appId: com.tummytracker.app.dev
 - waitForAnimationToEnd
 - tapOn: "Medication name"
 - inputText: "Omeprazole"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - tapOn: "Default dose"
 - inputText: "20"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - tapOn: "mg"
 - tapOn: "Frequency"
 - inputText: "once daily"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Save"
@@ -52,7 +52,7 @@ appId: com.tummytracker.app.dev
     commands:
       - pressKey: Backspace
 - inputText: "40"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Save changes"

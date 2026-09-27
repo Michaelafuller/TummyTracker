@@ -18,7 +18,7 @@ appId: com.tummytracker.app.dev
 - tapOn:
     text: "Component name"
 - inputText: "Toast"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Calories"
@@ -26,7 +26,7 @@ appId: com.tummytracker.app.dev
 - tapOn:
     text: "Calories"
 - inputText: "210"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 # Gotcha #1: scroll to a landmark BELOW the field about to be filled — the
 # label alone being visible doesn't mean the input box is on-screen.
 - scrollUntilVisible:
@@ -36,7 +36,7 @@ appId: com.tummytracker.app.dev
 - tapOn:
     text: "Fiber (g)"
 - inputText: "7"
-- hideKeyboard
+- runFlow: _helpers/dismiss-keyboard.yaml
 - scrollUntilVisible:
     element:
       text: "Finish meal"
