@@ -1,4 +1,4 @@
-import type { LogEntry, MealComponent, Medication, MedicationDose, MedicationEvent } from '@/db/schema';
+import type { DayCheckIn, LogEntry, MealComponent, Medication, MedicationDose, MedicationEvent } from '@/db/schema';
 import { dosesForRestoredEvents, entriesToJson, parseBackupJson } from '../backup';
 
 const BASE_ENTRY: LogEntry = {
@@ -83,6 +83,14 @@ const BASE_MEDICATION_DOSE: MedicationDose = {
   updatedAt: 6,
 };
 
+const BASE_DAY_CHECK_IN: DayCheckIn = {
+  id: 'ci1',
+  date: '2026-06-15',
+  status: 'fine',
+  createdAt: 7,
+  updatedAt: 8,
+};
+
 describe('entriesToJson / parseBackupJson roundtrip', () => {
   it('roundtrips a single entry intact', () => {
     const json = entriesToJson([BASE_ENTRY]);
@@ -95,6 +103,7 @@ describe('entriesToJson / parseBackupJson roundtrip', () => {
     expect(result.medications).toHaveLength(0);
     expect(result.medicationEvents).toHaveLength(0);
     expect(result.medicationDoses).toHaveLength(0);
+    expect(result.dayCheckIns).toHaveLength(0);
   });
 
   it('roundtrips multiple entries', () => {
@@ -125,7 +134,7 @@ describe('entriesToJson / parseBackupJson roundtrip', () => {
     expect(result.mealComponents[0]).toEqual(BASE_COMPONENT);
   });
 
-  it('roundtrips entries with the medication inventory and history intact (v3)', () => {
+  it('roundtrips entries with the medication inventory and history intact', () => {
     const json = entriesToJson(
       [BASE_ENTRY],
       [BASE_COMPONENT],
@@ -133,7 +142,9 @@ describe('entriesToJson / parseBackupJson roundtrip', () => {
       [BASE_MEDICATION_EVENT],
       [BASE_MEDICATION_DOSE],
     );
-    expect(JSON.parse(json).version).toBe(3);
+    // entriesToJson always writes the current version (4) — parseBackupJson
+    // separately still reads older v1/v2/v3 files (tested below).
+    expect(JSON.parse(json).version).toBe(4);
 
     const result = parseBackupJson(json);
     expect(result.ok).toBe(true);
@@ -141,6 +152,24 @@ describe('entriesToJson / parseBackupJson roundtrip', () => {
     expect(result.medications).toEqual([BASE_MEDICATION]);
     expect(result.medicationEvents).toEqual([BASE_MEDICATION_EVENT]);
     expect(result.medicationDoses).toEqual([BASE_MEDICATION_DOSE]);
+    expect(result.dayCheckIns).toEqual([]);
+  });
+
+  it('roundtrips entries with day check-ins intact (v4)', () => {
+    const json = entriesToJson(
+      [BASE_ENTRY],
+      [BASE_COMPONENT],
+      [BASE_MEDICATION],
+      [BASE_MEDICATION_EVENT],
+      [BASE_MEDICATION_DOSE],
+      [BASE_DAY_CHECK_IN],
+    );
+    expect(JSON.parse(json).version).toBe(4);
+
+    const result = parseBackupJson(json);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.dayCheckIns).toEqual([BASE_DAY_CHECK_IN]);
   });
 });
 
@@ -174,6 +203,59 @@ describe('legacy v2 backup import (no medication keys)', () => {
     expect(result.medications).toEqual([]);
     expect(result.medicationEvents).toEqual([]);
     expect(result.medicationDoses).toEqual([]);
+  });
+});
+
+describe('legacy v3 backup import (no dayCheckIns key)', () => {
+  it('imports a v3-shaped file with an empty dayCheckIns array', () => {
+    const legacy = {
+      version: 3,
+      entries: [BASE_ENTRY],
+      medications: [BASE_MEDICATION],
+      medicationEvents: [BASE_MEDICATION_EVENT],
+      medicationDoses: [BASE_MEDICATION_DOSE],
+    };
+    const result = parseBackupJson(JSON.stringify(legacy));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.medications).toEqual([BASE_MEDICATION]);
+    expect(result.dayCheckIns).toEqual([]);
+  });
+});
+
+describe('day check-in validation', () => {
+  it('rejects a day check-in missing an id', () => {
+    const bad = { ...BASE_DAY_CHECK_IN, id: '' };
+    const result = parseBackupJson(JSON.stringify({ version: 4, entries: [BASE_ENTRY], dayCheckIns: [bad] }));
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBe('Day check-in at index 0 has an invalid shape.');
+  });
+
+  it('rejects a day check-in with a malformed date', () => {
+    const bad = { ...BASE_DAY_CHECK_IN, date: '06/15/2026' };
+    const result = parseBackupJson(JSON.stringify({ version: 4, entries: [BASE_ENTRY], dayCheckIns: [bad] }));
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects a day check-in with an invalid status', () => {
+    const bad = { ...BASE_DAY_CHECK_IN, status: 'meh' };
+    const result = parseBackupJson(JSON.stringify({ version: 4, entries: [BASE_ENTRY], dayCheckIns: [bad] }));
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects a day check-in missing createdAt/updatedAt', () => {
+    const bad = { ...BASE_DAY_CHECK_IN, updatedAt: undefined };
+    const result = parseBackupJson(JSON.stringify({ version: 4, entries: [BASE_ENTRY], dayCheckIns: [bad] }));
+    expect(result.ok).toBe(false);
+  });
+
+  it('accepts a valid rough-status day check-in', () => {
+    const roughCheckIn = { ...BASE_DAY_CHECK_IN, id: 'ci2', date: '2026-06-16', status: 'rough' };
+    const result = parseBackupJson(JSON.stringify({ version: 4, entries: [BASE_ENTRY], dayCheckIns: [roughCheckIn] }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.dayCheckIns).toEqual([roughCheckIn]);
   });
 });
 
