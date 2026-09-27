@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
-import { Alert } from 'react-native';
+import { Alert, Platform } from 'react-native';
 import { SafeAreaProvider, type Metrics } from 'react-native-safe-area-context';
 
 import { insertDayCheckInsPreservingIds, listAllDayCheckIns, listLogEntries } from '@/db/repository';
@@ -9,6 +9,25 @@ import { DEFAULT_REMINDERS } from '@/features/notifications/model';
 import { ensureNotificationPermission, getReminders } from '@/features/notifications/service';
 import { usePrefsStore } from '@/features/prefs/prefsStore';
 import SettingsScreen from '../settings';
+
+// The gathering/export path (exportBackupViaShare/buildBackupJson) is kept
+// REAL here — it runs against the expo-file-system/expo-sharing/repository
+// mocks below, exactly as the pre-service handleExport used to, so the
+// existing export-content tests keep exercising the real v4 JSON shape. Only
+// the folder-picker actions (which need a real SAF folder to do anything
+// meaningful) are replaced with jest.fn()s for the new Automatic backup tests.
+const mockChooseBackupFolder = jest.fn();
+const mockBackUpToFolderNow = jest.fn();
+const mockTurnOffAutoBackup = jest.fn();
+jest.mock('@/features/backup/backupService', () => {
+  const actual = jest.requireActual('@/features/backup/backupService');
+  return {
+    ...actual,
+    chooseBackupFolder: (...args: unknown[]) => mockChooseBackupFolder(...args),
+    backUpToFolderNow: (...args: unknown[]) => mockBackUpToFolderNow(...args),
+    turnOffAutoBackup: (...args: unknown[]) => mockTurnOffAutoBackup(...args),
+  };
+});
 
 const mockPrintToFileAsync = jest.fn();
 jest.mock('expo-print', () => ({
@@ -69,8 +88,11 @@ function renderScreen(ui: ReactElement) {
   return render(<SafeAreaProvider initialMetrics={TEST_INSETS}>{ui}</SafeAreaProvider>);
 }
 
+const originalOS = Platform.OS;
+
 beforeEach(() => {
   jest.clearAllMocks();
+  Platform.OS = originalOS;
   usePrefsStore.setState({
     offlineMode: false,
     tagBackfillV1Done: false,
@@ -81,6 +103,11 @@ beforeEach(() => {
     dayCheckInEnabled: false,
     dayCheckInHour: 21,
     dayCheckInMinute: 0,
+    autoBackupDirUri: null,
+    autoBackupDirName: null,
+    lastBackupAt: null,
+    lastAutoBackupAt: null,
+    autoBackupError: null,
     loaded: false,
   });
   (getReminders as jest.Mock).mockResolvedValue(DEFAULT_REMINDERS);
@@ -88,6 +115,10 @@ beforeEach(() => {
   (listAllDayCheckIns as jest.Mock).mockResolvedValue([]);
   (insertDayCheckInsPreservingIds as jest.Mock).mockResolvedValue({ inserted: 0, skipped: 0 });
   (ensureNotificationPermission as jest.Mock).mockResolvedValue(true);
+});
+
+afterEach(() => {
+  Platform.OS = originalOS;
 });
 
 describe('SettingsScreen — Doctor report section', () => {
@@ -262,5 +293,134 @@ describe('SettingsScreen — Day check-in section (GitHub #13)', () => {
     expect((await findByLabelText('Day check-in')).props.value).toBe(false);
     expect(usePrefsStore.getState().dayCheckInEnabled).toBe(false);
     expect(disableDayCheckIn).toHaveBeenCalled();
+  });
+});
+
+describe('SettingsScreen — last backup line (GitHub #14)', () => {
+  it('shows "Never backed up" when there has been no backup', async () => {
+    const { findByText } = await renderScreen(<SettingsScreen />);
+    expect(await findByText('Never backed up')).toBeTruthy();
+  });
+
+  it('shows "Last backup: today" right after a lastBackupAt is recorded', async () => {
+    usePrefsStore.setState({ lastBackupAt: Date.now() });
+    const { findByText } = await renderScreen(<SettingsScreen />);
+    expect(await findByText('Last backup: today')).toBeTruthy();
+  });
+});
+
+describe('SettingsScreen — Automatic backup section (Android only, GitHub #14)', () => {
+  it('is not rendered on iOS', async () => {
+    Platform.OS = 'ios';
+    const { queryByText } = await renderScreen(<SettingsScreen />);
+    expect(queryByText('Automatic backup')).toBeNull();
+  });
+
+  it('shows "Choose backup folder" on Android when no folder is set', async () => {
+    Platform.OS = 'android';
+    const { findByText, findByLabelText } = await renderScreen(<SettingsScreen />);
+    expect(await findByText('Automatic backup')).toBeTruthy();
+    expect(await findByLabelText('Choose backup folder')).toBeTruthy();
+  });
+
+  it('shows "Saving to: <name>" and the folder-set actions once a folder is chosen', async () => {
+    Platform.OS = 'android';
+    usePrefsStore.setState({ autoBackupDirUri: 'content://tree/abc', autoBackupDirName: 'Documents' });
+    const { findByText, findByLabelText } = await renderScreen(<SettingsScreen />);
+    expect(await findByText('Saving to: Documents')).toBeTruthy();
+    expect(await findByLabelText('Back up to folder now')).toBeTruthy();
+    expect(await findByLabelText('Change folder')).toBeTruthy();
+    expect(await findByLabelText('Turn off automatic backup')).toBeTruthy();
+  });
+
+  it('shows the friendly error line when autoBackupError is set', async () => {
+    Platform.OS = 'android';
+    usePrefsStore.setState({
+      autoBackupDirUri: 'content://tree/abc',
+      autoBackupDirName: 'Documents',
+      autoBackupError: "Couldn't write to the backup folder. Choose it again in Settings.",
+    });
+    const { findByText } = await renderScreen(<SettingsScreen />);
+    expect(
+      await findByText("Couldn't write to the backup folder. Choose it again in Settings."),
+    ).toBeTruthy();
+  });
+
+  it('does not show an error line when autoBackupError is null', async () => {
+    Platform.OS = 'android';
+    const { queryByText } = await renderScreen(<SettingsScreen />);
+    expect(queryByText(/Couldn't write to the backup folder/)).toBeNull();
+  });
+
+  it('"Choose backup folder" calls chooseBackupFolder and alerts with the folder name on success', async () => {
+    Platform.OS = 'android';
+    mockChooseBackupFolder.mockImplementation(async () => {
+      usePrefsStore.setState({ autoBackupDirUri: 'content://tree/abc', autoBackupDirName: 'Documents' });
+      return 'chosen';
+    });
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+
+    const { findByLabelText } = await renderScreen(<SettingsScreen />);
+    await fireEvent.press(await findByLabelText('Choose backup folder'));
+
+    await waitFor(() => expect(mockChooseBackupFolder).toHaveBeenCalled());
+    expect(Alert.alert).toHaveBeenCalledWith('Backup saved to Documents.');
+    (Alert.alert as jest.Mock).mockRestore();
+  });
+
+  it('a cancelled folder pick shows no alert and keeps the "Choose backup folder" state', async () => {
+    Platform.OS = 'android';
+    mockChooseBackupFolder.mockResolvedValue('cancelled');
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+
+    const { findByLabelText } = await renderScreen(<SettingsScreen />);
+    await fireEvent.press(await findByLabelText('Choose backup folder'));
+
+    await waitFor(() => expect(mockChooseBackupFolder).toHaveBeenCalled());
+    expect(Alert.alert).not.toHaveBeenCalled();
+    expect(usePrefsStore.getState().autoBackupDirUri).toBeNull();
+    (Alert.alert as jest.Mock).mockRestore();
+  });
+
+  it('"Back up now" calls backUpToFolderNow and alerts with the folder name on success', async () => {
+    Platform.OS = 'android';
+    usePrefsStore.setState({ autoBackupDirUri: 'content://tree/abc', autoBackupDirName: 'Documents' });
+    mockBackUpToFolderNow.mockResolvedValue({ ok: true });
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+
+    const { findByLabelText } = await renderScreen(<SettingsScreen />);
+    await fireEvent.press(await findByLabelText('Back up to folder now'));
+
+    await waitFor(() => expect(mockBackUpToFolderNow).toHaveBeenCalled());
+    expect(Alert.alert).toHaveBeenCalledWith('Backup saved to Documents.');
+    (Alert.alert as jest.Mock).mockRestore();
+  });
+
+  it('"Back up now" failure shows no success alert (the error line above carries the message)', async () => {
+    Platform.OS = 'android';
+    usePrefsStore.setState({ autoBackupDirUri: 'content://tree/abc', autoBackupDirName: 'Documents' });
+    mockBackUpToFolderNow.mockResolvedValue({ ok: false, error: 'nope' });
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+
+    const { findByLabelText } = await renderScreen(<SettingsScreen />);
+    await fireEvent.press(await findByLabelText('Back up to folder now'));
+
+    await waitFor(() => expect(mockBackUpToFolderNow).toHaveBeenCalled());
+    expect(Alert.alert).not.toHaveBeenCalled();
+    (Alert.alert as jest.Mock).mockRestore();
+  });
+
+  it('"Turn off" calls turnOffAutoBackup and returns to the "Choose backup folder" state', async () => {
+    Platform.OS = 'android';
+    usePrefsStore.setState({ autoBackupDirUri: 'content://tree/abc', autoBackupDirName: 'Documents' });
+    mockTurnOffAutoBackup.mockImplementation(async () => {
+      usePrefsStore.setState({ autoBackupDirUri: null, autoBackupDirName: null, autoBackupError: null });
+    });
+
+    const { findByLabelText } = await renderScreen(<SettingsScreen />);
+    await fireEvent.press(await findByLabelText('Turn off automatic backup'));
+
+    await waitFor(() => expect(mockTurnOffAutoBackup).toHaveBeenCalled());
+    expect(await findByLabelText('Choose backup folder')).toBeTruthy();
   });
 });

@@ -1,7 +1,7 @@
-import { File, Paths } from 'expo-file-system';
+import { File } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FormField } from '@/components/form-fields';
@@ -17,13 +17,14 @@ import {
   insertMedicationDosesPreservingIds,
   insertMedicationEventsPreservingIds,
   insertMedicationsPreservingIds,
-  listAllDayCheckIns,
-  listAllMealComponents,
-  listAllMedicationDoses,
-  listAllMedicationEvents,
-  listAllMedications,
   listLogEntries,
 } from '@/db/repository';
+import {
+  backUpToFolderNow,
+  chooseBackupFolder,
+  exportBackupViaShare,
+  turnOffAutoBackup,
+} from '@/features/backup/backupService';
 import { disableDayCheckIn, refreshDayCheckIn } from '@/features/checkin/dayCheckInService';
 import {
   DEFAULT_REMINDERS,
@@ -33,8 +34,9 @@ import {
 } from '@/features/notifications/model';
 import { disableReminder, enableReminder, ensureNotificationPermission, getReminders } from '@/features/notifications/service';
 import { usePrefsStore } from '@/features/prefs/prefsStore';
-import { dosesForRestoredEvents, entriesToJson, parseBackupJson } from '@/lib/backup';
 import { useTheme } from '@/hooks/use-theme';
+import { lastBackupLabel } from '@/lib/autoBackup';
+import { dosesForRestoredEvents, parseBackupJson } from '@/lib/backup';
 import { buildReportHtml, REPORT_RANGES, type ReportRangeDays } from '@/lib/report';
 
 const REPORT_RANGE_LABELS: Record<ReportRangeDays, string> = {
@@ -52,11 +54,19 @@ export default function SettingsScreen() {
   const dayCheckInHour = usePrefsStore((s) => s.dayCheckInHour);
   const dayCheckInMinute = usePrefsStore((s) => s.dayCheckInMinute);
   const setDayCheckIn = usePrefsStore((s) => s.setDayCheckIn);
+  const lastBackupAt = usePrefsStore((s) => s.lastBackupAt);
+  const autoBackupDirUri = usePrefsStore((s) => s.autoBackupDirUri);
+  const autoBackupDirName = usePrefsStore((s) => s.autoBackupDirName);
+  const autoBackupError = usePrefsStore((s) => s.autoBackupError);
   const [reminders, setReminders] = useState<RemindersState>(DEFAULT_REMINDERS);
   const [loading, setLoading] = useState(true);
   const [dataWorking, setDataWorking] = useState(false);
+  const [backupWorking, setBackupWorking] = useState(false);
   const [reportRange, setReportRange] = useState<ReportRangeDays>(30);
   const [reportWorking, setReportWorking] = useState(false);
+  // Read once on mount, not Date.now() in render — the "last backup" line
+  // only needs to be roughly current (GitHub #14).
+  const [now] = useState(() => Date.now());
 
   useEffect(() => {
     let active = true;
@@ -123,25 +133,51 @@ export default function SettingsScreen() {
   async function handleExport() {
     setDataWorking(true);
     try {
-      const entries = await listLogEntries();
-      const mealComponents = await listAllMealComponents();
-      const medications = await listAllMedications();
-      const medicationEvents = await listAllMedicationEvents();
-      const medicationDoses = await listAllMedicationDoses();
-      const dayCheckIns = await listAllDayCheckIns();
-      const json = entriesToJson(entries, mealComponents, medications, medicationEvents, medicationDoses, dayCheckIns);
-      const file = new File(Paths.cache, 'tummytracker-backup.json');
-      file.write(json);
-      const canShare = await Sharing.isAvailableAsync();
-      if (!canShare) {
+      const shared = await exportBackupViaShare();
+      if (!shared) {
         Alert.alert('Sharing not available', 'Cannot share files on this device.');
-        return;
       }
-      await Sharing.shareAsync(file.uri, { mimeType: 'application/json', dialogTitle: 'Save backup' });
     } catch (e) {
       Alert.alert('Export failed', e instanceof Error ? e.message : String(e));
     } finally {
       setDataWorking(false);
+    }
+  }
+
+  async function handleChooseBackupFolder() {
+    setBackupWorking(true);
+    try {
+      const result = await chooseBackupFolder();
+      if (result === 'chosen') {
+        const name = usePrefsStore.getState().autoBackupDirName;
+        Alert.alert(`Backup saved to ${name}.`);
+      }
+      // 'cancelled': no-op. 'failed': the folder is kept and autoBackupError
+      // now holds the friendly message, shown below (HANDOFF.md §4).
+    } finally {
+      setBackupWorking(false);
+    }
+  }
+
+  async function handleBackUpNow() {
+    setBackupWorking(true);
+    try {
+      const result = await backUpToFolderNow();
+      if (result.ok) {
+        const name = usePrefsStore.getState().autoBackupDirName;
+        Alert.alert(`Backup saved to ${name}.`);
+      }
+    } finally {
+      setBackupWorking(false);
+    }
+  }
+
+  async function handleTurnOffAutoBackup() {
+    setBackupWorking(true);
+    try {
+      await turnOffAutoBackup();
+    } finally {
+      setBackupWorking(false);
     }
   }
 
@@ -254,6 +290,9 @@ export default function SettingsScreen() {
         <ThemedText type="small" themeColor="textSecondary">
           Your journal lives only on this device. Export a backup before switching phones.
         </ThemedText>
+        <ThemedText type="small" themeColor="textSecondary" accessibilityLabel={lastBackupLabel(lastBackupAt, now)}>
+          {lastBackupLabel(lastBackupAt, now)}
+        </ThemedText>
         <View style={styles.dataRow}>
           <Pressable
             accessibilityRole="button"
@@ -272,6 +311,76 @@ export default function SettingsScreen() {
             <ThemedText type="smallBold">Import data</ThemedText>
           </Pressable>
         </View>
+
+        {Platform.OS === 'android' && (
+          <View style={styles.row}>
+            <ThemedText type="smallBold">Automatic backup</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              Once a day, when you open the app, a backup is saved to a folder you choose. The
+              newest 7 are kept. Pick a folder outside the app (like Documents or a cloud drive
+              folder) so it survives reinstalling.
+            </ThemedText>
+            {autoBackupDirUri == null ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Choose backup folder"
+                disabled={backupWorking}
+                onPress={handleChooseBackupFolder}
+                style={[
+                  styles.dataButton,
+                  { backgroundColor: theme.backgroundElement, borderColor: theme.border, opacity: backupWorking ? 0.5 : 1 },
+                ]}>
+                <ThemedText type="smallBold">Choose backup folder</ThemedText>
+              </Pressable>
+            ) : (
+              <View style={styles.row}>
+                <ThemedText type="small" themeColor="textSecondary">
+                  Saving to: {autoBackupDirName}
+                </ThemedText>
+                <View style={styles.backupActionsRow}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Back up to folder now"
+                    disabled={backupWorking}
+                    onPress={handleBackUpNow}
+                    style={[
+                      styles.backupActionButton,
+                      { backgroundColor: theme.backgroundElement, borderColor: theme.border, opacity: backupWorking ? 0.5 : 1 },
+                    ]}>
+                    <ThemedText type="smallBold">Back up now</ThemedText>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Change folder"
+                    disabled={backupWorking}
+                    onPress={handleChooseBackupFolder}
+                    style={[
+                      styles.backupActionButton,
+                      { backgroundColor: theme.backgroundElement, borderColor: theme.border, opacity: backupWorking ? 0.5 : 1 },
+                    ]}>
+                    <ThemedText type="smallBold">Change folder</ThemedText>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Turn off automatic backup"
+                    disabled={backupWorking}
+                    onPress={handleTurnOffAutoBackup}
+                    style={[
+                      styles.backupActionButton,
+                      { backgroundColor: theme.backgroundElement, borderColor: theme.border, opacity: backupWorking ? 0.5 : 1 },
+                    ]}>
+                    <ThemedText type="smallBold">Turn off</ThemedText>
+                  </Pressable>
+                </View>
+              </View>
+            )}
+            {autoBackupError != null && (
+              <ThemedText type="small" themeColor="danger">
+                {autoBackupError}
+              </ThemedText>
+            )}
+          </View>
+        )}
 
         <View style={styles.divider} />
 
@@ -432,6 +541,17 @@ const styles = StyleSheet.create({
   dataRow: {
     flexDirection: 'row',
     gap: Spacing.three,
+  },
+  backupActionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.two,
+  },
+  backupActionButton: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: Spacing.two,
+    paddingVertical: Spacing.two,
+    paddingHorizontal: Spacing.three,
   },
   dataButton: {
     flex: 1,

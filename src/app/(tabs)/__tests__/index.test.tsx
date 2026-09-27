@@ -2,7 +2,7 @@ import { createElement as mockCreateElement, useEffect as mockUseEffect } from '
 import { Alert, AppState } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 
-import { getMealComponents, listRecentFoodEntries } from '@/db/repository';
+import { getMealComponents, hasAnyLogEntry, listRecentFoodEntries } from '@/db/repository';
 import type { LogEntry, MealComponent } from '@/db/schema';
 import { useMealBuilderStore } from '@/features/logging/mealBuilderStore';
 import type { MealComponentDraft } from '@/lib/mealAggregate';
@@ -37,6 +37,14 @@ jest.mock('@/features/logging/RecentFoodPicker', () => {
 jest.mock('@/db/repository', () => ({
   listRecentFoodEntries: jest.fn(),
   getMealComponents: jest.fn(),
+  hasAnyLogEntry: jest.fn(),
+}));
+
+// The backup nudge (GitHub #14) is exercised by its own tests
+// (features/backup/__tests__/BackupNudge.test.tsx) — mocked here so this
+// screen test isn't coupled to its prefs-store/backup-service internals.
+jest.mock('@/features/backup/BackupNudge', () => ({
+  BackupNudge: () => null,
 }));
 
 // The day check-in card and its notification-response hook are exercised by
@@ -120,6 +128,7 @@ beforeEach(() => {
     return { remove: jest.fn() } as unknown as ReturnType<typeof AppState.addEventListener>;
   });
   (getMealComponents as jest.Mock).mockResolvedValue([]);
+  (hasAnyLogEntry as jest.Mock).mockResolvedValue(false);
   useMealBuilderStore.setState({ components: [], reviewPrefill: null });
 });
 
@@ -136,6 +145,13 @@ describe('HomeScreen', () => {
     const { getByTestId } = await render(<HomeScreen />);
     expect(mockUseDayCheckInResponses).toHaveBeenCalled();
     expect(getByTestId('day-check-in-card').props.children).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('fetches hasAnyLogEntry on focus (drives the backup nudge, GitHub #14)', async () => {
+    (listRecentFoodEntries as jest.Mock).mockResolvedValue([]);
+    (hasAnyLogEntry as jest.Mock).mockResolvedValue(true);
+    await render(<HomeScreen />);
+    await waitFor(() => expect(hasAnyLogEntry).toHaveBeenCalled());
   });
 
   it('moves the check-in card to the new day when the app returns to the foreground', async () => {

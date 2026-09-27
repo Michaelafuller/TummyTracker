@@ -8,7 +8,8 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import type { LogEntry } from '@/db/schema';
-import { getMealComponents, listRecentFoodEntries } from '@/db/repository';
+import { getMealComponents, hasAnyLogEntry, listRecentFoodEntries } from '@/db/repository';
+import { BackupNudge } from '@/features/backup/BackupNudge';
 import { DayCheckInCard } from '@/features/checkin/DayCheckInCard';
 import { useDayCheckInResponses } from '@/features/checkin/useDayCheckInResponses';
 import { useMealBuilderStore } from '@/features/logging/mealBuilderStore';
@@ -24,6 +25,8 @@ export default function HomeScreen() {
   const clearBuilder = useMealBuilderStore((s) => s.clear);
   const [recents, setRecents] = useState<LogEntry[]>([]);
   const [today, setToday] = useState(() => formatDateInput(Date.now()));
+  const [now, setNow] = useState(() => Date.now());
+  const [hasData, setHasData] = useState(false);
   const recentTapInFlight = useRef(false);
 
   // Mounted here (not the root): Home is the initial tab, so it's mounted
@@ -36,15 +39,23 @@ export default function HomeScreen() {
       listRecentFoodEntries(50).then(setRecents).catch(() => setRecents([]));
       // Recomputed on every focus (returning from another tab or screen)…
       setToday(formatDateInput(Date.now()));
+      setNow(Date.now());
+      // Drives the backup nudge (GitHub #14) — never nudge before there's
+      // anything worth backing up.
+      hasAnyLogEntry().then(setHasData).catch(() => setHasData(false));
     }, []),
   );
 
   // …and on every return to the foreground: focus doesn't fire when the app
   // resumes, so an app left on Home overnight would otherwise show — and
-  // record a tap for — yesterday (GitHub #13).
+  // record a tap for — yesterday (GitHub #13). `now` rides along so the
+  // backup nudge's "N days ago" label and staleness check stay current too.
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') setToday(formatDateInput(Date.now()));
+      if (state === 'active') {
+        setToday(formatDateInput(Date.now()));
+        setNow(Date.now());
+      }
     });
     return () => subscription.remove();
   }, []);
@@ -156,6 +167,8 @@ export default function HomeScreen() {
               </Link>
             </ThemedView>
           </ThemedView>
+
+          <BackupNudge hasData={hasData} now={now} />
 
           <DayCheckInCard date={today} />
 
