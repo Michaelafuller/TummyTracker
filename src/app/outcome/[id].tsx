@@ -13,6 +13,7 @@ import { computeInsights } from '@/features/analysis/insights';
 import {
   hoursBeforeLabel,
   lookback,
+  untimedBeforeLabel,
   LOOKBACK_HOURS,
   type LookbackHours,
   type LookbackItem,
@@ -65,21 +66,27 @@ function FoodGroup({ item }: { item: Extract<LookbackItem, { kind: 'food' }> }) 
       ? 'No pattern yet'
       : `${SUSPICION_LABEL[item.suspicion]}, linked to rough outcomes: ${item.matches.map((m) => m.label).join(', ')}`;
 
+  // Not collapsed into one accessible node: that would hide the nested
+  // EntryRow (the tap target that opens the meal) from screen readers and
+  // Maestro. The composite summary lives on the suspicion line instead.
   return (
-    <View
-      style={styles.group}
-      accessible
-      accessibilityLabel={`${item.entry.name}, ${timeLabel}, ${suspicionText}`}>
-      <ThemedText type="small" themeColor="textSecondary" importantForAccessibility="no">
+    <View style={styles.group}>
+      <ThemedText type="small" themeColor="textSecondary">
         {timeLabel}
       </ThemedText>
       <EntryRow entry={item.entry} />
       {item.suspicion == null ? (
-        <ThemedText type="small" themeColor="textSecondary" importantForAccessibility="no">
+        <ThemedText
+          type="small"
+          themeColor="textSecondary"
+          accessibilityLabel={`${item.entry.name}, ${timeLabel}, ${suspicionText}`}>
           No pattern yet
         </ThemedText>
       ) : (
-        <View style={styles.suspicionRow}>
+        <View
+          style={styles.suspicionRow}
+          accessible
+          accessibilityLabel={`${item.entry.name}, ${timeLabel}, ${suspicionText}`}>
           <SuspicionChip confidence={item.suspicion} />
           <ThemedText type="small" themeColor="textSecondary" style={styles.matchedLabels}>
             {`Linked to rough outcomes: ${item.matches.map((m) => m.label).join(', ')}`}
@@ -90,11 +97,19 @@ function FoodGroup({ item }: { item: Extract<LookbackItem, { kind: 'food' }> }) 
   );
 }
 
-function MedicationGroup({ item }: { item: Extract<LookbackItem, { kind: 'medication' }> }) {
+function MedicationGroup({
+  item,
+  outcomeAt,
+}: {
+  item: Extract<LookbackItem, { kind: 'medication' }>;
+  outcomeAt: number;
+}) {
   return (
     <View style={styles.group}>
       <ThemedText type="small" themeColor="textSecondary">
-        {item.hoursBefore == null ? 'Same day, time not set' : hoursBeforeLabel(item.hoursBefore)}
+        {item.hoursBefore == null
+          ? untimedBeforeLabel(outcomeAt, item.item.loggedAt)
+          : hoursBeforeLabel(item.hoursBefore)}
       </ThemedText>
       <MedicationEventRow item={item.item} />
     </View>
@@ -182,7 +197,7 @@ export default function OutcomeScreen() {
               item.kind === 'food' ? (
                 <FoodGroup key={item.entry.id} item={item} />
               ) : (
-                <MedicationGroup key={item.item.id} item={item} />
+                <MedicationGroup key={item.item.id} item={item} outcomeAt={entry.loggedAt} />
               ),
             )}
           </View>

@@ -135,6 +135,24 @@ export function lookback(
   return [...foodItems, ...medItems].sort((a, b) => itemTime(b) - itemTime(a));
 }
 
+/**
+ * Label for a medication logged without a time (stored at local noon of its
+ * day): counts LOCAL CALENDAR days back from the outcome — "Same day, time
+ * not set" | "Day before, time not set" | "2 days before, time not set".
+ * A noon-stamped dose from yesterday is not "same day" just because it's
+ * < 24 h before a morning outcome.
+ */
+export function untimedBeforeLabel(outcomeAt: number, takenAt: number): string {
+  const dayIndex = (ms: number) => {
+    const d = new Date(ms);
+    return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / (24 * HOUR_MS);
+  };
+  const days = dayIndex(outcomeAt) - dayIndex(takenAt);
+  if (days <= 0) return 'Same day, time not set';
+  if (days === 1) return 'Day before, time not set';
+  return `${days} days before, time not set`;
+}
+
 /** "Just before" (< 1 h) | "3 h before" | "1 day 2 h before" (≥ 24 h). */
 export function hoursBeforeLabel(hoursBefore: number): string {
   if (hoursBefore < 1) return 'Just before';

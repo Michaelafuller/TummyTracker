@@ -198,11 +198,15 @@ describe('OutcomeScreen — timeline', () => {
     (getLogEntry as jest.Mock).mockResolvedValue(thisOutcome);
     setEntries([...lactoseMeals, ...controlMeals, ...earlierOutcomes, unmatched]);
 
-    const { findByText } = await render(<OutcomeScreen />);
+    const { findByText, getByLabelText, getByTestId } = await render(<OutcomeScreen />);
 
     expect(await findByText('Low')).toBeTruthy();
     expect(await findByText('Linked to rough outcomes: lactose')).toBeTruthy();
     expect(await findByText('No pattern yet')).toBeTruthy();
+    // Screen-reader summary sits on the suspicion line, and the meal row itself
+    // stays its own tap target (not swallowed by a collapsed group).
+    expect(getByLabelText(/^Plain Rice, .*, No pattern yet$/)).toBeTruthy();
+    expect(getByTestId('entry-row-plain-rice')).toBeTruthy();
   });
 
   it('renders a medication row with no suspicion', async () => {

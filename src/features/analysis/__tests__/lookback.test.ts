@@ -1,7 +1,7 @@
 import type { LogEntry } from '@/db/schema';
 import type { OutcomeFinding } from '@/features/analysis/temporal';
 import type { MedicationJournalItem } from '@/lib/journal';
-import { hoursBeforeLabel, lookback } from '../lookback';
+import { hoursBeforeLabel, lookback, untimedBeforeLabel } from '../lookback';
 
 let seq = 0;
 function makeEntry(overrides: Partial<LogEntry>): LogEntry {
@@ -244,5 +244,25 @@ describe('hoursBeforeLabel', () => {
 
   it('shows days + hours at or beyond 24 h', () => {
     expect(hoursBeforeLabel(26)).toBe('1 day 2 h before');
+  });
+});
+
+describe('untimedBeforeLabel', () => {
+  it('counts local calendar days, not a 24 h span', () => {
+    const morningOutcome = new Date(2026, 8, 27, 9, 0).getTime();
+    const yesterdayNoon = new Date(2026, 8, 26, 12, 0).getTime(); // only 21 h earlier
+    expect(untimedBeforeLabel(morningOutcome, yesterdayNoon)).toBe('Day before, time not set');
+  });
+
+  it('says same day for a noon dose before an afternoon outcome', () => {
+    expect(
+      untimedBeforeLabel(new Date(2026, 8, 27, 15, 0).getTime(), new Date(2026, 8, 27, 12, 0).getTime()),
+    ).toBe('Same day, time not set');
+  });
+
+  it('counts several days back', () => {
+    expect(
+      untimedBeforeLabel(new Date(2026, 8, 27, 15, 0).getTime(), new Date(2026, 8, 25, 12, 0).getTime()),
+    ).toBe('2 days before, time not set');
   });
 });
