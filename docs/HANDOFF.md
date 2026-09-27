@@ -1,244 +1,187 @@
-# HANDOFF.md — Execute session: Automatic backups + "last backup" nudge, GitHub #14
+# HANDOFF.md — Execute session: Work backwards from a bad day, GitHub #15
 
-> **Read first:** this file only. `CLAUDE.md` is auto-loaded (§0 has the
-> `expo-file-system` SDK 56 API note; §4 rungs, §8 conventions, §9
-> guardrails). This cycle touches `src/lib/prefs.ts`,
-> `src/features/prefs/prefsStore.ts`, new `src/lib/autoBackup.ts`, new
-> `src/features/backup/*`, `src/db/repository.ts` (one read helper),
-> `src/components/app-providers.tsx`, `src/app/(tabs)/index.tsx`,
-> `src/app/settings.tsx`, and tests.
+> **Read first:** this file only. `CLAUDE.md` is auto-loaded (§4 rungs, §8
+> conventions, §9 guardrails). This cycle adds new
+> `src/features/analysis/lookback.ts`, a new screen
+> `src/app/outcome/[id].tsx`, a small entry point in
+> `src/app/entry/[id].tsx`, one `Stack.Screen` in `src/app/_layout.tsx`, and
+> tests.
 >
-> **Pure JS/TS** — no new dependency, **no schema change**, no new device
-> permission (Android's folder picker grants access per folder; no manifest
-> permission), no network call, no native change, no EAS build. Everything
-> used (`Directory.pickDirectoryAsync`, `Directory.createFile`, `list`,
-> `File.write`, `File.delete`) is in the installed `expo-file-system` 56.0.8,
-> which predates the current dev client (package unchanged since 2026-06-28).
+> **Pure JS/TS, read-only feature** — no new dependency, no schema change, no
+> new permission, no writes, no native change, no EAS build.
 
 **Planned 2026-09-27 (Opus plan session) — GitHub
-Michaelafuller/TummyTracker#14.** Done-when (from the issue): "backups run on
-a schedule to a location I choose, or Home/Settings shows 'last backup: N days
-ago' with a one-tap backup." This cycle does **both**, within what's possible
-without a background task runner (`expo-task-manager` is not approved):
-
-- **Automatic backup (Android):** the user picks a folder once in Settings.
-  After that, **once per local day, when the app opens or comes back to the
-  foreground**, a fresh backup file is written there. The newest **7**
-  automatic backups are kept; older *automatic* ones are deleted. A folder the
-  user picks (e.g. Documents, or a cloud-drive folder they choose) **survives
-  an uninstall** — the whole point, since a signing-mismatch reinstall wipes
-  the app's own storage (CLAUDE.md §0).
-- **Nudge:** Home shows "Last backup: 34 days ago" (or "Never backed up") with
-  a **Back up now** button when the last backup is **more than 7 days old**
-  and the journal isn't empty. Settings always shows the last-backup line.
-- **iOS:** automatic-folder UI is **Android-only** this cycle (no iOS device
-  to verify persisted folder access). iOS gets the nudge + the existing
-  share-sheet export.
+Michaelafuller/TummyTracker#15.** Done-when (from the issue): "a rough outcome
+opens a timeline of preceding meals and medications, each with its existing
+suspicion level." It's the reverse of the Insights finding drill-down
+(`src/app/insight/detail.tsx`, `features/analysis/drilldown.ts`) and reuses
+the engine's existing findings — it computes nothing new about causation.
 
 ---
 
 ## 0. Invariants — read twice
 
-- **Never touch a file we didn't write.** Pruning deletes only files whose
-  name matches our exact automatic-backup pattern (§2) in the chosen folder.
-  Manual exports, other apps' files and anything renamed are left alone.
-- **Never overwrite — always create a new file.** Some Android storage
-  providers don't truncate on rewrite (a shorter file leaves old bytes at the
-  end = a corrupt backup). Each backup is `createFile` with a unique
-  timestamped name; old ones are pruned *after* the new one is written.
-- **A failed backup never deletes anything and never blocks the app.** The
-  automatic run is fire-and-forget; on failure it records an error string for
-  Settings to show, prunes nothing, and does **not** update
-  `lastBackupAt`/`lastAutoBackupAt`. No Alert pops up at app open.
-- **At most one backup in flight.** App-open and resume can both fire; the
-  service keeps a module-level in-flight promise and a second call while one
-  runs returns that same promise (don't queue a second backup). The previous
-  cycle's review found exactly this class of race.
-- **The backup content is the existing format** — `entriesToJson(...)` v4 with
-  every table (entries, meal components, medications, events, doses, day
-  check-ins). Extract the gathering code from `settings.tsx`; don't fork it.
-- **Prefs file is the source of truth** for backup state. The service reads
-  with `loadPrefs()`, writes with `savePrefs({ ...fresh, ...patch })`, then
-  mirrors into the store with `usePrefsStore.setState(patch)` — it must not
-  depend on the store having finished `load()` (app-open runs early).
+- **The engine does not change.** No edits to `temporal.ts`, `insights.ts`,
+  `drilldown.ts`, `isOutcome`, or any finding's thresholds. "Suspicion" is
+  read off `computeInsights(entries)`'s existing findings, nothing else.
+- **No finding ≠ safe.** A food with no matching finding shows **"No pattern
+  yet"** — never "safe", "fine" or a green/positive treatment.
+- **Medications are shown, never scored.** They appear in the timeline (the
+  issue asks for "eaten *and taken*"), but the engine doesn't analyse them
+  (CLAUDE.md / Cycle B invariant: medication correlation is future work), so
+  they carry no suspicion and the screen says so once.
+- **Only rough outcomes get the entry point** — `isOutcome(entry)` on the
+  *saved* entry, the same rule as everywhere else.
+- **Window rule matches the engine's join:** an item counts when
+  `outcome.loggedAt - windowMs <= item time < outcome.loggedAt` (inclusive
+  at the far edge, strictly before the outcome — an item at the exact same
+  instant is excluded, like `mealsFollowedByOutcome`).
+- Observations, not advice: keep the Insights disclaimer tone.
 - Stage files by path — never `git add -A` / `git add .`.
 
-## 1. Prefs
-
-`src/lib/prefs.ts` `AppPrefs` + defaults (and the store's initial state):
+## 1. Pure logic — `src/features/analysis/lookback.ts` (main test target)
 
 ```ts
-/** SAF tree URI of the user's automatic-backup folder (Android), or null = off. */
-autoBackupDirUri: string | null;        // default null
-/** Folder display name for Settings ("Documents"), captured when picked. */
-autoBackupDirName: string | null;       // default null
-/** Epoch ms of the last successful backup of ANY kind (folder write or share-sheet export). */
-lastBackupAt: number | null;            // default null
-/** Epoch ms of the last successful AUTOMATIC folder backup — drives "once per day". */
-lastAutoBackupAt: number | null;        // default null
-/** Last automatic/folder backup failure message, cleared on the next success. */
-autoBackupError: string | null;         // default null
+import type { ConfidenceTier } from '@/lib/stats';
+
+export const LOOKBACK_HOURS = [24, 48, 72] as const;
+export type LookbackHours = (typeof LOOKBACK_HOURS)[number];
+
+export interface SuspicionMatch {
+  kind: 'food' | 'ingredient' | 'combination';
+  label: string;              // finding.label — "Wheat Bread", "gluten", "milk + wheat"
+  confidence: ConfidenceTier;
+}
+
+export type LookbackItem =
+  | { kind: 'food'; entry: LogEntry; hoursBefore: number;
+      /** Strongest match's tier, or null = "No pattern yet". */
+      suspicion: ConfidenceTier | null;
+      /** Every matching finding, strongest first (high > medium > low, then foods, ingredients, combinations). */
+      matches: SuspicionMatch[] }
+  | { kind: 'medication'; item: MedicationJournalItem; hoursBefore: number | null /* null when time not set */ };
+
+export function lookback(
+  outcome: LogEntry,
+  entries: readonly LogEntry[],
+  medicationItems: readonly MedicationJournalItem[],
+  findings: Pick<Insights, 'foodFindings' | 'ingredientFindings' | 'pairFindings'>,
+  hours: LookbackHours,
+): LookbackItem[]
+
+/** "Just before" (< 1 h) | "3 h before" | "1 day 2 h before" (≥ 24 h). */
+export function hoursBeforeLabel(hoursBefore: number): string
 ```
 
-A share-sheet export counts as a backup once `Sharing.shareAsync` resolves
-without throwing (we can't see what the user did in the sheet; it's the same
-signal the Export button gives today).
+- **Food items:** entries of `FOOD_TYPES` inside the window (§0 rule).
+  Matching, mirroring `drilldown.ts`'s grouping exactly:
+  - food finding when `finding.key === entry.name.trim().toLowerCase()`;
+  - ingredient finding when `finding.key` is in `parseTagsJson(entry.tagsJson)`;
+  - combination finding when **both** tags of its `"a + b"` key are in the
+    entry's tags (split on `' + '`; the key is built from sorted tags in
+    `analyzePairOutcomes`, so don't depend on order).
+- **Medication items:** from `medicationEventsToJournalItems(...)`
+  (`src/lib/journal.ts` — export a `MedicationJournalItem` type alias for the
+  `kind: 'medication'` variant if one doesn't exist). Inside the window by
+  `loggedAt`. `timeKnown: false` items (stored at local noon) are included
+  when noon is in the window, with `hoursBefore: null`.
+- Other BMs/symptoms in the window are **not** listed (keep it to what was
+  eaten and taken).
+- Order: **closest to the outcome first** (smallest `hoursBefore`; untimed
+  meds sort by their noon `loggedAt` like the rest). `hoursBefore` = whole
+  hours, floored.
+- `MedicationJournalItem` is exported from `journal.ts` if not already.
 
-## 2. Pure logic — `src/lib/autoBackup.ts` (main test target)
+## 2. Screen — `src/app/outcome/[id].tsx`
 
-```ts
-export const AUTO_BACKUP_KEEP = 7;
-export const BACKUP_STALE_DAYS = 7;
+- `Stack.Screen` in `_layout.tsx`: `name="outcome/[id]"`, title
+  **"What came before"**.
+- Data: `getLogEntry(id)` on focus (like `entry/[id].tsx`), `useAllEntries()`,
+  `useMedicationEvents()` / `useMedicationDoses()` / `useMedications()` →
+  `medicationEventsToJournalItems`, `computeInsights(entries)`. If the entry is
+  missing or isn't an outcome (`!isOutcome(entry)`): "Nothing to show"
+  (mirror `insight/detail.tsx`'s invalid state).
+- Layout, top to bottom:
+  1. The outcome itself via `EntryRow` (reuse — it's already a link to
+     `/entry/[id]`), then one `textSecondary` line: the long date.
+  2. `SegmentedControl` of `LOOKBACK_HOURS` labelled "24 h" / "48 h" / "72 h",
+     default **24 h** (the engine's own window). State is local.
+  3. The timeline: for each item a row group —
+     - food: a `textSecondary` line `hoursBeforeLabel(...)`, then `EntryRow`
+       (reuse — tap opens the meal), then a suspicion line: the strongest
+       tier as a chip reusing Insights' confidence colours ("High
+       suspicion" / "Medium" / "Low"), followed by the matched labels
+       ("Linked to rough outcomes: gluten, Wheat Bread") — or, with no
+       match, `textSecondary` **"No pattern yet"**. Give the group
+       `accessibilityLabel` `"<name>, <hoursBefore label>, <suspicion text>"`.
+     - medication: the `hoursBeforeLabel` line (or "Same day, time not set"),
+       then `MedicationEventRow` (reuse — tap opens the dose entry).
+  4. Empty state: "Nothing logged in the 24 h before this." (use the selected
+     window) + "Try a longer window." when not already at 72 h.
+  5. Footer (`textSecondary`): "Suspicion comes from your Insights patterns
+     (a rough outcome within 24 h of eating). Medications aren't part of the
+     pattern analysis yet. Observations, not medical advice."
+- Extract the Insights `ConfidenceChip` colour logic only if it's trivial to
+  share (a tiny exported helper in `insights.tsx` or a component under
+  `src/components/`); otherwise duplicate the three colour choices — don't
+  refactor Insights for this.
 
-/** 'tummytracker-auto-2026-09-27-213005.json' — local time, seconds included,
- *  so names sort chronologically and two backups never collide. */
-export function autoBackupFileName(now: number): string
-/** Exact-pattern match: /^tummytracker-auto-\d{4}-\d{2}-\d{2}-\d{6}\.json$/ */
-export function isAutoBackupFileName(name: string): boolean
-/** Names to delete: only matching names, newest `keep` retained (sort by name desc). */
-export function autoBackupsToPrune(names: readonly string[], keep = AUTO_BACKUP_KEEP): string[]
-/** True when never auto-backed-up, or the last one was on an earlier LOCAL day. */
-export function isAutoBackupDue(lastAutoBackupAt: number | null, now: number): boolean
-/** 'Never backed up' | 'Last backup: today' | 'Last backup: yesterday' | 'Last backup: 34 days ago'
- *  — whole local calendar days between the two dates (DST-safe, via local midnights). */
-export function lastBackupLabel(lastBackupAt: number | null, now: number): string
-/** Nudge rule: hasData && (never, or more than BACKUP_STALE_DAYS local days ago). */
-export function shouldNudgeBackup(lastBackupAt: number | null, now: number, hasData: boolean): boolean
-```
+## 3. Entry point — `src/app/entry/[id].tsx`
 
-"Days ago" = difference in local calendar days (midnight to midnight via
-`dayBounds`/`Date` mutation, not `ms / 86_400_000`), so 23:50 → 00:10 is
-"yesterday". Stale = strictly more than 7 days (day 8 nudges, day 7 doesn't).
+- When the loaded entry is a BM or symptom **and** `isOutcome(entry)`: above
+  the form, a compact `Pressable` banner — `smallBold` "Rough outcome" + link
+  text **"See what came before"** (`accessibilityRole="button"`,
+  `accessibilityLabel="See what came before"`,
+  `testID="see-what-came-before"`) → `router.push('/outcome/<id>')`.
+- Not shown for food entries, for non-rough BMs/symptoms, or before load.
+- It sits beside the existing watched-ingredient banner logic (that one only
+  applies to food) — don't disturb it.
 
-## 3. Service — `src/features/backup/backupService.ts`
+## 4. Tests (same change, CLAUDE.md §4)
 
-```ts
-export async function buildBackupJson(): Promise<string>        // gathers every table → entriesToJson
-export async function exportBackupViaShare(): Promise<boolean>  // today's Export flow; true = shared; records lastBackupAt
-export async function chooseBackupFolder(): Promise<'chosen' | 'cancelled' | 'failed'>
-export async function backUpToFolderNow(): Promise<{ ok: true } | { ok: false; error: string }>
-export async function runAutoBackupIfDue(): Promise<void>       // fire-and-forget; never throws
-export async function turnOffAutoBackup(): Promise<void>
-```
+- `src/features/analysis/__tests__/lookback.test.ts` — window edges (exactly
+  24 h before = in; same instant = out; after = out; 24 h + 1 ms = out at 24,
+  in at 48); food/ingredient/combination matching (case-insensitive food
+  name; exact tag; pair needs both tags, order-free); strongest-first match
+  order; no match → `suspicion: null`; medication items in/out of window;
+  untimed med → `hoursBefore: null`; BMs/symptoms excluded; ordering;
+  `hoursBeforeLabel` (0.5 h, 3 h, 26 h).
+- Screen test `src/app/outcome/__tests__/[id].test.tsx` (mock repository +
+  hooks like `insight/detail`'s test): outcome renders; default 24 h hides a
+  30-h-earlier meal and 48 h shows it; a matched meal shows its tier +
+  labels, an unmatched one "No pattern yet"; a medication row renders with no
+  suspicion; non-outcome entry → "Nothing to show"; empty-window copy.
+- `entry/[id]` test: banner shown for a rough BM and a severity-3 symptom;
+  hidden for a food entry, a Bristol-4 BM with feel 4, and a severity-2
+  symptom; tap pushes `/outcome/<id>`.
+- `journal.test.ts` stays green (if you add the type alias).
 
-- **`chooseBackupFolder`** — `Directory.pickDirectoryAsync()` (cancel → the
-  promise rejects or returns nothing; treat both as `'cancelled'` — check the
-  real behavior in `node_modules/expo-file-system/build/Directory.js` and
-  handle it explicitly). Store `uri` + `name`, then immediately run
-  `backUpToFolderNow()` to prove write access; `'failed'` if that fails (keep
-  the folder so the error shows in Settings).
-- **`backUpToFolderNow`** (shared by auto, "Back up now" and choose-folder) —
-  single-flight (§0). `new Directory(prefs.autoBackupDirUri)` →
-  `createFile(autoBackupFileName(now), 'application/json')` →
-  `file.write(await buildBackupJson())` → on success patch
-  `{ lastBackupAt: now, lastAutoBackupAt: now, autoBackupError: null }`, then
-  prune: `dir.list()`, keep `File` entries, `autoBackupsToPrune(names)` →
-  `delete()` each (a prune failure is swallowed — the backup already
-  succeeded). On any failure before success: patch
-  `{ autoBackupError: <friendly message> }` — "Couldn't write to the backup
-  folder. Choose it again in Settings." (keep the raw error out of the UI).
-- **`runAutoBackupIfDue`** — no-op unless Android, a folder is set,
-  `isAutoBackupDue(lastAutoBackupAt, now)`, and the journal has at least one
-  log entry (`hasAnyLogEntry()`, below — don't write empty backups). Catches
-  everything.
-- **`turnOffAutoBackup`** — patch `{ autoBackupDirUri: null,
-  autoBackupDirName: null, autoBackupError: null }`. Existing files stay.
-- `src/db/repository.ts`: `hasAnyLogEntry(): Promise<boolean>` (`limit(1)`).
-- Triggers: `MigrationGate`'s success effect → `void runAutoBackupIfDue()`;
-  and an `AppState` `'change'` → `'active'` listener registered in
-  `AppProviders` (after migrations succeed — put it in `MigrationGate`, with
-  cleanup) → `void runAutoBackupIfDue()`.
+## 5. Definition of done
 
-## 4. Screens
-
-- **Settings → Data section** (`settings.tsx`):
-  - Under the section's intro text: the `lastBackupLabel(...)` line
-    (`accessibilityLabel` = the same text; read `lastBackupAt` from the store
-    and `now` from state set on mount — no `Date.now()` in render).
-  - Export keeps its button; its handler becomes `exportBackupViaShare()`
-    (same Alerts as today on failure / sharing unavailable).
-  - **Android only** (`Platform.OS === 'android'`), below Export/Import, an
-    "Automatic backup" block:
-    - Copy: "Once a day, when you open the app, a backup is saved to a folder
-      you choose. The newest 7 are kept. Pick a folder outside the app (like
-      Documents or a cloud drive folder) so it survives reinstalling."
-    - No folder: button **"Choose backup folder"**.
-    - Folder set: "Saving to: <name>", buttons **"Back up now"**
-      (`accessibilityLabel="Back up to folder now"`), **"Change folder"**,
-      **"Turn off"** (`accessibilityLabel="Turn off automatic backup"`).
-    - `autoBackupError` non-null → show it (theme error/danger color if the
-      palette has one, else `textSecondary`).
-    - Success of choose/back-up-now → a short Alert ("Backup saved to
-      <name>."). Busy state disables the buttons (reuse `dataWorking`).
-- **Home nudge** — new `src/features/backup/BackupNudge.tsx`, rendered in
-  `(tabs)/index.tsx` **above** the day check-in card:
-  - Props `{ hasData: boolean; now: number }`. Home fetches `hasAnyLogEntry()`
-    in its existing `useFocusEffect` and keeps `now` in state, refreshed in
-    the same places `today` is (focus + the AppState listener added last
-    cycle).
-  - Renders nothing unless the prefs store is `loaded` **and**
-    `shouldNudgeBackup(...)` — so it never flashes on launch.
-  - One compact row: the label ("Never backed up" / "Last backup: 34 days
-    ago") + a button **"Back up now"** (`accessibilityLabel="Back up now"`).
-    Tap → Android with a folder set: `backUpToFolderNow()` (Alert on failure
-    with the friendly message); otherwise `exportBackupViaShare()`.
-  - Don't reuse any existing Home label ("Log a symptom", "Scan a barcode",
-    "Add an entry manually", "Mark today as …").
-
-## 5. Tests (same change, CLAUDE.md §4)
-
-- `src/lib/__tests__/autoBackup.test.ts` — file name format + zero padding;
-  pattern rejects near-misses (`… (1).json`, manual `tummytracker-backup.json`,
-  other prefixes); prune keeps newest 7, ignores non-matching names, returns
-  [] under 8; due: null / same local day / previous day / across midnight;
-  labels: never / today / yesterday / N days (use a DST-crossing pair); nudge:
-  no data → false, day 7 false, day 8 true, never + data → true.
-- `src/features/backup/__tests__/backupService.test.ts` (mock
-  `expo-file-system` `Directory`/`File`, `expo-sharing`, repository, prefs,
-  `react-native` `Platform`) — writes a new file with the generated name and
-  the v4 JSON; prunes only matching old names beyond 7; failure records the
-  error, prunes nothing, leaves `lastBackupAt`; two overlapping calls write
-  once; not due / no folder / no data / iOS → no write; share export records
-  `lastBackupAt` only when `shareAsync` resolves; choose-folder cancel.
-- `BackupNudge` test — hidden when not loaded / not stale / no data; shows the
-  label; tap routes to folder backup vs share export.
-- Update, don't weaken: `settings.test.tsx` (export path still works via the
-  service; Android block states; error line; iOS hides the block),
-  `index.test.tsx` (mock the nudge; `hasAnyLogEntry` fetched on focus),
-  `prefs`/`prefsStore` tests for the new fields, `backup.test.ts` unchanged
-  and green.
-
-## 6. Definition of done
-
-- `npm run typecheck` && `npm run lint` clean; `npm run bundle:check` clean.
+- `npm run typecheck` && `npm run lint` clean; `npm run bundle:check` clean
+  (new route).
 - **Targeted Jest only (owner instruction — never the full suite):** every
-  test file you created or touched + `backup`, `prefs`, `prefsStore`,
-  `settings`, `index`, `dayCheckInService`. `(tabs)` paths via
-  `npx jest --runTestsByPath "<path>"` (plain path args silently skip them).
+  test file you created or touched + `drilldown`, `insights` (analysis),
+  `journal`, `insight/detail`, `entry/[id]`, and the Insights screen test.
+  `(tabs)` paths via `npx jest --runTestsByPath "<path>"`; bracketed paths
+  like `[id]` also need `--runTestsByPath` with the path quoted.
 - No `@ts-ignore`, no lint disables, no `any` without `// reason:`, no new
-  deps, no schema change, no new permission (if you think you need one, stop
-  and report).
+  deps, no schema change.
 - Do NOT run Maestro, EAS, or `npx expo start` (Metro runs on 8081 — leave
   it). Do NOT edit `flows/`, `CLAUDE.md` or `docs/`.
+- Keep LF line endings if you write files with a script.
 - Commits (stage by path), suggested split:
-  `feat(backup): pure auto-backup naming, pruning and staleness rules` ·
-  `refactor(backup): move backup gathering + share export into a service` ·
-  `feat(backup): automatic daily backup to a user-chosen folder (Android)` ·
-  `feat(backup): last-backup line in Settings and a Home nudge` —
+  `feat(analysis): lookback from a rough outcome with existing suspicion` ·
+  `feat(insights): "What came before" timeline for a rough outcome` —
   each ending `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`.
   Do NOT push.
 - Execute summary: files per commit, hashes, rung + bundle:check results,
-  targeted Jest counts, how `pickDirectoryAsync` reports a cancel (what you
-  found in the source), deviations with reasons, review/device-test pointers.
+  targeted Jest counts, deviations with reasons, review/device-test pointers.
 
-## 7. After this (review + test session)
+## 6. After this (review + test session)
 
-- Opus review: §0 invariants (prune pattern, new-file-only, single-flight,
-  failure path), prefs race, Android gating; re-run rungs + bundle:check.
-- Update `CLAUDE.md` (§0 note), `docs/PROGRESS.md`, session handoff.
-- Maestro (Opus writes it): seed one entry → Home shows "Never backed up" +
-  "Back up now"; Settings shows the line + "Choose backup folder". The system
-  folder picker, the daily run, pruning and survival across reinstall are a
-  **manual** device check: choose a folder (e.g. Documents/TummyTracker),
-  confirm a file appears, relaunch same day → no second file; change the
-  device date forward a day → a new file; 8+ files → oldest auto one pruned.
+- Opus review: §0 invariants (engine untouched, "No pattern yet" wording,
+  meds unscored, window edges), matching parity with `drilldown.ts`.
+- Maestro (Opus writes it): seed meals + a rough symptom → open the symptom →
+  "See what came before" → meals listed with suspicion / "No pattern yet" →
+  72 h widens the list → tapping a meal opens it.
