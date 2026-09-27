@@ -77,6 +77,13 @@ Completed work is collapsed to a single line; its detail lives in git.
 
 ## 📌 Pinned — next up (ranked)
 
+Ranked 2026-09-26 (Opus product review, owner-requested). Items 1–7 are the
+near term; 8–19 below continue the same ranking. Why this order: re-baseline
+first; then fix what makes every insight untrustworthy (missing "fine day"
+data) and what risks losing the journal (no automatic backup); then cheap,
+high-value views and polish; then the big "act on it" epic and deeper
+analysis.
+
 1. **Full regression: all 34 Maestro flows + full `npm test`** — S–M, a test
    session. 2026-09-26 touched cross-cutting code (navigation, the meal
    builder's `dismissTo`, the keyboard wrappers, backup) and verified it only
@@ -85,24 +92,57 @@ Completed work is collapsed to a single line; its detail lives in git.
    native module is installed — on Android `hideKeyboard` is a Back press and
    can exit the app from a tab root (`docs/E2E.md` finding); prefer
    tap-outside / per-key input.
-2. **iOS check for GitHub #2** — S, owner (no iOS device/Mac here): Done on a
-   number pad, tap-outside on Home, drag-to-dismiss on a form.
-3. **Medication entry form is scroll-heavy** — S. Every ticked medication shows
-   all 10 unit chips, though the unit is almost always its default: show the
-   unit as text with a "Change unit" affordance.
-4. **Stale auto-generated meal name** — S (owner-approved). Review sets the
-   name once, so re-using "Rice + 1 more" and removing Beans saves a 1-item
-   meal still named "Rice + 1 more". While the name still equals the
-   auto-default, recompute it (`defaultMealName`) as items change; never
-   overwrite a user-typed name. Update `q-reuse-adjust` to assert it.
-5. **"Add item" needs the camera screen** — S. From meal review, "Enter
-   manually" only appears once camera permission is granted; offer a manual
-   path directly.
-6. **Small cleanups** (bundle into any cycle): retire `entry/new` +
-   `prefillStore` (no callers — owner decision) · shared Jest mock for
-   `Collapsible` (reanimated worklets can't init under Jest) · app / adaptive /
-   splash icon SVG sources are missing (`generate-icons.mjs` skips them) ·
-   `DateTimePicker onChange` deprecation.
+2. **Daily "fine day / rough day" check-in** — S–M. Today a day with no
+   symptom logged is indistinguishable from a day the user didn't open the
+   app, so every "no rough outcome" in the engine's baseline is an
+   assumption. A one-tap daily confirmation (inside the existing daily
+   notification) makes the baseline real and gives an honest count of
+   covered days. Same principle as medications: missing data is never a
+   confirmed negative. Needs a small additive migration (owner, §9).
+3. **Automatic backups + staleness nudge** — S–M. The whole journal lives on
+   one phone; backup is manual, and a signing-mismatch reinstall wipes it
+   (CLAUDE.md §0). Scheduled automatic backup to a user-chosen location, or at
+   minimum a "last backup: 34 days ago" nudge on Home/Settings.
+4. **Work backwards from a bad day** — S. Tap a rough BM or symptom → see
+   everything eaten *and taken* in the preceding 24–72 h, with the engine's
+   existing suspicion for each. The reverse of today's food → outcomes
+   drill-down; reuses existing data and helpers.
+5. **Quick-win polish** — S each, bundle into one cycle:
+   - *Medication entry "Change unit":* every ticked med shows all 10 unit
+     chips though the unit is almost always its default — show it as text
+     with a "Change unit" affordance.
+   - *Stale auto-generated meal name* (owner-approved): while the name still
+     equals the auto-default, recompute it (`defaultMealName`) as items
+     change; never overwrite a user-typed name. Update `q-reuse-adjust`.
+   - *"Add item" without the camera:* from meal review, "Enter manually" only
+     appears after camera permission is granted — offer a manual path.
+   - *Cleanups:* retire `entry/new` + `prefillStore` (owner decision) ·
+     shared Jest mock for `Collapsible` · missing app / adaptive / splash icon
+     SVG sources · `DateTimePicker onChange` deprecation.
+6. **Doctor PDF report: add medications** — S. The report covers food and
+   outcomes; a clinician will want medication use and adherence alongside.
+7. **Database-level tests for `repository.ts`** — S–M. The repository is only
+   exercised through mocks; both 2026-09-26 restore bugs (SQLite bound-
+   variable cap, stale doses after an edit) were caught by review alone. An
+   in-memory SQLite harness would catch that class automatically. Check
+   whether a new dev dependency is needed (⚠ if so).
+
+## Ranked backlog — continued (2026-09-26 product review)
+
+| # | Item | Why it matters | Effort | Notes |
+|:-:|------|----------------|:--:|------|
+| 8 | **Elimination experiment mode** | The north star's "act on it": pick a suspect → guided avoid-then-reintroduce period → before/during/after outcome comparison with a confidence verdict. Turns correlation into a near-controlled test. | L | Epic — plan first. Reuses watchlist (save-time warnings), outcome engine, reminders. Depends on #2 for a real baseline. |
+| 9 | **Medications in the correlation engine** | NSAIDs, antibiotics and PPIs strongly affect digestion; today a bad antibiotic week is blamed on food. Treat meds as confounders and candidate exposures. | M–L | Plan first. The #11 helpers already make the data analysis-ready; the engine deliberately doesn't read it yet. |
+| 10 | **Reaction latency + multiple windows** | Every outcome counts "within 24 h", but reactions range from hours (lactose) to 1–3 days (some FODMAP/gluten). Show when outcomes tend to follow each trigger; compare windows. | M | Also makes findings more explainable. |
+| 11 | **Dose-response** | Servings are stored, but the engine appears to treat an ingredient as present/absent — "a splash of milk is fine, a latte isn't" is exactly what the app should find. | S spike → M | First confirm in `temporal.ts` whether servings are ignored (not verified in review). |
+| 12 | **Confounder tracking** | Sleep, stress, menstrual cycle, alcohol and caffeine drive gut symptoms and currently land on food. Even one daily "stress 1–5" helps. | M | Could fold into #2's daily check-in. Additive migration. |
+| 13 | **"By chance" indicator on findings** | Many ingredients × few logs = some spurious correlations. Show how many findings like this you'd expect by chance. | S–M | Complements the existing confidence tiers. |
+| 14 | **Saved recipes / "my meals" with ingredients** | Homemade and restaurant food has a name but no ingredients, blinding the ingredient engine where it matters most. | M | Re-used like Recent meals. |
+| 15 | **Faster logging** | Favourites ("usual breakfast"), log straight from the reminder notification (subsumes the reminder deep-link), one-tap "took my regular meds". Adherence and data quality die when logging is tedious. | M | |
+| 16 | **Optional app lock** | Sensitive health data (BMs, symptoms, medications) with no lock. | S–M | ⚠ likely `expo-local-authentication` — owner approval + CVE check. |
+| 17 | **Medication adherence view + as-needed reason** | "Taken 26 of 30 days" calendar; a reason field for as-needed doses ("ibuprofen — headache"). | S–M | Builds on Cycle B history. |
+| 18 | **Medication reminders** | Owner-requested enhancement: local notifications from a structured schedule (times/days) via the approved `expo-notifications`. | M | A reminder must never become a dose record (#10/#11). Needs a structured schedule, not today's free-text frequency. |
+| 19 | **iOS pass** | Every device check so far is Android. Includes the #2 keyboard checks (Done on a number pad, tap-outside on Home, drag-to-dismiss), the iOS icon, time-picker feel. | M | Owner — no iOS device/Mac in this environment. |
 
 ## Tier 0 — Foundations · ✅ complete
 Saturated fat, backup/export-import, native date/time picker, serving-size scaling,
@@ -112,8 +152,8 @@ recent quick-add — all shipped.
 Ingredient/allergen capture, outcome-based correlation (ingredients, foods, pairs,
 nutrients, timing), symptom logging, ingredient-capture hardening + tag backfill,
 trigger watchlist with badges and term editing, **medication tracking** — all
-shipped. Next frontier: correlate medication use with outcomes (the #11 helpers
-make the data ready; the engine deliberately doesn't read it yet) — L, plan first.
+shipped. Next frontier: see ranked #8–#13 (experiments, medications in the
+engine, latency, dose-response, confounders).
 
 ## Tier 2 — The payoff · core ✅ shipped
 Trend charts, confidence labels, pair analysis, Goals tally + thresholds + check-in,
@@ -127,13 +167,10 @@ editing, doctor PDF report — all shipped. Remaining follow-ons:
 | **Pair-finding drill-down** | Single findings drill down; pairs don't | S |
 
 ## Tier 3 — Quality of life
-- **Medication reminders** (owner-requested, 2026-09-26) — M. Local scheduled
-  notifications from a medication's schedule via the approved
-  `expo-notifications`. Needs a structured schedule (times/days), not today's
-  free-text frequency. A reminder must never become a dose record — only an
-  explicit entry is "taken" (#10/#11).
-- Remaining: photo attachment ⚠ · save-confirmation toasts · onboarding +
-  better empty states · reminder **deep-link** into the add-entry form ·
+- Medication reminders → ranked #18; reminder deep-link → ranked #15.
+- Remaining: photo attachment ⚠ (only worth it with ingredient extraction —
+  a network call, owner §9) · save-confirmation toasts · onboarding + better
+  empty states ·
   settings (force theme, first-day-of-week — hardcoded Sunday, default meal
   slot by time of day) · watchlist badges on Home recents.
 - ✅ shipped (collapsed): OFF search-by-name → Search-a-licious migration,
@@ -141,8 +178,7 @@ editing, doctor PDF report — all shipped. Remaining follow-ons:
   use before any USDA layer (Decision 6).
 
 ## Tier 4 — Platform / infra
-- **iOS pass** (BUILD_PLAN "iOS crossover") — icon, picker and light-mode
-  blockers addressed; now also the #2 keyboard checks. M.
+- iOS pass → ranked #19. Repository test harness → pinned #7.
 - `bundle:check` in a pre-push hook · `FlashList` virtualization once entry
   volume grows · more screen-level RNTL coverage.
 - ✅ shipped (collapsed): build-variant split (`com.tummytracker.app.dev`),
