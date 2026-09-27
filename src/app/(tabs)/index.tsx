@@ -1,6 +1,6 @@
 import { useFocusEffect, Link, useRouter } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, AppState, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { KeyboardShiftView } from '@/components/keyboard-aware-screen';
@@ -34,11 +34,20 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       listRecentFoodEntries(50).then(setRecents).catch(() => setRecents([]));
-      // Recomputed on every focus (not just mount) so a day rollover while
-      // the app sits in the background refreshes the card's date on return.
+      // Recomputed on every focus (returning from another tab or screen)…
       setToday(formatDateInput(Date.now()));
     }, []),
   );
+
+  // …and on every return to the foreground: focus doesn't fire when the app
+  // resumes, so an app left on Home overnight would otherwise show — and
+  // record a tap for — yesterday (GitHub #13).
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') setToday(formatDateInput(Date.now()));
+    });
+    return () => subscription.remove();
+  }, []);
 
   const handleRecentTap = useCallback(
     async (entry: LogEntry) => {

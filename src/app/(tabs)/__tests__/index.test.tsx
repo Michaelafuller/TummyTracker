@@ -1,6 +1,6 @@
 import { createElement as mockCreateElement, useEffect as mockUseEffect } from 'react';
-import { Alert } from 'react-native';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { Alert, AppState } from 'react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 
 import { getMealComponents, listRecentFoodEntries } from '@/db/repository';
 import type { LogEntry, MealComponent } from '@/db/schema';
@@ -108,8 +108,17 @@ function draft(name: string, overrides: Partial<MealComponentDraft> = {}): MealC
   };
 }
 
+// Captured AppState 'change' listeners. The preset's AppState stub returns no
+// subscription, which the screen's cleanup needs — hand back a removable one.
+let appStateListeners: ((state: string) => void)[] = [];
+
 beforeEach(() => {
   jest.clearAllMocks();
+  appStateListeners = [];
+  jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, listener) => {
+    appStateListeners.push(listener as (state: string) => void);
+    return { remove: jest.fn() } as unknown as ReturnType<typeof AppState.addEventListener>;
+  });
   (getMealComponents as jest.Mock).mockResolvedValue([]);
   useMealBuilderStore.setState({ components: [], reviewPrefill: null });
 });
@@ -127,6 +136,21 @@ describe('HomeScreen', () => {
     const { getByTestId } = await render(<HomeScreen />);
     expect(mockUseDayCheckInResponses).toHaveBeenCalled();
     expect(getByTestId('day-check-in-card').props.children).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('moves the check-in card to the new day when the app returns to the foreground', async () => {
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(new Date(2026, 8, 27, 23, 50).getTime());
+    const { getByTestId } = await render(<HomeScreen />);
+    expect(getByTestId('day-check-in-card').props.children).toBe('2026-09-27');
+
+    // Left open on Home overnight: no focus event, just a foreground resume.
+    nowSpy.mockReturnValue(new Date(2026, 8, 28, 7, 30).getTime());
+    await act(async () => {
+      appStateListeners.forEach((listener) => listener('active'));
+    });
+
+    expect(getByTestId('day-check-in-card').props.children).toBe('2026-09-28');
+    nowSpy.mockRestore();
   });
 
   it('renders the recents section and its search input inside the keyboard-shift wrapper', async () => {
