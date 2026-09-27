@@ -42,6 +42,9 @@ export async function disableDayCheckIn(): Promise<void> {
   await cancelDayCheckIn();
 }
 
+/** Tail of the serialized refresh chain — see {@link refreshDayCheckIn}. */
+let refreshQueue: Promise<void> = Promise.resolve();
+
 /**
  * The single (re)scheduling entry point for the day check-in, mirroring
  * `checkInService.refreshCheckIn`'s one-shot-horizon shape: cancel every
@@ -56,8 +59,20 @@ export async function disableDayCheckIn(): Promise<void> {
  *
  * Does not itself request notification permission — that's the Settings
  * switch's job, mirroring `enableReminder`/`refreshCheckIn`.
+ *
+ * Serialized: cancel-then-schedule isn't atomic, so two overlapping refreshes
+ * (app-open's re-arm racing a notification-action answer on a cold start, or
+ * two quick Fine→Rough taps) would both cancel, then both schedule — a
+ * doubled horizon that fires every prompt twice. Each call waits for the
+ * previous one to finish; a failed run doesn't block the next.
  */
-export async function refreshDayCheckIn(hour: number, minute: number): Promise<void> {
+export function refreshDayCheckIn(hour: number, minute: number): Promise<void> {
+  const run = refreshQueue.then(() => rescheduleDayCheckIn(hour, minute));
+  refreshQueue = run.catch(() => undefined);
+  return run;
+}
+
+async function rescheduleDayCheckIn(hour: number, minute: number): Promise<void> {
   await cancelDayCheckIn();
 
   const today = formatDateInput(Date.now());

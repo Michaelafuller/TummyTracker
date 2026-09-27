@@ -125,6 +125,41 @@ describe('refreshDayCheckIn', () => {
   });
 });
 
+describe('refreshDayCheckIn serialization', () => {
+  it('runs overlapping refreshes one after another, so the second cancel sees the first horizon', async () => {
+    // Stateful fake of the OS schedule: without serialization both refreshes
+    // would cancel an empty list, then both schedule — a doubled horizon.
+    let pending: { identifier: string; content: { data: Record<string, unknown> } }[] = [];
+    let nextId = 0;
+    (Notifications.getAllScheduledNotificationsAsync as jest.Mock).mockImplementation(async () => [...pending]);
+    (Notifications.cancelScheduledNotificationAsync as jest.Mock).mockImplementation(async (id: string) => {
+      pending = pending.filter((n) => n.identifier !== id);
+    });
+    (Notifications.scheduleNotificationAsync as jest.Mock).mockImplementation(
+      async (req: { content: { data: Record<string, unknown> } }) => {
+        const identifier = `n${nextId++}`;
+        pending.push({ identifier, content: req.content });
+        return identifier;
+      },
+    );
+    jest.spyOn(Date, 'now').mockReturnValue(new Date(2026, 5, 15, 10, 0, 0, 0).getTime());
+
+    await Promise.all([refreshDayCheckIn(21, 0), refreshDayCheckIn(21, 0)]);
+
+    expect(pending).toHaveLength(7);
+  });
+
+  it('keeps going after a failed refresh', async () => {
+    (Notifications.getAllScheduledNotificationsAsync as jest.Mock).mockRejectedValueOnce(new Error('boom'));
+    jest.spyOn(Date, 'now').mockReturnValue(new Date(2026, 5, 15, 10, 0, 0, 0).getTime());
+
+    await expect(refreshDayCheckIn(21, 0)).rejects.toThrow('boom');
+    await refreshDayCheckIn(21, 0);
+
+    expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledTimes(7);
+  });
+});
+
 describe('refreshDayCheckInIfEnabled', () => {
   it('schedules nothing when disabled', async () => {
     (loadPrefs as jest.Mock).mockResolvedValue({ dayCheckInEnabled: false, dayCheckInHour: 21, dayCheckInMinute: 0 });
