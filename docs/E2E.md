@@ -238,8 +238,9 @@ occurred:**
 2. Typing into a text field and then immediately `tapOn`-ing a same-screen
    button (e.g. "Add to watchlist") without a `hideKeyboard` in between can
    silently no-op the tap — the button ends up covered/mis-hit while the
-   keyboard is still up. **Always `hideKeyboard` before tapping a button that
-   follows text entry.** Watch for the matching false-positive: an
+   keyboard is still up. **Always dismiss the keyboard before tapping a button
+   that follows text entry — with `runFlow: _helpers/dismiss-keyboard.yaml`,
+   never `hideKeyboard` (see the 2026-09-27 update below).** Watch for the matching false-positive: an
    `assertVisible` on the term you just typed can still pass because the text
    is sitting unsent in the input box — assert on something that only exists
    once the action actually succeeded (e.g. the resulting list item's own
@@ -261,6 +262,19 @@ occurred:**
    in the flows until the owner's next EAS build ships the native module, at
    which point a fresh test-execute session should re-check whether they're
    still needed.
+
+   **Update 2026-09-27 — `hideKeyboard` retired from the suite.** The
+   2026-08-29 build ships the native module, and on Android `hideKeyboard` is
+   a Back press: when the keyboard is already closed it navigates instead
+   (pops a pushed screen; exits the app from a tab root). All 86 uses now call
+   `_helpers/dismiss-keyboard.yaml`, which taps the keyboard toolbar's Done
+   (`keyboard.toolbar.done`) only while it's visible — a no-op when no keyboard
+   is up. **Home has no toolbar** (hidden there on purpose), so on Home dismiss
+   with a tap in empty space (`tapOn: point: "50%,22%"`). Knock-on: Done and
+   Back leave a keyboard-aware form at different scroll positions, so a
+   `scrollUntilVisible` on a field's *label* can now stop with the input still
+   below the fold (gotcha #1 again) — add `centerElement: true` (done for the
+   Calories scrolls in `j-component-drilldown` / `q-reuse-adjust`).
 3. A second row in a short list can sit just below the fold on a Pixel 5
    viewport even when the section header above it is already on-screen —
    `assertVisible` does not scroll, so a below-fold row silently "fails to be

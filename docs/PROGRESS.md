@@ -35,12 +35,10 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   natives all present. Metro on 8081; the reconnect helper also switches off
   the dev-client tools bubble on fresh installs (it covers the Settings gear —
   `docs/E2E.md` finding).
-- **Test baseline:** the last **full** Maestro regression is **29/29 on
-  2026-08-29** (the new build). The 2026-09-26 session ran **targeted** flows
-  and **targeted** Jest only (owner preference): suite is now **34 flows**,
-  with `h`, `j`, `nav-tabs` and the five Settings flows reworked and `p`, `q`,
-  `r`, `s` new. Full `npm test` last ran 2026-08-29 (74 suites / 648 tests).
-  → **A full regression + full Jest run is owed** — pinned #1.
+- **Test baseline: 34/34 full Maestro regression + full Jest (95 suites /
+  887 tests) on 2026-09-27** (GitHub #12, `docs/RESULTS.md`) — the new
+  standing baseline, covering the whole 2026-09-26 session. The suite no
+  longer uses `hideKeyboard` (86 calls → `_helpers/dismiss-keyboard.yaml`).
 - **Owed device checks:** iOS pass (the #2 keyboard items below + carried: iOS
   app icon, time-picker Done feel), light-mode walkthrough, camera scan loop,
   and the manual items in `docs/E2E.md`. **Owner sequencing from the
@@ -85,14 +83,9 @@ data) and what risks losing the journal (no automatic backup); then cheap,
 high-value views and polish; then the big "act on it" epic and deeper
 analysis.
 
-1. **Full regression: all 34 Maestro flows + full `npm test`** (GH #12) — S–M, a test
-   session. 2026-09-26 touched cross-cutting code (navigation, the meal
-   builder's `dismissTo`, the keyboard wrappers, backup) and verified it only
-   with targeted runs. Re-baseline before building more on top. Same session:
-   audit the suite's ~45 `hideKeyboard` workarounds now that the keyboard
-   native module is installed — on Android `hideKeyboard` is a Back press and
-   can exit the app from a tab root (`docs/E2E.md` finding); prefer
-   tap-outside / per-key input.
+1. ~~**Full regression + full `npm test` + `hideKeyboard` audit** (GH #12)~~ —
+   **✅ done 2026-09-27**: 34/34 + 95/887, `hideKeyboard` retired from the
+   suite, 0 app regressions (`docs/RESULTS.md`).
 2. **Daily "fine day / rough day" check-in** (GH #13) — S–M. Today a day with no
    symptom logged is indistinguishable from a day the user didn't open the
    app, so every "no rough outcome" in the engine's baseline is an
