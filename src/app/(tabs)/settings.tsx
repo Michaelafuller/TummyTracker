@@ -13,7 +13,13 @@ import {
   createLogEntry,
   getLogEntry,
   insertMealComponents,
+  insertMedicationDosesPreservingIds,
+  insertMedicationEventsPreservingIds,
+  insertMedicationsPreservingIds,
   listAllMealComponents,
+  listAllMedicationDoses,
+  listAllMedicationEvents,
+  listAllMedications,
   listLogEntries,
 } from '@/db/repository';
 import {
@@ -87,7 +93,10 @@ export default function SettingsScreen() {
     try {
       const entries = await listLogEntries();
       const mealComponents = await listAllMealComponents();
-      const json = entriesToJson(entries, mealComponents);
+      const medications = await listAllMedications();
+      const medicationEvents = await listAllMedicationEvents();
+      const medicationDoses = await listAllMedicationDoses();
+      const json = entriesToJson(entries, mealComponents, medications, medicationEvents, medicationDoses);
       const file = new File(Paths.cache, 'tummytracker-backup.json');
       file.write(json);
       const canShare = await Sharing.isAvailableAsync();
@@ -132,7 +141,21 @@ export default function SettingsScreen() {
           imported++;
         }
       }
-      Alert.alert('Import complete', `Imported ${imported} ${imported === 1 ? 'entry' : 'entries'} (${skipped} already existed).`);
+
+      // Medications preserve their ids on import (unlike log entries above) —
+      // #11's dose records reference a stable medicationId (HANDOFF.md Cycle A).
+      const medResult = await insertMedicationsPreservingIds(parsed.medications);
+      await insertMedicationEventsPreservingIds(parsed.medicationEvents);
+      await insertMedicationDosesPreservingIds(parsed.medicationDoses);
+
+      const medSummary =
+        parsed.medications.length > 0
+          ? ` Imported ${medResult.inserted} ${medResult.inserted === 1 ? 'medication' : 'medications'} (${medResult.skipped} already existed).`
+          : '';
+      Alert.alert(
+        'Import complete',
+        `Imported ${imported} ${imported === 1 ? 'entry' : 'entries'} (${skipped} already existed).${medSummary}`,
+      );
     } catch (e) {
       Alert.alert('Import failed', e instanceof Error ? e.message : String(e));
     } finally {

@@ -1,4 +1,4 @@
-import type { LogEntry, MealComponent } from '@/db/schema';
+import type { LogEntry, MealComponent, Medication, MedicationDose, MedicationEvent } from '@/db/schema';
 import { entriesToJson, parseBackupJson } from '../backup';
 
 const BASE_ENTRY: LogEntry = {
@@ -50,6 +50,39 @@ const BASE_COMPONENT: MealComponent = {
   createdAt: 5,
 };
 
+const BASE_MEDICATION: Medication = {
+  id: 'med1',
+  name: 'Omeprazole',
+  defaultDose: 10,
+  doseUnit: 'mg',
+  frequency: 'once daily',
+  startDate: 1700000000000,
+  endDate: null,
+  isActive: true,
+  notes: 'with breakfast',
+  createdAt: 1,
+  updatedAt: 2,
+};
+
+const BASE_MEDICATION_EVENT: MedicationEvent = {
+  id: 'evt1',
+  takenAt: 1700000100000,
+  timeKnown: true,
+  notes: 'felt fine',
+  createdAt: 3,
+  updatedAt: 4,
+};
+
+const BASE_MEDICATION_DOSE: MedicationDose = {
+  id: 'dose1',
+  eventId: 'evt1',
+  medicationId: 'med1',
+  dose: 10,
+  doseUnit: 'mg',
+  createdAt: 5,
+  updatedAt: 6,
+};
+
 describe('entriesToJson / parseBackupJson roundtrip', () => {
   it('roundtrips a single entry intact', () => {
     const json = entriesToJson([BASE_ENTRY]);
@@ -59,6 +92,9 @@ describe('entriesToJson / parseBackupJson roundtrip', () => {
     expect(result.entries).toHaveLength(1);
     expect(result.entries[0]).toEqual(BASE_ENTRY);
     expect(result.mealComponents).toHaveLength(0);
+    expect(result.medications).toHaveLength(0);
+    expect(result.medicationEvents).toHaveLength(0);
+    expect(result.medicationDoses).toHaveLength(0);
   });
 
   it('roundtrips multiple entries', () => {
@@ -88,6 +124,24 @@ describe('entriesToJson / parseBackupJson roundtrip', () => {
     expect(result.mealComponents).toHaveLength(1);
     expect(result.mealComponents[0]).toEqual(BASE_COMPONENT);
   });
+
+  it('roundtrips entries with the medication inventory and history intact (v3)', () => {
+    const json = entriesToJson(
+      [BASE_ENTRY],
+      [BASE_COMPONENT],
+      [BASE_MEDICATION],
+      [BASE_MEDICATION_EVENT],
+      [BASE_MEDICATION_DOSE],
+    );
+    expect(JSON.parse(json).version).toBe(3);
+
+    const result = parseBackupJson(json);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.medications).toEqual([BASE_MEDICATION]);
+    expect(result.medicationEvents).toEqual([BASE_MEDICATION_EVENT]);
+    expect(result.medicationDoses).toEqual([BASE_MEDICATION_DOSE]);
+  });
 });
 
 describe('legacy v1 backup import (no mealComponents key)', () => {
@@ -98,6 +152,7 @@ describe('legacy v1 backup import (no mealComponents key)', () => {
     if (!result.ok) return;
     expect(result.entries).toHaveLength(1);
     expect(result.mealComponents).toEqual([]);
+    expect(result.medications).toEqual([]);
   });
 
   it('imports a bare entries array (pre-version format) with no components', () => {
@@ -105,6 +160,56 @@ describe('legacy v1 backup import (no mealComponents key)', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.mealComponents).toEqual([]);
+    expect(result.medications).toEqual([]);
+  });
+});
+
+describe('legacy v2 backup import (no medication keys)', () => {
+  it('imports a v2-shaped file with empty medication arrays', () => {
+    const legacy = { version: 2, entries: [BASE_ENTRY], mealComponents: [BASE_COMPONENT] };
+    const result = parseBackupJson(JSON.stringify(legacy));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.mealComponents).toEqual([BASE_COMPONENT]);
+    expect(result.medications).toEqual([]);
+    expect(result.medicationEvents).toEqual([]);
+    expect(result.medicationDoses).toEqual([]);
+  });
+});
+
+describe('medication validation', () => {
+  it('rejects a medication missing an id', () => {
+    const bad = { ...BASE_MEDICATION, id: '' };
+    const result = parseBackupJson(JSON.stringify({ version: 3, entries: [BASE_ENTRY], medications: [bad] }));
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects a medication event missing takenAt', () => {
+    const bad = { ...BASE_MEDICATION_EVENT, takenAt: undefined };
+    const result = parseBackupJson(
+      JSON.stringify({ version: 3, entries: [BASE_ENTRY], medicationEvents: [bad] }),
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects a medication dose missing medicationId', () => {
+    const bad = { ...BASE_MEDICATION_DOSE, medicationId: '' };
+    const result = parseBackupJson(
+      JSON.stringify({ version: 3, entries: [BASE_ENTRY], medicationDoses: [bad] }),
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it('defaults isActive to true and nullable fields to null when absent', () => {
+    const minimal = { id: 'm1', name: 'Vitamin D', createdAt: 1, updatedAt: 1 };
+    const result = parseBackupJson(
+      JSON.stringify({ version: 3, entries: [BASE_ENTRY], medications: [minimal] }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.medications[0].isActive).toBe(true);
+    expect(result.medications[0].defaultDose).toBeNull();
+    expect(result.medications[0].doseUnit).toBeNull();
   });
 });
 

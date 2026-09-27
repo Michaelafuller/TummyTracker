@@ -20,11 +20,17 @@ import {
   goal,
   logEntry,
   mealComponent,
+  medication,
+  medicationDose,
+  medicationEvent,
   watchlistItem,
   type Goal,
   type GoalDirection,
   type LogEntry,
   type MealComponent,
+  type Medication,
+  type MedicationDose,
+  type MedicationEvent,
   type NewLogEntry,
   type NewMealComponent,
   type WatchlistItem,
@@ -413,4 +419,76 @@ export async function upsertGoal(
 
 export async function removeGoal(nutrient: NutritionField): Promise<void> {
   await db.delete(goal).where(eq(goal.nutrient, nutrient));
+}
+
+/** All medication rows — used by the backup export (src/lib/backup.ts). */
+export async function listAllMedications(): Promise<Medication[]> {
+  return db.select().from(medication).orderBy(asc(medication.createdAt));
+}
+
+/** All medication_event rows — used by the backup export (Cycle B writes these). */
+export async function listAllMedicationEvents(): Promise<MedicationEvent[]> {
+  return db.select().from(medicationEvent).orderBy(asc(medicationEvent.createdAt));
+}
+
+/** All medication_dose rows — used by the backup export (Cycle B writes these). */
+export async function listAllMedicationDoses(): Promise<MedicationDose[]> {
+  return db.select().from(medicationDose).orderBy(asc(medicationDose.createdAt));
+}
+
+/**
+ * Inserts medication rows PRESERVING their ids (unlike log entries, which are
+ * re-minted on import) — #11's dose records reference a stable medicationId,
+ * so a restore must keep it. Rows whose id already exists are skipped rather
+ * than overwritten, matching the existing log-entry import's "already
+ * existed" semantics.
+ */
+export async function insertMedicationsPreservingIds(
+  rows: Medication[],
+): Promise<{ inserted: number; skipped: number }> {
+  if (rows.length === 0) return { inserted: 0, skipped: 0 };
+  const existing = await db
+    .select({ id: medication.id })
+    .from(medication)
+    .where(inArray(medication.id, rows.map((row) => row.id)));
+  const existingIds = new Set(existing.map((row) => row.id));
+  const toInsert = rows.filter((row) => !existingIds.has(row.id));
+  if (toInsert.length > 0) {
+    await db.insert(medication).values(toInsert);
+  }
+  return { inserted: toInsert.length, skipped: rows.length - toInsert.length };
+}
+
+/** Same id-preserving skip-if-exists behavior as {@link insertMedicationsPreservingIds}, for medication_event rows. */
+export async function insertMedicationEventsPreservingIds(
+  rows: MedicationEvent[],
+): Promise<{ inserted: number; skipped: number }> {
+  if (rows.length === 0) return { inserted: 0, skipped: 0 };
+  const existing = await db
+    .select({ id: medicationEvent.id })
+    .from(medicationEvent)
+    .where(inArray(medicationEvent.id, rows.map((row) => row.id)));
+  const existingIds = new Set(existing.map((row) => row.id));
+  const toInsert = rows.filter((row) => !existingIds.has(row.id));
+  if (toInsert.length > 0) {
+    await db.insert(medicationEvent).values(toInsert);
+  }
+  return { inserted: toInsert.length, skipped: rows.length - toInsert.length };
+}
+
+/** Same id-preserving skip-if-exists behavior as {@link insertMedicationsPreservingIds}, for medication_dose rows. */
+export async function insertMedicationDosesPreservingIds(
+  rows: MedicationDose[],
+): Promise<{ inserted: number; skipped: number }> {
+  if (rows.length === 0) return { inserted: 0, skipped: 0 };
+  const existing = await db
+    .select({ id: medicationDose.id })
+    .from(medicationDose)
+    .where(inArray(medicationDose.id, rows.map((row) => row.id)));
+  const existingIds = new Set(existing.map((row) => row.id));
+  const toInsert = rows.filter((row) => !existingIds.has(row.id));
+  if (toInsert.length > 0) {
+    await db.insert(medicationDose).values(toInsert);
+  }
+  return { inserted: toInsert.length, skipped: rows.length - toInsert.length };
 }

@@ -26,6 +26,12 @@ jest.mock('@/db/repository', () => ({
   createLogEntry: jest.fn(),
   getLogEntry: jest.fn(),
   insertMealComponents: jest.fn(),
+  listAllMedications: jest.fn(),
+  listAllMedicationEvents: jest.fn(),
+  listAllMedicationDoses: jest.fn(),
+  insertMedicationsPreservingIds: jest.fn(),
+  insertMedicationEventsPreservingIds: jest.fn(),
+  insertMedicationDosesPreservingIds: jest.fn(),
 }));
 
 jest.mock('@/features/notifications/service', () => ({

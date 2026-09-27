@@ -1,22 +1,49 @@
 // Pure serialization/parse helpers for the JSON backup format.
 // No filesystem or sharing imports here — kept pure so the logic can be unit-tested.
 
-import { LOG_ENTRY_TYPES, FOOD_TYPES, MEAL_SLOTS, type LogEntry, type MealComponent } from '@/db/schema';
+import {
+  LOG_ENTRY_TYPES,
+  FOOD_TYPES,
+  MEAL_SLOTS,
+  type LogEntry,
+  type MealComponent,
+  type Medication,
+  type MedicationDose,
+  type MedicationEvent,
+} from '@/db/schema';
 
 export interface BackupFile {
   version: number;
   entries: LogEntry[];
   /** Absent in v1 backups (pre meal-builder) and treated as [] on import. */
   mealComponents?: MealComponent[];
+  /** Absent before v3 (pre medications, HANDOFF.md Cycle A) and treated as [] on import. */
+  medications?: Medication[];
+  medicationEvents?: MedicationEvent[];
+  medicationDoses?: MedicationDose[];
 }
 
 /**
- * Serializes entries + their mealComponent rows (HANDOFF 2.4 backup v2). Version
- * bumps to 2 but `parseBackupJson` still reads v1 files (no mealComponents key)
- * by defaulting the array to empty — old backups remain importable.
+ * Serializes entries + their mealComponent rows plus the medication inventory
+ * and history (HANDOFF.md Cycle A backup v3). Version bumps to 3 but
+ * `parseBackupJson` still reads v1/v2 files (missing keys) by defaulting
+ * every new array to empty — old backups remain importable.
  */
-export function entriesToJson(entries: LogEntry[], mealComponents: MealComponent[] = []): string {
-  const payload: BackupFile = { version: 2, entries, mealComponents };
+export function entriesToJson(
+  entries: LogEntry[],
+  mealComponents: MealComponent[] = [],
+  medications: Medication[] = [],
+  medicationEvents: MedicationEvent[] = [],
+  medicationDoses: MedicationDose[] = [],
+): string {
+  const payload: BackupFile = {
+    version: 3,
+    entries,
+    mealComponents,
+    medications,
+    medicationEvents,
+    medicationDoses,
+  };
   return JSON.stringify(payload, null, 2);
 }
 
@@ -75,7 +102,14 @@ function normaliseEntry(v: Record<string, unknown>): LogEntry {
 }
 
 export type ParseResult =
-  | { ok: true; entries: LogEntry[]; mealComponents: MealComponent[] }
+  | {
+      ok: true;
+      entries: LogEntry[];
+      mealComponents: MealComponent[];
+      medications: Medication[];
+      medicationEvents: MedicationEvent[];
+      medicationDoses: MedicationDose[];
+    }
   | { ok: false; error: string };
 
 function isValidMealComponent(v: unknown): v is MealComponent {
@@ -113,10 +147,88 @@ function normaliseMealComponent(v: Record<string, unknown>): MealComponent {
   };
 }
 
+function isValidMedication(v: unknown): v is Medication {
+  if (!v || typeof v !== 'object') return false;
+  const r = v as Record<string, unknown>;
+  if (!isString(r.id) || r.id.length === 0) return false;
+  if (!isString(r.name)) return false;
+  if (typeof r.createdAt !== 'number') return false;
+  if (typeof r.updatedAt !== 'number') return false;
+  return true;
+}
+
+/** Normalises a medication from the backup so optional absent fields become null/defaults. */
+function normaliseMedication(v: Record<string, unknown>): Medication {
+  const nullable = <T>(key: string): T | null => (v[key] !== undefined ? v[key] : null) as T | null;
+  return {
+    id: v.id as string,
+    name: v.name as string,
+    defaultDose: nullable<number>('defaultDose'),
+    doseUnit: nullable<string>('doseUnit'),
+    frequency: nullable<string>('frequency'),
+    startDate: nullable<number>('startDate'),
+    endDate: nullable<number>('endDate'),
+    isActive: typeof v.isActive === 'boolean' ? v.isActive : true,
+    notes: nullable<string>('notes'),
+    createdAt: v.createdAt as number,
+    updatedAt: v.updatedAt as number,
+  };
+}
+
+function isValidMedicationEvent(v: unknown): v is MedicationEvent {
+  if (!v || typeof v !== 'object') return false;
+  const r = v as Record<string, unknown>;
+  if (!isString(r.id) || r.id.length === 0) return false;
+  if (typeof r.takenAt !== 'number') return false;
+  if (typeof r.createdAt !== 'number') return false;
+  if (typeof r.updatedAt !== 'number') return false;
+  return true;
+}
+
+/** Normalises a medicationEvent from the backup so optional absent fields become null/defaults. */
+function normaliseMedicationEvent(v: Record<string, unknown>): MedicationEvent {
+  const nullable = <T>(key: string): T | null => (v[key] !== undefined ? v[key] : null) as T | null;
+  return {
+    id: v.id as string,
+    takenAt: v.takenAt as number,
+    timeKnown: typeof v.timeKnown === 'boolean' ? v.timeKnown : true,
+    notes: nullable<string>('notes'),
+    createdAt: v.createdAt as number,
+    updatedAt: v.updatedAt as number,
+  };
+}
+
+function isValidMedicationDose(v: unknown): v is MedicationDose {
+  if (!v || typeof v !== 'object') return false;
+  const r = v as Record<string, unknown>;
+  if (!isString(r.id) || r.id.length === 0) return false;
+  if (!isString(r.eventId) || r.eventId.length === 0) return false;
+  if (!isString(r.medicationId) || r.medicationId.length === 0) return false;
+  if (typeof r.dose !== 'number') return false;
+  if (!isString(r.doseUnit)) return false;
+  if (typeof r.createdAt !== 'number') return false;
+  if (typeof r.updatedAt !== 'number') return false;
+  return true;
+}
+
+/** Normalises a medicationDose from the backup. Every field here is required (no nullable columns). */
+function normaliseMedicationDose(v: Record<string, unknown>): MedicationDose {
+  return {
+    id: v.id as string,
+    eventId: v.eventId as string,
+    medicationId: v.medicationId as string,
+    dose: v.dose as number,
+    doseUnit: v.doseUnit as string,
+    createdAt: v.createdAt as number,
+    updatedAt: v.updatedAt as number,
+  };
+}
+
 /**
  * Parses a backup file, accepting both the legacy v1 shape (no mealComponents
- * key — imports with an empty component list) and the v2 shape produced by
- * entriesToJson. Also accepts a bare entries array for maximum backward compat.
+ * key — imports with an empty component list) and the v2/v3 shapes produced
+ * by entriesToJson. Also accepts a bare entries array for maximum backward
+ * compat.
  */
 export function parseBackupJson(text: string): ParseResult {
   let parsed: unknown;
@@ -161,7 +273,39 @@ export function parseBackupJson(text: string): ParseResult {
     mealComponents.push(normaliseMealComponent(rawComponents[i] as Record<string, unknown>));
   }
 
-  return { ok: true, entries, mealComponents };
+  // Absent before v3 — default to [] so v1/v2 backups remain importable.
+  const rawMedications: unknown[] = Array.isArray(root.medications) ? (root.medications as unknown[]) : [];
+  const medications: Medication[] = [];
+  for (let i = 0; i < rawMedications.length; i++) {
+    if (!isValidMedication(rawMedications[i])) {
+      return { ok: false, error: `Medication at index ${i} has an invalid shape.` };
+    }
+    medications.push(normaliseMedication(rawMedications[i] as Record<string, unknown>));
+  }
+
+  const rawMedicationEvents: unknown[] = Array.isArray(root.medicationEvents)
+    ? (root.medicationEvents as unknown[])
+    : [];
+  const medicationEvents: MedicationEvent[] = [];
+  for (let i = 0; i < rawMedicationEvents.length; i++) {
+    if (!isValidMedicationEvent(rawMedicationEvents[i])) {
+      return { ok: false, error: `Medication event at index ${i} has an invalid shape.` };
+    }
+    medicationEvents.push(normaliseMedicationEvent(rawMedicationEvents[i] as Record<string, unknown>));
+  }
+
+  const rawMedicationDoses: unknown[] = Array.isArray(root.medicationDoses)
+    ? (root.medicationDoses as unknown[])
+    : [];
+  const medicationDoses: MedicationDose[] = [];
+  for (let i = 0; i < rawMedicationDoses.length; i++) {
+    if (!isValidMedicationDose(rawMedicationDoses[i])) {
+      return { ok: false, error: `Medication dose at index ${i} has an invalid shape.` };
+    }
+    medicationDoses.push(normaliseMedicationDose(rawMedicationDoses[i] as Record<string, unknown>));
+  }
+
+  return { ok: true, entries, mealComponents, medications, medicationEvents, medicationDoses };
 }
 
 // Re-export so callers only need one import.
