@@ -195,7 +195,7 @@ export default function SettingsScreen() {
       const dayCheckInResult = await insertDayCheckInsPreservingIds(parsed.dayCheckIns);
       const dayCheckInSummary =
         parsed.dayCheckIns.length > 0
-          ? ` Imported ${dayCheckInResult.inserted} day check-in(s) (${dayCheckInResult.skipped} already existed).`
+          ? ` Imported ${dayCheckInResult.inserted} ${dayCheckInResult.inserted === 1 ? 'day check-in' : 'day check-ins'} (${dayCheckInResult.skipped} already existed).`
           : '';
 
       Alert.alert(

@@ -190,7 +190,7 @@ describe('SettingsScreen — Data section (day check-ins, GitHub #13)', () => {
     await waitFor(() =>
       expect(Alert.alert).toHaveBeenCalledWith(
         'Import complete',
-        'Imported 0 entries (0 already existed). Imported 1 day check-in(s) (0 already existed).',
+        'Imported 0 entries (0 already existed). Imported 1 day check-in (0 already existed).',
       ),
     );
     expect(insertDayCheckInsPreservingIds).toHaveBeenCalledWith(backup.dayCheckIns);
