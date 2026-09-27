@@ -3,9 +3,10 @@ import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 import { SafeAreaProvider, type Metrics } from 'react-native-safe-area-context';
 
-import { listLogEntries } from '@/db/repository';
+import { insertDayCheckInsPreservingIds, listAllDayCheckIns, listLogEntries } from '@/db/repository';
+import { disableDayCheckIn, refreshDayCheckIn } from '@/features/checkin/dayCheckInService';
 import { DEFAULT_REMINDERS } from '@/features/notifications/model';
-import { getReminders } from '@/features/notifications/service';
+import { ensureNotificationPermission, getReminders } from '@/features/notifications/service';
 import { usePrefsStore } from '@/features/prefs/prefsStore';
 import SettingsScreen from '../settings';
 
@@ -20,6 +21,17 @@ jest.mock('expo-sharing', () => ({
   shareAsync: (...args: unknown[]) => mockShareAsync(...args),
 }));
 
+const mockPickFileAsync = jest.fn();
+jest.mock('expo-file-system', () => {
+  const actual = jest.requireActual('expo-file-system');
+  return {
+    ...actual,
+    File: class MockFile extends actual.File {
+      static pickFileAsync = (...args: unknown[]) => mockPickFileAsync(...args);
+    },
+  };
+});
+
 jest.mock('@/db/repository', () => ({
   listLogEntries: jest.fn(),
   listAllMealComponents: jest.fn(),
@@ -32,12 +44,20 @@ jest.mock('@/db/repository', () => ({
   insertMedicationsPreservingIds: jest.fn(),
   insertMedicationEventsPreservingIds: jest.fn().mockResolvedValue({ inserted: 0, skipped: 0, insertedIds: [] }),
   insertMedicationDosesPreservingIds: jest.fn(),
+  listAllDayCheckIns: jest.fn(),
+  insertDayCheckInsPreservingIds: jest.fn(),
 }));
 
 jest.mock('@/features/notifications/service', () => ({
   getReminders: jest.fn(),
   enableReminder: jest.fn(),
   disableReminder: jest.fn(),
+  ensureNotificationPermission: jest.fn(),
+}));
+
+jest.mock('@/features/checkin/dayCheckInService', () => ({
+  disableDayCheckIn: jest.fn(),
+  refreshDayCheckIn: jest.fn(),
 }));
 
 const TEST_INSETS: Metrics = {
@@ -58,10 +78,16 @@ beforeEach(() => {
     checkInHour: 20,
     checkInMinute: 0,
     checkInAdoptedV1: false,
+    dayCheckInEnabled: false,
+    dayCheckInHour: 21,
+    dayCheckInMinute: 0,
     loaded: false,
   });
   (getReminders as jest.Mock).mockResolvedValue(DEFAULT_REMINDERS);
   (listLogEntries as jest.Mock).mockResolvedValue([]);
+  (listAllDayCheckIns as jest.Mock).mockResolvedValue([]);
+  (insertDayCheckInsPreservingIds as jest.Mock).mockResolvedValue({ inserted: 0, skipped: 0 });
+  (ensureNotificationPermission as jest.Mock).mockResolvedValue(true);
 });
 
 describe('SettingsScreen — Doctor report section', () => {
@@ -121,5 +147,120 @@ describe('SettingsScreen — Doctor report section', () => {
     );
     expect(mockShareAsync).not.toHaveBeenCalled();
     (Alert.alert as jest.Mock).mockRestore();
+  });
+});
+
+describe('SettingsScreen — Data section (day check-ins, GitHub #13)', () => {
+  it('export includes the day check-ins in the shared backup JSON', async () => {
+    (listAllDayCheckIns as jest.Mock).mockResolvedValue([
+      { id: 'ci1', date: '2026-06-15', status: 'fine', createdAt: 1, updatedAt: 1 },
+    ]);
+
+    const { findByLabelText } = await renderScreen(<SettingsScreen />);
+    await fireEvent.press(await findByLabelText('Export data'));
+
+    await waitFor(() => expect(mockShareAsync).toHaveBeenCalled());
+    expect(listAllDayCheckIns).toHaveBeenCalled();
+
+    const [uri] = mockShareAsync.mock.calls[0];
+    const { File } = jest.requireActual('expo-file-system');
+    const written = JSON.parse(await new File(uri).text());
+    expect(written.version).toBe(4);
+    expect(written.dayCheckIns).toEqual([
+      { id: 'ci1', date: '2026-06-15', status: 'fine', createdAt: 1, updatedAt: 1 },
+    ]);
+  });
+
+  it('import summary reports the imported day check-in count', async () => {
+    const backup = {
+      version: 4,
+      entries: [],
+      dayCheckIns: [{ id: 'ci1', date: '2026-06-10', status: 'rough', createdAt: 1, updatedAt: 1 }],
+    };
+    mockPickFileAsync.mockResolvedValue({
+      canceled: false,
+      result: { text: async () => JSON.stringify(backup) },
+    });
+    (insertDayCheckInsPreservingIds as jest.Mock).mockResolvedValue({ inserted: 1, skipped: 0 });
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+
+    const { findByLabelText } = await renderScreen(<SettingsScreen />);
+    await fireEvent.press(await findByLabelText('Import data'));
+
+    await waitFor(() =>
+      expect(Alert.alert).toHaveBeenCalledWith(
+        'Import complete',
+        'Imported 0 entries (0 already existed). Imported 1 day check-in(s) (0 already existed).',
+      ),
+    );
+    expect(insertDayCheckInsPreservingIds).toHaveBeenCalledWith(backup.dayCheckIns);
+    (Alert.alert as jest.Mock).mockRestore();
+  });
+
+  it('import summary omits the day-check-in sentence when the file had none', async () => {
+    const backup = { version: 1, entries: [] };
+    mockPickFileAsync.mockResolvedValue({
+      canceled: false,
+      result: { text: async () => JSON.stringify(backup) },
+    });
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+
+    const { findByLabelText } = await renderScreen(<SettingsScreen />);
+    await fireEvent.press(await findByLabelText('Import data'));
+
+    await waitFor(() =>
+      expect(Alert.alert).toHaveBeenCalledWith('Import complete', 'Imported 0 entries (0 already existed).'),
+    );
+    (Alert.alert as jest.Mock).mockRestore();
+  });
+});
+
+describe('SettingsScreen — Day check-in section (GitHub #13)', () => {
+  it('renders the switch and time field', async () => {
+    const { findByLabelText } = await renderScreen(<SettingsScreen />);
+    expect(await findByLabelText('Day check-in')).toBeTruthy();
+    expect(await findByLabelText('Day check-in time')).toBeTruthy();
+  });
+
+  it('turning the switch on requests permission, persists enabled, and refreshes the schedule', async () => {
+    const { findByLabelText } = await renderScreen(<SettingsScreen />);
+    const toggle = await findByLabelText('Day check-in');
+    await fireEvent(toggle, 'valueChange', true);
+
+    await waitFor(() => expect(refreshDayCheckIn).toHaveBeenCalledWith(21, 0));
+    expect(ensureNotificationPermission).toHaveBeenCalled();
+    expect(usePrefsStore.getState().dayCheckInEnabled).toBe(true);
+  });
+
+  it('shows an alert and leaves the switch off when permission is declined', async () => {
+    (ensureNotificationPermission as jest.Mock).mockResolvedValue(false);
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+
+    const { findByLabelText } = await renderScreen(<SettingsScreen />);
+    const toggle = await findByLabelText('Day check-in');
+    await fireEvent(toggle, 'valueChange', true);
+
+    await waitFor(() =>
+      expect(Alert.alert).toHaveBeenCalledWith(
+        'Notifications are off',
+        'Enable notifications for TummyTracker in your system settings to get the day check-in.',
+      ),
+    );
+    expect(refreshDayCheckIn).not.toHaveBeenCalled();
+    expect(usePrefsStore.getState().dayCheckInEnabled).toBe(false);
+    (Alert.alert as jest.Mock).mockRestore();
+  });
+
+  it('turning the switch off persists disabled and cancels the schedule', async () => {
+    usePrefsStore.setState({ dayCheckInEnabled: true });
+    const { findByLabelText } = await renderScreen(<SettingsScreen />);
+    const toggle = await findByLabelText('Day check-in');
+    expect(toggle.props.value).toBe(true);
+
+    await fireEvent(toggle, 'valueChange', false);
+
+    expect((await findByLabelText('Day check-in')).props.value).toBe(false);
+    expect(usePrefsStore.getState().dayCheckInEnabled).toBe(false);
+    expect(disableDayCheckIn).toHaveBeenCalled();
   });
 });

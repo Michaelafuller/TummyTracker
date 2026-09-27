@@ -12,23 +12,26 @@ import { BottomTabInset, Spacing } from '@/constants/theme';
 import {
   createLogEntry,
   getLogEntry,
+  insertDayCheckInsPreservingIds,
   insertMealComponents,
   insertMedicationDosesPreservingIds,
   insertMedicationEventsPreservingIds,
   insertMedicationsPreservingIds,
+  listAllDayCheckIns,
   listAllMealComponents,
   listAllMedicationDoses,
   listAllMedicationEvents,
   listAllMedications,
   listLogEntries,
 } from '@/db/repository';
+import { disableDayCheckIn, refreshDayCheckIn } from '@/features/checkin/dayCheckInService';
 import {
   DEFAULT_REMINDERS,
   REMINDER_SLOTS,
   type ReminderSlot,
   type RemindersState,
 } from '@/features/notifications/model';
-import { disableReminder, enableReminder, getReminders } from '@/features/notifications/service';
+import { disableReminder, enableReminder, ensureNotificationPermission, getReminders } from '@/features/notifications/service';
 import { usePrefsStore } from '@/features/prefs/prefsStore';
 import { dosesForRestoredEvents, entriesToJson, parseBackupJson } from '@/lib/backup';
 import { useTheme } from '@/hooks/use-theme';
@@ -45,6 +48,10 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const offlineMode = usePrefsStore((s) => s.offlineMode);
   const setOfflineMode = usePrefsStore((s) => s.setOfflineMode);
+  const dayCheckInEnabled = usePrefsStore((s) => s.dayCheckInEnabled);
+  const dayCheckInHour = usePrefsStore((s) => s.dayCheckInHour);
+  const dayCheckInMinute = usePrefsStore((s) => s.dayCheckInMinute);
+  const setDayCheckIn = usePrefsStore((s) => s.setDayCheckIn);
   const [reminders, setReminders] = useState<RemindersState>(DEFAULT_REMINDERS);
   const [loading, setLoading] = useState(true);
   const [dataWorking, setDataWorking] = useState(false);
@@ -88,6 +95,31 @@ export default function SettingsScreen() {
     }
   }
 
+  async function toggleDayCheckIn(value: boolean) {
+    if (value) {
+      const granted = await ensureNotificationPermission();
+      if (!granted) {
+        Alert.alert(
+          'Notifications are off',
+          'Enable notifications for TummyTracker in your system settings to get the day check-in.',
+        );
+        return;
+      }
+      setDayCheckIn(true, dayCheckInHour, dayCheckInMinute);
+      await refreshDayCheckIn(dayCheckInHour, dayCheckInMinute);
+    } else {
+      setDayCheckIn(false, dayCheckInHour, dayCheckInMinute);
+      await disableDayCheckIn();
+    }
+  }
+
+  async function commitDayCheckInTime(hour: number, minute: number) {
+    setDayCheckIn(dayCheckInEnabled, hour, minute);
+    if (dayCheckInEnabled) {
+      await refreshDayCheckIn(hour, minute);
+    }
+  }
+
   async function handleExport() {
     setDataWorking(true);
     try {
@@ -96,7 +128,8 @@ export default function SettingsScreen() {
       const medications = await listAllMedications();
       const medicationEvents = await listAllMedicationEvents();
       const medicationDoses = await listAllMedicationDoses();
-      const json = entriesToJson(entries, mealComponents, medications, medicationEvents, medicationDoses);
+      const dayCheckIns = await listAllDayCheckIns();
+      const json = entriesToJson(entries, mealComponents, medications, medicationEvents, medicationDoses, dayCheckIns);
       const file = new File(Paths.cache, 'tummytracker-backup.json');
       file.write(json);
       const canShare = await Sharing.isAvailableAsync();
@@ -156,9 +189,18 @@ export default function SettingsScreen() {
         parsed.medications.length > 0
           ? ` Imported ${medResult.inserted} ${medResult.inserted === 1 ? 'medication' : 'medications'} (${medResult.skipped} already existed).`
           : '';
+
+      // Day check-ins: the device's own answer for a day wins over a
+      // backup's (insertDayCheckInsPreservingIds skips on date OR id match).
+      const dayCheckInResult = await insertDayCheckInsPreservingIds(parsed.dayCheckIns);
+      const dayCheckInSummary =
+        parsed.dayCheckIns.length > 0
+          ? ` Imported ${dayCheckInResult.inserted} day check-in(s) (${dayCheckInResult.skipped} already existed).`
+          : '';
+
       Alert.alert(
         'Import complete',
-        `Imported ${imported} ${imported === 1 ? 'entry' : 'entries'} (${skipped} already existed).${medSummary}`,
+        `Imported ${imported} ${imported === 1 ? 'entry' : 'entries'} (${skipped} already existed).${medSummary}${dayCheckInSummary}`,
       );
     } catch (e) {
       Alert.alert('Import failed', e instanceof Error ? e.message : String(e));
@@ -303,6 +345,33 @@ export default function SettingsScreen() {
             </FormField>
           </View>
         ))}
+
+        <View style={styles.divider} />
+
+        {/* Day check-in section (GitHub #13) */}
+        <ThemedText type="smallBold">Day check-in</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">
+          An evening notification asking whether today was a fine day or a rough day — answering
+          takes one tap.
+        </ThemedText>
+        <View style={styles.row}>
+          <View style={styles.rowHeader}>
+            <ThemedText type="smallBold">Day check-in</ThemedText>
+            <Switch
+              value={dayCheckInEnabled}
+              onValueChange={toggleDayCheckIn}
+              accessibilityLabel="Day check-in"
+            />
+          </View>
+          <FormField label="Time">
+            <TimeField
+              hour={dayCheckInHour}
+              minute={dayCheckInMinute}
+              onChange={commitDayCheckInTime}
+              accessibilityLabel="Day check-in time"
+            />
+          </FormField>
+        </View>
 
         <View style={styles.divider} />
 

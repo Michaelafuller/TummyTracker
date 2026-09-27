@@ -5,6 +5,7 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { Spacing } from '@/constants/theme';
 import { useDatabaseMigrations } from '@/db/migrate';
 import { runTagBackfillOnce } from '@/db/tagBackfillRunner';
+import { refreshDayCheckInIfEnabled } from '@/features/checkin/dayCheckInService';
 import { refreshCheckInIfEnabled } from '@/features/goals/checkInService';
 import { useGoalsStore } from '@/features/goals/goalsStore';
 import { configureNotificationHandler } from '@/features/notifications/service';
@@ -53,6 +54,8 @@ function MigrationGate({ children }: { children: ReactNode }) {
       // Day rollover re-arming: if the check-in is enabled, its last-scheduled
       // fire may be stale (yesterday's totals) by the time the app reopens.
       void refreshCheckInIfEnabled();
+      // Same re-arming for the day check-in (GitHub #13) — its own slot.
+      void refreshDayCheckInIfEnabled();
     }
   }, [success]);
 

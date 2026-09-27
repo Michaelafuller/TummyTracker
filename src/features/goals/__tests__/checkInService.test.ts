@@ -68,6 +68,9 @@ const DEFAULT_TEST_PREFS: AppPrefs = {
   checkInHour: 20,
   checkInMinute: 0,
   checkInAdoptedV1: true,
+  dayCheckInEnabled: false,
+  dayCheckInHour: 21,
+  dayCheckInMinute: 0,
 };
 
 function prefs(overrides: Partial<AppPrefs> = {}): AppPrefs {

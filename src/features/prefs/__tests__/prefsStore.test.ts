@@ -13,6 +13,9 @@ beforeEach(() => {
     checkInHour: 20,
     checkInMinute: 0,
     checkInAdoptedV1: false,
+    dayCheckInEnabled: false,
+    dayCheckInHour: 21,
+    dayCheckInMinute: 0,
     loaded: false,
   });
   jest.clearAllMocks();
@@ -86,5 +89,39 @@ describe('prefsStore.setCheckIn', () => {
     usePrefsStore.getState().setCheckIn(false, 7, 30);
     expect(usePrefsStore.getState().checkInEnabled).toBe(false);
     expect(savePrefs).toHaveBeenLastCalledWith(expect.objectContaining({ checkInEnabled: false }));
+  });
+});
+
+describe('prefsStore.setDayCheckIn', () => {
+  it('updates dayCheckInEnabled/dayCheckInHour/dayCheckInMinute', () => {
+    (savePrefs as jest.Mock).mockResolvedValue(undefined);
+    usePrefsStore.getState().setDayCheckIn(true, 21, 30);
+    expect(usePrefsStore.getState()).toMatchObject({
+      dayCheckInEnabled: true,
+      dayCheckInHour: 21,
+      dayCheckInMinute: 30,
+    });
+  });
+
+  it('persists the new day-check-in state by calling savePrefs', () => {
+    (savePrefs as jest.Mock).mockResolvedValue(undefined);
+    usePrefsStore.getState().setDayCheckIn(true, 21, 30);
+    expect(savePrefs).toHaveBeenCalledWith(
+      expect.objectContaining({ dayCheckInEnabled: true, dayCheckInHour: 21, dayCheckInMinute: 30 }),
+    );
+  });
+
+  it('disabling after enabling persists dayCheckInEnabled: false while keeping the last time', () => {
+    (savePrefs as jest.Mock).mockResolvedValue(undefined);
+    usePrefsStore.getState().setDayCheckIn(true, 21, 30);
+    usePrefsStore.getState().setDayCheckIn(false, 21, 30);
+    expect(usePrefsStore.getState().dayCheckInEnabled).toBe(false);
+    expect(savePrefs).toHaveBeenLastCalledWith(expect.objectContaining({ dayCheckInEnabled: false }));
+  });
+
+  it('does not touch the Goals check-in prefs', () => {
+    (savePrefs as jest.Mock).mockResolvedValue(undefined);
+    usePrefsStore.getState().setDayCheckIn(true, 21, 30);
+    expect(usePrefsStore.getState().checkInEnabled).toBe(false);
   });
 });

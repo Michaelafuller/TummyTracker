@@ -9,6 +9,9 @@ type PrefsStore = AppPrefs & {
   /** The only write path for check-in prefs (design contract, HANDOFF.md
    * Cycle A) — sets store state and persists in one call. */
   setCheckIn: (enabled: boolean, hour: number, minute: number) => void;
+  /** The only write path for day-check-in prefs (GitHub #13) — sets store
+   * state and persists in one call, like `setCheckIn`. */
+  setDayCheckIn: (enabled: boolean, hour: number, minute: number) => void;
 };
 
 export const usePrefsStore = create<PrefsStore>((set, get) => ({
@@ -18,6 +21,9 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
   checkInHour: 20,
   checkInMinute: 0,
   checkInAdoptedV1: false,
+  dayCheckInEnabled: false,
+  dayCheckInHour: 21,
+  dayCheckInMinute: 0,
   loaded: false,
   load: async () => {
     const prefs = await loadPrefs();
@@ -30,5 +36,9 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
   setCheckIn: (enabled, hour, minute) => {
     set({ checkInEnabled: enabled, checkInHour: hour, checkInMinute: minute, checkInAdoptedV1: true });
     savePrefs({ ...get(), checkInEnabled: enabled, checkInHour: hour, checkInMinute: minute, checkInAdoptedV1: true });
+  },
+  setDayCheckIn: (enabled, hour, minute) => {
+    set({ dayCheckInEnabled: enabled, dayCheckInHour: hour, dayCheckInMinute: minute });
+    savePrefs({ ...get(), dayCheckInEnabled: enabled, dayCheckInHour: hour, dayCheckInMinute: minute });
   },
 }));

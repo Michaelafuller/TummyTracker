@@ -15,6 +15,14 @@ export type AppPrefs = {
   /** Set once the one-time check-in adoption (pre-existing OS-scheduled
    * notification -> these prefs, for installs that predate this field) has run. */
   checkInAdoptedV1: boolean;
+  /** Whether the day check-in ("fine day / rough day", GitHub #13) is
+   * enabled — off by default; the Goals check-in above is untouched. */
+  dayCheckInEnabled: boolean;
+  /** Local hour (0-23) the day check-in fires at. 21:00 by default so it
+   * never collides with the Goals check-in's 20:00 default. */
+  dayCheckInHour: number;
+  /** Local minute (0-59) the day check-in fires at. */
+  dayCheckInMinute: number;
 };
 
 const DEFAULT_PREFS: AppPrefs = {
@@ -24,6 +32,9 @@ const DEFAULT_PREFS: AppPrefs = {
   checkInHour: 20,
   checkInMinute: 0,
   checkInAdoptedV1: false,
+  dayCheckInEnabled: false,
+  dayCheckInHour: 21,
+  dayCheckInMinute: 0,
 };
 const PREFS_FILENAME = 'prefs.json';
 
