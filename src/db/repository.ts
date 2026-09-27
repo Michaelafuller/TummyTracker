@@ -3,6 +3,7 @@
 // lib/ and features/logging/formModel; this module just persists.
 import { asc, desc, eq, inArray } from 'drizzle-orm';
 
+import { chunk } from '@/lib/array';
 import { createId } from '@/lib/id';
 import {
   aggregateComponents,
@@ -486,58 +487,75 @@ export async function listAllMedicationDoses(): Promise<MedicationDose[]> {
 }
 
 /**
+ * Bound-variable-safe batch size for the id-preserving restore helpers below
+ * (HANDOFF.md §2). SQLite caps bound variables at 32,766 — `medication_dose`
+ * (7 cols) hits it at ~4,700 rows on a single INSERT, and the existence
+ * `inArray(...)` lookup faces the same cap on very large restores. 500 keeps
+ * every statement well under that ceiling regardless of column count.
+ */
+const RESTORE_CHUNK_SIZE = 500;
+
+/**
  * Inserts medication rows PRESERVING their ids (unlike log entries, which are
  * re-minted on import) — #11's dose records reference a stable medicationId,
  * so a restore must keep it. Rows whose id already exists are skipped rather
  * than overwritten, matching the existing log-entry import's "already
- * existed" semantics.
+ * existed" semantics. Both the existence lookup and the insert are chunked
+ * (HANDOFF.md §2 restore hardening) so a very large restore never builds one
+ * oversized statement.
  */
 export async function insertMedicationsPreservingIds(
   rows: Medication[],
 ): Promise<{ inserted: number; skipped: number }> {
   if (rows.length === 0) return { inserted: 0, skipped: 0 };
-  const existing = await db
-    .select({ id: medication.id })
-    .from(medication)
-    .where(inArray(medication.id, rows.map((row) => row.id)));
-  const existingIds = new Set(existing.map((row) => row.id));
+  const existingIds = new Set<string>();
+  for (const idBatch of chunk(rows.map((row) => row.id), RESTORE_CHUNK_SIZE)) {
+    const existing = await db.select({ id: medication.id }).from(medication).where(inArray(medication.id, idBatch));
+    for (const row of existing) existingIds.add(row.id);
+  }
   const toInsert = rows.filter((row) => !existingIds.has(row.id));
-  if (toInsert.length > 0) {
-    await db.insert(medication).values(toInsert);
+  for (const insertBatch of chunk(toInsert, RESTORE_CHUNK_SIZE)) {
+    await db.insert(medication).values(insertBatch);
   }
   return { inserted: toInsert.length, skipped: rows.length - toInsert.length };
 }
 
-/** Same id-preserving skip-if-exists behavior as {@link insertMedicationsPreservingIds}, for medication_event rows. */
+/** Same chunked, id-preserving skip-if-exists behavior as {@link insertMedicationsPreservingIds}, for medication_event rows. */
 export async function insertMedicationEventsPreservingIds(
   rows: MedicationEvent[],
 ): Promise<{ inserted: number; skipped: number }> {
   if (rows.length === 0) return { inserted: 0, skipped: 0 };
-  const existing = await db
-    .select({ id: medicationEvent.id })
-    .from(medicationEvent)
-    .where(inArray(medicationEvent.id, rows.map((row) => row.id)));
-  const existingIds = new Set(existing.map((row) => row.id));
+  const existingIds = new Set<string>();
+  for (const idBatch of chunk(rows.map((row) => row.id), RESTORE_CHUNK_SIZE)) {
+    const existing = await db
+      .select({ id: medicationEvent.id })
+      .from(medicationEvent)
+      .where(inArray(medicationEvent.id, idBatch));
+    for (const row of existing) existingIds.add(row.id);
+  }
   const toInsert = rows.filter((row) => !existingIds.has(row.id));
-  if (toInsert.length > 0) {
-    await db.insert(medicationEvent).values(toInsert);
+  for (const insertBatch of chunk(toInsert, RESTORE_CHUNK_SIZE)) {
+    await db.insert(medicationEvent).values(insertBatch);
   }
   return { inserted: toInsert.length, skipped: rows.length - toInsert.length };
 }
 
-/** Same id-preserving skip-if-exists behavior as {@link insertMedicationsPreservingIds}, for medication_dose rows. */
+/** Same chunked, id-preserving skip-if-exists behavior as {@link insertMedicationsPreservingIds}, for medication_dose rows. */
 export async function insertMedicationDosesPreservingIds(
   rows: MedicationDose[],
 ): Promise<{ inserted: number; skipped: number }> {
   if (rows.length === 0) return { inserted: 0, skipped: 0 };
-  const existing = await db
-    .select({ id: medicationDose.id })
-    .from(medicationDose)
-    .where(inArray(medicationDose.id, rows.map((row) => row.id)));
-  const existingIds = new Set(existing.map((row) => row.id));
+  const existingIds = new Set<string>();
+  for (const idBatch of chunk(rows.map((row) => row.id), RESTORE_CHUNK_SIZE)) {
+    const existing = await db
+      .select({ id: medicationDose.id })
+      .from(medicationDose)
+      .where(inArray(medicationDose.id, idBatch));
+    for (const row of existing) existingIds.add(row.id);
+  }
   const toInsert = rows.filter((row) => !existingIds.has(row.id));
-  if (toInsert.length > 0) {
-    await db.insert(medicationDose).values(toInsert);
+  for (const insertBatch of chunk(toInsert, RESTORE_CHUNK_SIZE)) {
+    await db.insert(medicationDose).values(insertBatch);
   }
   return { inserted: toInsert.length, skipped: rows.length - toInsert.length };
 }
