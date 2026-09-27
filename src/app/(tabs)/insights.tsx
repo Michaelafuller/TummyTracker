@@ -17,14 +17,22 @@ import {
   type NutrientOutcomeFinding,
   type OutcomeFinding,
 } from '@/features/analysis/insights';
+import { useDayCheckIns } from '@/features/checkin/useDayCheckIns';
 import { useAllEntries } from '@/features/logging/useEntries';
 import { WatchButton } from '@/features/watchlist/WatchButton';
 import { WatchlistSection } from '@/features/watchlist/WatchlistSection';
 import { useTheme } from '@/hooks/use-theme';
 import { bmRegularity, bristolDistribution, weeklyBmCounts } from '@/lib/bmTrends';
 import { weeklyIntake, weeklyOutcomes } from '@/lib/chartData';
+import { dayCoverage } from '@/lib/dayCoverage';
 import { NUTRITION_NOUNS } from '@/lib/nutrition';
 import type { ConfidenceTier } from '@/lib/stats';
+
+/** "Days covered: 19 of 28 (last 28 days) · 6 checked in" — singular "day" when total is 1. */
+function coverageSentence(covered: number, total: number, checkedIn: number): string {
+  const dayNoun = total === 1 ? 'day' : 'days';
+  return `Days covered: ${covered} of ${total} (last ${total} ${dayNoun}) · ${checkedIn} checked in`;
+}
 
 function confidenceLabel(confidence: ConfidenceTier): string {
   return confidence === 'high' ? 'High' : confidence === 'medium' ? 'Medium' : 'Low';
@@ -119,11 +127,13 @@ function Card({
 export default function InsightsScreen() {
   const router = useRouter();
   const entries = useAllEntries();
+  const checkIns = useDayCheckIns();
   const insets = useSafeAreaInsets();
   const { summary, nutrientFindings, foodFindings, ingredientFindings, pairFindings } = computeInsights(entries);
   // Lazy-init so Date.now() is read once per mount, not on every render pass
   // (the render function itself must stay pure/idempotent).
   const [now] = useState(() => Date.now());
+  const coverage = dayCoverage(entries, checkIns, now);
   const roughOutcomeBuckets = weeklyOutcomes(entries, now);
   const hasRoughOutcomeData = roughOutcomeBuckets.some((b) => b.count > 0);
   const regularity = bmRegularity(entries, now);
@@ -154,6 +164,16 @@ export default function InsightsScreen() {
           <ThemedText type="small" themeColor="textSecondary">
             {`${summary.totalEntries} entries · ${summary.foodEntries} food · ${summary.bmEntries} BM · ${summary.symptomEntries} symptoms · ${summary.roughOutcomes} rough outcomes`}
           </ThemedText>
+          {coverage != null ? (
+            <>
+              <ThemedText type="small" themeColor="textSecondary">
+                {coverageSentence(coverage.covered, coverage.total, coverage.checkedIn)}
+              </ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                A day counts when you logged something or answered the day check-in.
+              </ThemedText>
+            </>
+          ) : null}
         </View>
 
         {hasRoughOutcomeData ? (

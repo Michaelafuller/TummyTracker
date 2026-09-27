@@ -10,6 +10,11 @@ jest.mock('@/features/logging/useEntries', () => ({
   useAllEntries: () => mockEntries,
 }));
 
+let mockCheckIns: { date: string }[] = [];
+jest.mock('@/features/checkin/useDayCheckIns', () => ({
+  useDayCheckIns: () => mockCheckIns,
+}));
+
 const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush }),
@@ -60,6 +65,7 @@ const baseEntry = {
 
 beforeEach(() => {
   mockPush.mockClear();
+  mockCheckIns = [];
 });
 
 describe('sentence helpers', () => {
@@ -204,6 +210,42 @@ describe('InsightsScreen', () => {
         'Keep logging meals — and log symptoms and bowel movements when they happen. Patterns appear once a few ingredients or foods have been followed by enough outcomes to compare.',
       ),
     ).toBeTruthy();
+  });
+});
+
+describe('day coverage line (GitHub #13)', () => {
+  afterEach(() => {
+    (Date.now as jest.Mock).mockRestore?.();
+  });
+
+  it('shows the coverage line (singular "day") for exactly one day of entries and no check-ins', async () => {
+    const now = new Date(2026, 5, 15, 12, 0, 0, 0).getTime();
+    jest.spyOn(Date, 'now').mockReturnValue(now);
+    mockEntries = [{ ...baseEntry, id: 'm1', type: 'meal', name: 'Food', loggedAt: now }];
+    mockCheckIns = [];
+
+    const { getByText } = await renderScreen(<InsightsScreen />);
+    expect(getByText('Days covered: 1 of 1 (last 1 day) · 0 checked in')).toBeTruthy();
+    expect(
+      getByText('A day counts when you logged something or answered the day check-in.'),
+    ).toBeTruthy();
+  });
+
+  it('includes a check-in day in the covered/checked-in counts (plural "days")', async () => {
+    const now = new Date(2026, 5, 15, 12, 0, 0, 0).getTime();
+    jest.spyOn(Date, 'now').mockReturnValue(now);
+    mockEntries = [{ ...baseEntry, id: 'm1', type: 'meal', name: 'Food', loggedAt: now }];
+    mockCheckIns = [{ date: '2026-06-14' }];
+
+    const { getByText } = await renderScreen(<InsightsScreen />);
+    expect(getByText('Days covered: 2 of 2 (last 2 days) · 1 checked in')).toBeTruthy();
+  });
+
+  it('hides the coverage line when there is no activity at all', async () => {
+    mockEntries = [];
+    mockCheckIns = [];
+    const { queryByText } = await renderScreen(<InsightsScreen />);
+    expect(queryByText(/Days covered/)).toBeNull();
   });
 });
 

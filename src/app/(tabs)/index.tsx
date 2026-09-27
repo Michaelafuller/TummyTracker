@@ -9,9 +9,12 @@ import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import type { LogEntry } from '@/db/schema';
 import { getMealComponents, listRecentFoodEntries } from '@/db/repository';
+import { DayCheckInCard } from '@/features/checkin/DayCheckInCard';
+import { useDayCheckInResponses } from '@/features/checkin/useDayCheckInResponses';
 import { useMealBuilderStore } from '@/features/logging/mealBuilderStore';
 import { RecentFoodPicker } from '@/features/logging/RecentFoodPicker';
 import { useTheme } from '@/hooks/use-theme';
+import { formatDateInput } from '@/lib/datetime';
 import { entryToComponentDrafts } from '@/lib/mealAggregate';
 
 export default function HomeScreen() {
@@ -20,11 +23,20 @@ export default function HomeScreen() {
   const loadBuilder = useMealBuilderStore((s) => s.load);
   const clearBuilder = useMealBuilderStore((s) => s.clear);
   const [recents, setRecents] = useState<LogEntry[]>([]);
+  const [today, setToday] = useState(() => formatDateInput(Date.now()));
   const recentTapInFlight = useRef(false);
+
+  // Mounted here (not the root): Home is the initial tab, so it's mounted
+  // whenever the app is, and only after the migration gate — the write
+  // can't race the migrations (GitHub #13).
+  useDayCheckInResponses();
 
   useFocusEffect(
     useCallback(() => {
       listRecentFoodEntries(50).then(setRecents).catch(() => setRecents([]));
+      // Recomputed on every focus (not just mount) so a day rollover while
+      // the app sits in the background refreshes the card's date on return.
+      setToday(formatDateInput(Date.now()));
     }, []),
   );
 
@@ -135,6 +147,8 @@ export default function HomeScreen() {
               </Link>
             </ThemedView>
           </ThemedView>
+
+          <DayCheckInCard date={today} />
 
           {recents.length > 0 && (
             <ThemedView style={styles.recentSection}>

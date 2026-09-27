@@ -39,6 +39,20 @@ jest.mock('@/db/repository', () => ({
   getMealComponents: jest.fn(),
 }));
 
+// The day check-in card and its notification-response hook are exercised by
+// their own tests (features/checkin/__tests__) — mocked here so this screen
+// test never touches the real (native-only) expo-sqlite client.
+const mockUseDayCheckInResponses = jest.fn();
+jest.mock('@/features/checkin/useDayCheckInResponses', () => ({
+  useDayCheckInResponses: () => mockUseDayCheckInResponses(),
+}));
+jest.mock('@/features/checkin/DayCheckInCard', () => ({
+  DayCheckInCard: ({ date }: { date: string }) => {
+    const { Text } = jest.requireActual('react-native');
+    return mockCreateElement(Text, { testID: 'day-check-in-card' }, date);
+  },
+}));
+
 const BASE_ENTRY: LogEntry = {
   id: 'e1',
   type: 'meal',
@@ -106,6 +120,13 @@ describe('HomeScreen', () => {
     const { getByLabelText } = await render(<HomeScreen />);
     expect(getByLabelText('Scan a barcode')).toBeTruthy();
     expect(getByLabelText('Add an entry manually')).toBeTruthy();
+  });
+
+  it('mounts the day check-in responder hook and renders the check-in card with today\'s date', async () => {
+    (listRecentFoodEntries as jest.Mock).mockResolvedValue([]);
+    const { getByTestId } = await render(<HomeScreen />);
+    expect(mockUseDayCheckInResponses).toHaveBeenCalled();
+    expect(getByTestId('day-check-in-card').props.children).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
   it('renders the recents section and its search input inside the keyboard-shift wrapper', async () => {
