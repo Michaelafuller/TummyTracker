@@ -1,210 +1,237 @@
-# HANDOFF.md — Execute session: re-log a past meal + add items to it (GitHub #1)
+# HANDOFF.md — Execute session: Medications, Cycle A (inventory + screen + data model)
 
-> **Read first:** this file only. `CLAUDE.md` is auto-loaded (§4 rungs, §8
-> conventions, §9 guardrails). This cycle is **pure JS/TS** — no new
-> dependency, no schema change, no native/config change, no EAS build. It
-> touches `src/lib/mealAggregate.ts`, `src/features/logging/mealBuilderStore.ts`,
-> `src/app/(tabs)/index.tsx`, `src/app/meal/review.tsx`,
-> `src/app/meal/component.tsx`, and their tests.
-
-**Planned 2026-09-26 (Opus plan session), owner-requested — GitHub issue
-Michaelafuller/TummyTracker#1:**
-
-> As a User, I want to be able to add new food items when selecting an
-> existing meal item from my history, so that I can update similar, but not
-> exact, meals for faster meal entry.
+> **Read first:** this file only. `CLAUDE.md` is auto-loaded (§4 rungs, §6
+> data-model conventions, §8 conventions, §9 guardrails). This cycle touches
+> `src/db/schema.ts` + a **new generated migration**, `src/db/repository.ts`,
+> new `src/lib/medications.ts`, `src/lib/backup.ts`,
+> `src/components/date-time-field.tsx` (additive prop), `src/components/app-tabs.tsx`,
+> `src/app/(tabs)/_layout.tsx`, **moves** `src/app/(tabs)/settings.tsx` →
+> `src/app/settings.tsx`, new `src/app/(tabs)/meds.tsx` +
+> `src/app/medication/{new,[id]}.tsx`, `src/app/_layout.tsx`, a new tab icon
+> SVG + `scripts/generate-icons.mjs`, and tests.
 >
-> Done when there is an "Add item" button that follows the existing
-> add-food-item-to-a-meal process.
+> **Pure JS/TS + a bundled PNG asset** — no new dependency, no native/config
+> change, no EAS build. **Schema change: owner-approved 2026-09-26** (CLAUDE.md
+> §9) — additive migration only.
+
+**Planned 2026-09-26 (Opus plan session), owner-requested — GitHub epic
+Michaelafuller/TummyTracker#4, stories #5–#11, split into two cycles:**
+
+- **Cycle A (this file):** #5 inventory, #6 screen (inventory half), #11
+  data model + analysis-ready helpers, plus the nav restructure.
+- **Cycle B (next handoff):** #7 create entry, #8 entry notes, #9 dosage
+  override, #10 history, #6's recent-doses list + fixed **Create Entry** button,
+  and doses in the Journal timeline/calendar dots.
 
 **Owner decisions (2026-09-26):**
-1. **Copy, never edit.** Picking a past meal starts a *new* draft meal
-   (date/time = now) pre-loaded with that meal's items. The original entry is
-   never modified. (Edit-in-place of a saved meal stays on `entry/[id]`, out
-   of scope.)
-2. **Every Recent tap goes to the meal review screen** — single foods and
-   multi-item meals alike. A single food becomes a one-item draft meal.
-3. **After adding an item the user lands back on the review screen** with the
-   new item listed and totals updated, then taps the existing "Save meal".
+1. **Settings leaves the tab bar** → a gear button at the top-right of every
+   tab screen. Tabs become **Home · Journal · Meds · Insights · Goals**.
+2. **Dose units: a fixed list + "Other"** (free-text unit when Other).
+3. **Frequency: free text.** No reminders, no schedule inference — reminders
+   are a documented future enhancement (PROGRESS.md), out of scope.
+4. **Doses will appear in the Journal** (Cycle B; plan the data for it now).
+5. The issue's suggested TS model is a starting point, not a contract — the
+   model below follows this project's conventions instead (§1 below).
 
 ---
 
-## 0. How it works today (so you don't re-derive it)
+## 0. Invariants — read twice
 
-- **"History" = Home's Recent list** (`RecentFoodPicker`). `handleRecentTap`
-  in `src/app/(tabs)/index.tsx` flattens the entry into the single-item
-  `LogEntryForm` via `usePrefillStore` → `/entry/new`. A multi-item meal is
-  squashed to one flat entry and **its components are lost** — this cycle
-  fixes that as a side effect.
-- **The existing add-food process is the meal builder:** `/scan` (or its
-  "Enter manually" hatch) → `router.replace('/meal/component')` → "Add & scan
-  next" (`replace('/scan')`) or "Finish meal" (`replace('/meal/review')`) →
-  `/meal/review` → "Save meal" (`createMealWithComponents`, then
-  `clearBuilder()` + `router.dismissAll()`).
-- **`/meal/review` already does most of the story:** item list with a
-  per-item **Remove**, live aggregate, cap/watchlist notices, and a save that
-  always *creates* a new entry. Its name/type/slot/date/notes live in local
-  `useState` seeded once by `defaultMealReviewState(components)`.
-- **`useMealBuilderStore` is only cleared on save.** Abandoning the builder
-  midway leaves stale components that leak into the next meal (latent bug —
-  fixed here in §1.5 because seeding from history makes it worse).
+- **Never delete a medication.** Deactivate only (#5). No delete button, no
+  `deleteMedication` in the repository.
+- **Nothing is ever inferred as taken.** No code path creates a dose from a
+  medication's frequency/schedule (#10, #11). Only an explicit user entry
+  (Cycle B) writes `medication_dose` rows.
+- **Editing a medication never touches dose rows** (#9): a dose snapshots its
+  own `dose` + `doseUnit` at log time.
+- **Doses reference `medicationId`, never the name** (#11) — renaming or
+  deactivating a medication leaves history valid.
+- **Timestamps are Unix epoch ms integers** (CLAUDE.md §6) — NOT the issue's
+  ISO strings. Date-only fields store **local midnight** epoch ms.
+- Do NOT touch `src/app/(tabs)/explore.tsx`, `src/lib/journal.ts`, or their
+  tests — an uncommitted owner-review fix (week-strip alignment) lives there.
+  Never `git add -A` / `git add .`; stage your files by path.
 
-## 1. Changes
+## 1. Data model — `src/db/schema.ts` (+ `npm run db:generate`)
 
-### 1.1 `src/lib/mealAggregate.ts` — pure seed helper
+Mirror the existing `logEntry` / `mealComponent` parent/child pattern (plain
+text id columns + indexes, no FK constraints — same as today).
 
 ```ts
-/**
- * Turn a saved food entry into builder drafts for a "re-log with changes"
- * session. Uses the entry's saved component rows when there are any; a flat
- * entry (legacy / single-item, no component rows) becomes one draft built
- * from the entry's own fields with servings = 1 (logEntry nutrition is the
- * as-eaten total, so ×1 reproduces it exactly).
- */
-export function entryToComponentDrafts(
-  entry: LogEntry,
-  components: readonly MealComponent[],
-): MealComponentDraft[]
+export const DOSE_UNITS = ['mg', 'mcg', 'g', 'mL', 'tablet', 'capsule', 'drop', 'puff', 'unit'] as const;
+
+// Inventory (#5). Never deleted; isActive=false hides it from pickers only.
+medication: id (text pk) · name (text, not null) · defaultDose (real) ·
+  doseUnit (text — a DOSE_UNITS value, or the user's own text for "Other") ·
+  frequency (text, free) · startDate (integer, local-midnight ms) ·
+  endDate (integer, local-midnight ms) ·
+  isActive (integer { mode: 'boolean' }, not null, default true) ·
+  notes (text) · createdAt · updatedAt (integer, not null)
+
+// One "I took these" event (#7: several medications, one moment).
+medication_event: id · takenAt (integer, not null) ·
+  timeKnown (integer { mode: 'boolean' }, not null, default true — #10 time
+  is optional; when false, takenAt is local noon of the date) ·
+  notes (text — #8, per event, separate from medication.notes) ·
+  createdAt · updatedAt
+
+// One medication within an event (#9, #11). Snapshots dose + unit.
+medication_dose: id · eventId (text, not null, indexed) ·
+  medicationId (text, not null, indexed) · dose (real, not null, > 0 —
+  partial doses allowed, e.g. 0.5) · doseUnit (text, not null) ·
+  createdAt · updatedAt
 ```
 
-- Component rows → drop `id`, `entryId`, `createdAt`; keep everything else
-  (servings, servingG, per-serving nutrition, `ingredientsText`, `tagsJson`),
-  ordered by `sortOrder`.
-- Flat entry → `name`, `barcode`, `servings: 1`, `servingG`, every
-  `NUTRITION_FIELDS` value, `ingredientsText`, `tagsJson`, `sortOrder: 0`.
-- Must round-trip: `aggregateComponents(entryToComponentDrafts(e, rows))`
-  equals the entry's saved nutrition for both shapes (assert it in tests).
+- All three tables are created **now** (one migration, 0009) even though
+  Cycle A writes only `medication` — Cycle B then needs no schema change.
+- Run `npm run db:generate`; commit the generated SQL, snapshot, `_journal.json`
+  and `migrations.js`. Extend `src/db/__tests__/migrations.test.ts` in its
+  existing style: 0009 creates the three tables and contains no `drop table`
+  and no `alter table \`log_entry\``.
 
-### 1.2 `src/features/logging/mealBuilderStore.ts` — load + review prefill
+## 2. Pure helpers — new `src/lib/medications.ts` (the main test target)
 
-Add to the store:
+- `validateMedication(input)` → `{ valid, errors }`: name required (trimmed,
+  ≤ 100 chars); `defaultDose` optional but > 0 when present; a unit is required
+  when a dose is given; "Other" unit text trimmed, ≤ 20 chars; `endDate` ≥
+  `startDate` when both set; notes via the existing `validateNotes` (500).
+- `formatDoseSummary(med)` → `"10 mg · twice daily"`, `"10 mg"`,
+  `"twice daily"`, or `""` — used by the list rows. Drops trailing zeros
+  (`0.5 tablet`, not `0.50`).
+- **#11 analysis-ready helpers** (pure, over rows; Cycle B's UI and any future
+  insights consume them):
+  - `flattenDoseRecords(events, doses)` → one record per dose with exactly #11's
+    fields: `{ entryId (dose id), eventId, medicationId, takenAt, timeKnown,
+    dose, doseUnit, notes (from the event), createdAt, updatedAt }`.
+  - `filterDoseRecordsInRange(records, { start, end })` — half-open, same
+    semantics as `lib/journal.ts` ranges.
+  - `groupDoseRecordsByMedication(records)` → `Map<medicationId, records[]>`.
+  - `wasTakenOn(records, medicationId, dayStartMs)` → boolean; **false** when
+    there is no record (never inferred from schedule).
 
-```ts
-reviewPrefill: Partial<MealReviewFormState> | null;
-/** Replace the whole builder (never append) — used when seeding from history. */
-load: (components: MealComponentDraft[], reviewPrefill: Partial<MealReviewFormState>) => void;
-```
+## 3. Repository — `src/db/repository.ts`
 
-- `load` **replaces** `components` and sets `reviewPrefill`.
-- `clear()` resets **both** `components: []` and `reviewPrefill: null`.
-- Import `MealReviewFormState` as a type only (avoid a runtime cycle).
+`listMedications()` (all, active first then name A–Z), `getMedication(id)`,
+`createMedication(input)` (mints id + timestamps), `updateMedication(id,
+patch)` (bumps `updatedAt`; must not touch dose rows),
+`setMedicationActive(id, isActive)`, and for backup:
+`listAllMedicationEvents()`, `listAllMedicationDoses()`,
+`insertMedicationsPreservingIds(rows)` / `…Events…` / `…Doses…` (skip rows
+whose id already exists). **No delete functions.** Event/dose *creation* is
+Cycle B.
 
-### 1.3 `src/app/(tabs)/index.tsx` — Recent tap seeds the builder
+## 4. Backup v3 — `src/lib/backup.ts` + the import/export handlers
 
-Replace `handleRecentTap`'s body:
+- `entriesToJson` writes `version: 3` with `medications`, `medicationEvents`,
+  `medicationDoses` arrays alongside `entries` + `mealComponents`.
+- `parseBackupJson` still reads v1 and v2 (missing arrays → `[]`) and normalises
+  medication rows like `normaliseMealComponent` does.
+- Import inserts medication rows **preserving their ids** (unlike log entries,
+  which are re-minted) — #11's stable ids must survive a restore — skipping
+  ids that already exist. Report counts in the existing "Import complete" alert.
 
-1. `const rows = await getMealComponents(entry.id)` (already exported from
-   `@/db/repository`; returns `[]` for flat entries).
-2. `load(entryToComponentDrafts(entry, rows), { name: entry.name, type:
-   entry.type, mealSlot: entry.mealSlot })` — **notes are not copied**
-   (they describe that occasion), date/time is left to default to now.
-3. `router.push('/meal/review')`.
+## 5. Navigation — Settings to a gear, Meds tab in
 
-Drop the now-unused `usePrefillStore` / `logEntryToFormState` / datetime
-imports from this file. Leave `src/app/entry/new.tsx` and `prefillStore.ts`
-in place (see §5 — owner decides on removal).
+- `git mv src/app/(tabs)/settings.tsx src/app/settings.tsx`; register it in
+  `src/app/_layout.tsx` as a Stack screen, title "Settings". Drop the screen's
+  own "Settings" subtitle + top safe-area padding if the Stack header now
+  provides them (keep bottom padding). Move its test alongside if the path
+  changes (`src/app/__tests__/settings.test.tsx`).
+- New `src/components/settings-button.tsx`: 44×44 gear `Pressable`,
+  `accessibilityRole="button"`, `accessibilityLabel="Settings"`,
+  `testID="open-settings"`, `router.push('/settings')`. Render it once in
+  `src/app/(tabs)/_layout.tsx` as an absolutely-positioned overlay at the
+  top-right below the safe-area inset, above every tab. Reuse the existing
+  settings tab icon image (tinted `textSecondary`).
+- `src/components/app-tabs.tsx`: remove the settings tab; add
+  `name="meds"`, title/label "Meds", `tabBarButtonTestID: 'tab-meds'`, placed
+  between Journal and Insights.
+- Tab icon: new `assets/icons/tab-meds.svg` (simple capsule/pill glyph,
+  same 24-unit viewBox/stroke style as `tab-insights.svg`/`tab-settings.svg`)
+  + a rasterize line in `scripts/generate-icons.mjs`; run the script and
+  commit `assets/images/tabIcons/meds{,@2x,@3x}.png`.
+- Check (don't assume) that the gear overlay doesn't cover interactive content
+  at the top-right of Home, Journal, Insights, Goals, Meds — add top-right
+  padding to a screen's title row if it would.
 
-### 1.4 `src/app/meal/review.tsx` — "Add item" button + prefill
+## 6. Screens
 
-- Initial state: `{ ...defaultMealReviewState(components), ...reviewPrefill }`
-  read once inside the existing `useState` initializer (read via
-  `useMealBuilderStore.getState()` like `meal/component.tsx` reads its prefill).
-- **"Add item" button** directly **below the "In this meal" list** (above
-  the aggregate line): secondary style consistent with the screen,
-  `accessibilityLabel="Add item to this meal"`, `testID="review-add-item"`,
-  label "Add item". `onPress={() => router.push('/scan')}`.
-  - `push`, **not** `replace`: the review screen stays mounted underneath,
-    so any name/slot/notes edits the user already made survive the round
-    trip, and hardware-back from the scanner returns to the draft instead of
-    abandoning it.
-- Everything else (Remove, aggregate, notices, Save) is unchanged — it
-  already reacts to store changes.
+- **`src/app/(tabs)/meds.tsx`** — title "Medications". **Active** list: each
+  row name + `formatDoseSummary` secondary line, tap → `/medication/[id]`,
+  `testID="med-row-<id>"`, `accessibilityLabel="Edit <name>"`. **Inactive (n)**
+  section collapsed by default (Collapsible from `components/ui/collapsible`).
+  Empty state: "No medications yet." "Add medication" `PrimaryButton`
+  (`accessibilityLabel="Add medication"`) → `/medication/new`. Refresh on
+  focus. (Cycle B adds recent doses + the fixed Create Entry button.)
+- **`src/app/medication/new.tsx` / `[id].tsx`** (Stack screens, titles "Add
+  medication" / "Edit medication") sharing a
+  `src/features/medications/MedicationForm.tsx`: Name; Default dose (numeric)
+  + Unit chips (`DOSE_UNITS` + "Other" → reveals a unit text field, wraps like
+  the meal-slot chips); Frequency (free text, placeholder "e.g. twice daily");
+  Start date / End date (optional, date-only — see §7); Notes (500, counter
+  like meal review). Save validates via `validateMedication`, shows errors
+  inline. `[id]` adds **Mark inactive / Mark active** (no delete, ever).
+  Every control gets an `accessibilityLabel` (§8).
 
-### 1.5 `src/app/meal/component.tsx` — return to the existing review
+## 7. `DateTimeField` — additive date-only mode
 
-- "Finish meal": `router.replace('/meal/review')` →
-  **`router.dismissTo('/meal/review')`** (expo-router 56.2 exports it). If a
-  review screen is already in the stack (the Add-item path) it pops back to
-  that mounted instance; if not (the normal Home → Scan path) it replaces —
-  identical to today's behavior, so existing flows are unaffected.
-- "Add & scan next" keeps `router.replace('/scan')`.
+Add optional `mode?: 'datetime' | 'date'` (default `'datetime'`, so every
+existing caller is unchanged). In `'date'` mode hide the time chip and the Now
+shortcut, and add an optional `onClear` so an optional date can be emptied
+("Clear" link when set). Extend its existing test file.
 
-### 1.6 Clean start for a new meal (latent-bug fix)
+## 8. Tests (same change, CLAUDE.md §4)
 
-Home's "Scan barcode" and "Add an entry manually" CTAs start a *new* meal,
-so they must call `useMealBuilderStore.getState().clear()` before
-navigating. They are `<Link asChild>` today — add an `onPress` that clears
-on the inner `Pressable` (Link still navigates), or convert to
-`router.push` in a handler — whichever keeps the existing `testID`s /
-labels / flattened styles intact (Maestro flows depend on them).
+- `src/lib/__tests__/medications.test.ts` — every validation branch;
+  `formatDoseSummary` shapes; `flattenDoseRecords` field mapping (notes come
+  from the event; two doses in one event → two records sharing `eventId`);
+  range filter edges; grouping; `wasTakenOn` false with no record, true with a
+  record at 23:59 that day, false the next day; **a renamed/inactive
+  medication's records still group under its id**.
+- `src/lib/__tests__/backup.test.ts` — v3 round-trip incl. medication arrays;
+  v2 and v1 files still parse (medication arrays default to `[]`).
+- `src/db/__tests__/migrations.test.ts` — 0009 as in §1.
+- `src/components/__tests__/date-time-field.test.tsx` — date mode hides time +
+  Now; Clear calls `onClear`; default mode unchanged.
+- Screen tests (mock the repository like sibling tests): meds list renders
+  active rows + collapsed inactive count + empty state; Add navigates; form
+  shows validation errors and calls `createMedication`/`updateMedication`;
+  Mark inactive calls `setMedicationActive(id, false)`; settings-button pushes
+  `/settings`; app-tabs has no settings tab and has `tab-meds`.
 
-## 2. Out of scope (do not build)
+## 9. Definition of done
 
-- Changing an item's servings on the review screen — **already built
-  (2026-09-26)**: `ServingsStepper` (`src/components/servings-stepper.tsx`,
-  math in `src/lib/servings.ts`) on every review row. Rows copied from
-  history get it for free; don't rebuild it.
-- Adding items to a saved entry in place from `entry/[id]` (owner chose copy
-  semantics).
-- Badging Home recents with watched ingredients (already a separate
-  optional follow-on).
+- `npm run typecheck` && `npm run lint` clean.
+- **Targeted Jest only (owner instruction — do NOT run the full suite):** run
+  every test file you created or touched plus `backup`, `migrations`,
+  `date-time-field`, `settings`, and any test importing `app-tabs` /
+  `(tabs)/_layout` / `repository` types you changed. Paths containing `(tabs)`
+  must be run via `npx jest --runTestsByPath "<path>"` — plain path args
+  silently skip them.
+- **`npm run bundle:check`** — required this cycle (new migration SQL import +
+  new PNG assets are exactly the bundler risks §0 of CLAUDE.md warns about).
+- No `@ts-ignore`, no lint disables, no `any` without `// reason:`, no new deps.
+- Do NOT run Maestro, EAS, or `npx expo start` (Metro is running on 8081 —
+  leave it). Do NOT edit `flows/` (the test session owns them — see §10).
+- Commits (imperative, scoped, stage by path), suggested split:
+  `feat(db): medication, medication_event, medication_dose tables (0009)` ·
+  `feat(meds): pure medication validation + analysis-ready dose helpers` ·
+  `feat(backup): v3 — include medication inventory and history` ·
+  `feat(nav): move Settings to a gear button; add Meds tab` ·
+  `feat(meds): medications screen + add/edit/deactivate form` ·
+  each ending `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`.
+  Do NOT push.
+- Execute summary: files, commits, rung + bundle:check results, targeted Jest
+  counts, deviations with reasons, anything the review should examine.
 
-## 3. Tests (same change, CLAUDE.md §4)
+## 10. After this (review + test session)
 
-- **`src/lib/__tests__/mealAggregate.test.ts`** — `entryToComponentDrafts`:
-  multi-component entry → drafts in `sortOrder` with ids stripped; flat
-  entry → one draft, `servings: 1`, all nutrition/tags/ingredients carried;
-  entry with `componentCount` set but zero rows → falls back to the flat
-  draft; round-trip `aggregateComponents(...)` equals the entry's nutrition
-  for both shapes.
-- **`src/features/logging/__tests__/mealBuilderStore.test.ts`** — `load`
-  replaces (not appends) pre-existing components; `clear` resets
-  `reviewPrefill` too.
-- **`src/app/(tabs)/__tests__/index.test.tsx`** — tapping a recent row
-  calls `getMealComponents(entry.id)`, loads the store with the expected
-  drafts + prefill (name/type/slot, no notes), and pushes `/meal/review`;
-  Scan / manual CTAs clear a pre-populated builder. Add `getMealComponents`
-  to the existing `@/db/repository` mock.
-- **`src/app/meal/__tests__/review.test.tsx`** — `reviewPrefill` populates
-  the name field (and slot); "Add item to this meal" pushes `/scan` (add
-  `push` to the router mock); saving a loaded draft calls
-  `createMealWithComponents` once with all components (original + added) —
-  i.e. it creates, never updates.
-- **`src/app/meal/__tests__/component.test.tsx`** — "Finish meal" now calls
-  `dismissTo('/meal/review')` (update the router mock + the existing test at
-  line ~65).
-
-## 4. Definition of done
-
-- `npm run typecheck` && `npm run lint` && `npm test` green — run all three.
-  (`bundle:check` not required: no deps/config/Babel change.)
-- No `// @ts-ignore`, no lint disables, no schema change, no new dependency.
-- Every new interactive element has an `accessibilityLabel` (§8).
-- Do NOT run EAS, Metro, or Maestro.
-- Commits (imperative, scoped), suggested split:
-  `feat(logging): seed meal builder from a history entry` (lib helper +
-  store + tests) ·
-  `feat(logging): re-log recents through meal review with an Add item button`
-  (index, review, component + tests) ·
-  `fix(logging): clear stale meal-builder state when starting a new meal`.
-- Execute summary: files, commits, rung results (suite/test counts),
-  deviations with reasons.
-
-## 5. After this (review pass + test session + owner decisions)
-
-- **Opus review** of the diff; re-run the three rungs.
-- **Test session (on-device, Metro-served — no new build needed):**
-  - **Update `flows/h-recent-foods.yaml`** — after tapping `recent-oatmeal`
-    it now lands on meal review ("In this meal" / "Save meal", not "Save
-    entry"). Extend it: tap `review-add-item` → "Enter manually" → fill a
-    name (e.g. "Banana") → "Finish meal" → assert back on review with both
-    "Oatmeal" and "Banana" listed → "Save meal" → Journal shows the new
-    entry and the original Oatmeal entry is still present and unchanged.
-  - Scratch-check hardware-back from the scanner during Add item returns to
-    the draft with the name edit intact.
-  - **Full regression** — every flow that taps "Finish meal" now goes
-    through `dismissTo` (behavior should be identical; prove it).
-- **Owner decisions owed:**
-  - `src/app/entry/new.tsx` + `prefillStore.ts` lose their only entry point
-    (Recent tap). Delete them in a follow-up cleanup, or keep for a future
-    use?
+- Opus review; re-run rungs + bundle:check.
+- **Flows referencing `tab-settings` must switch to `open-settings`:**
+  `01e-reminders`, `i-backup`, `n-doctor-report`, `nav-tabs`,
+  `settings-smoke`. `nav-tabs` also asserts the new tab set.
+- **Dev-client caveat:** the Expo dev-tools floating bubble also sits at the
+  top-right on dev builds — confirm on device that tapping `open-settings`
+  isn't intercepted by it (production builds have no bubble).
+- New flow for Cycle A: add → edit → deactivate → appears under Inactive →
+  reactivate; plus backup export/import keeps the medication.

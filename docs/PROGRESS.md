@@ -136,8 +136,14 @@ Completed tiers are collapsed to a single line; their detail lives in git.
 
 ## 📌 Pinned — next up
 
-_(none — GitHub #1 shipped, below. Next plan session picks from the
-follow-ups or the tiers.)_
+1. **Medications (GitHub epic #4, stories #5–#11, planned 2026-09-26), two
+   cycles.** **A (spec: `docs/HANDOFF.md`):** medication / medication_event /
+   medication_dose tables (additive 0009, owner-approved), inventory
+   add/edit/deactivate (never delete), Meds tab, Settings moved to a gear
+   button, backup v3, #11 analysis-ready pure helpers. **B (next plan):**
+   Create Entry form (multi-med event, dose override incl. partial, notes),
+   recent-doses list + history, doses in the Journal timeline + dots.
+   Invariant for both: nothing is ever inferred as taken.
 
 **✅ Shipped 2026-09-26 (GitHub #1 re-log + Add item, + servings stepper —
 Opus planned/reviewed, Sonnet executed, on-device verified same day):**
@@ -226,6 +232,12 @@ ingredient-pair analysis **✅ shipped**. Remaining:
 | **Doctor / dietitian PDF report** | Share a date range + insights with a pro | M | **✅ shipped 2026-08-24** (⚠ `expo-print` owner-approved) — device items owed, see Status |
 
 ## Tier 3 — Quality of life
+- **Medication reminders (owner-requested enhancement, 2026-09-26):** local
+  scheduled notifications per medication from its frequency, via the already
+  approved `expo-notifications`. Deliberately out of the Medications epic:
+  a reminder must never become a dose record — only an explicit entry is
+  "taken" (#10/#11). Needs a structured schedule (times/days) rather than
+  today's free-text frequency. M.
 
 **OFF search-by-name + unbranded re-ranking — ✅ shipped (2026-07-03), but the
 endpoint under it is dying.** Recovers buried generic entries (e.g. "banana") but
