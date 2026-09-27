@@ -144,22 +144,25 @@ Completed tiers are collapsed to a single line; their detail lives in git.
    id-preserving restore, #11 pure analysis-ready helpers. Targeted Jest 161+
    green, `bundle:check` green; Maestro green: `nav-tabs`, `r-medications`
    (new), `settings-smoke`, `i-backup`, `01e-reminders`, `n-doctor-report`.
-   **Cycle B (spec: `docs/HANDOFF.md`, planned 2026-09-26):** Create Entry
-   form (multi-med event, dose override incl. partial, notes, optional time),
-   fixed Create entry button + recent doses, history screen, doses in the
-   Journal with a "Meds" filter (Insights/Goals stay food-only), plus the
-   owner-requested real gear icon and the chunked-restore + icon-script
-   follow-ups below. Invariant for both: nothing is ever inferred as taken.
+   **✅ Cycle B shipped 2026-09-26** (Opus planned/reviewed, Sonnet executed,
+   on-device verified): Create Entry (multi-med event, dose override incl.
+   partial, notes, optional time), edit/delete of an entry, fixed Create entry
+   button + Recent doses, Medication history, doses in the Journal with a
+   "Meds" filter (Insights/Goals stay food-only), real gear icon,
+   generate-icons runnable again, chunked restores. Review fix: restore only
+   adds doses for events it inserts (an edit re-mints dose ids, so an older
+   backup would have re-added stale doses). Targeted Jest 254 green,
+   `bundle:check` green; Maestro green: `s-medication-entry` (new),
+   `r-medications`, `nav-tabs`, `journal-calendar`, `01d-browse-edit`.
+   Invariant for both cycles holds: nothing is ever inferred as taken.
 
    **Cycle A follow-ups (from execute + review):**
-   - **Chunk the id-preserving restore inserts** (`insertMedication…PreservingIds`
-     in `repository.ts`): one multi-row INSERT per table hits SQLite's 32,766
-     bound-variable cap at ~4,700 dose rows (7 cols) — years of daily use.
-     Do it in Cycle B, before doses exist in volume. S.
-   - **`scripts/generate-icons.mjs` is broken** — it still references
-     `assets/icons/icon.svg` / `icon-monochrome.svg`, deleted in `65e7014`
-     ("new app icon"), so app/adaptive/splash icons can't be regenerated
-     (the Meds tab PNGs were rendered with the same Resvg call standalone). S.
+   - ~~Chunk restore inserts~~ · ~~generate-icons broken~~ — both fixed in
+     Cycle B (`3721423`, `b3fb985`). App/adaptive/splash icon sources are
+     still missing (the script now skips them with a warning). S.
+   - **Entry form is scroll-heavy:** every ticked medication shows all 10
+     unit chips, though the unit is almost always the medication's default.
+     Show the unit as text with a "Change unit" affordance instead. S.
    - **`Collapsible` can't render under Jest** (reanimated worklets not
      initialised) — `meds.test.tsx` mocks it locally; a shared jest mock
      would let any screen test use it. S.
