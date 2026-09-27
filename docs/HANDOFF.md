@@ -1,239 +1,330 @@
-# HANDOFF.md — Execute session: Medications, Cycle B (log doses + history + Journal) + gear icon
+# HANDOFF.md — Execute session: Day check-in ("fine day / rough day"), GitHub #13
 
 > **Read first:** this file only. `CLAUDE.md` is auto-loaded (§4 rungs, §6,
-> §8 conventions, §9 guardrails). Cycle A (tables, inventory, Meds tab,
-> Settings gear, backup v3) shipped 2026-09-26 — see `git log 4d017be..692ab88`.
-> This cycle touches `src/db/repository.ts`, `src/lib/journal.ts`,
-> new `src/lib/medicationEntry.ts`, `src/features/medications/*`,
-> `src/features/logging/EntryList.tsx`, `src/app/(tabs)/meds.tsx`,
-> `src/app/(tabs)/explore.tsx`, new `src/app/medication/entry/{new,[id]}.tsx` +
-> `src/app/medication/history.tsx`, `src/app/_layout.tsx`,
-> `assets/icons/tab-settings.svg`, `scripts/generate-icons.mjs`, the settings
-> tab PNGs, and tests.
+> §8 conventions, §9 guardrails). This cycle touches `src/db/schema.ts` + one
+> **generated** migration, `src/db/repository.ts`, `src/lib/backup.ts`,
+> `src/lib/prefs.ts`, `src/features/prefs/prefsStore.ts`, new
+> `src/lib/dayCoverage.ts`, new `src/features/checkin/*`,
+> `src/components/app-providers.tsx`, `src/app/(tabs)/index.tsx`,
+> `src/app/(tabs)/insights.tsx`, `src/app/settings.tsx`, and tests.
 >
-> **Pure JS/TS + regenerated PNG assets** — no new dependency, **no schema
-> change** (Cycle A's 0009 already created `medication_event` +
-> `medication_dose`), no native change, no EAS build.
+> **Pure JS/TS + one additive migration (owner-approved 2026-09-27)** — no new
+> dependency, no native change, no EAS build. `expo-notifications` (already
+> installed, already in the dev client) provides the action buttons.
 
-**Planned 2026-09-26 (Opus plan session) — GitHub epic
-Michaelafuller/TummyTracker#4: #7 create entry, #8 entry notes, #9 dosage
-override, #10 history, #6's recent doses + Create Entry button; plus doses in
-the Journal (owner: "trust your judgement" → yes), two Cycle A review
-follow-ups, and an owner-requested gear icon redesign.**
+**Planned 2026-09-27 (Opus plan session) — GitHub
+Michaelafuller/TummyTracker#13. Owner decisions, all 2026-09-27, "keep it
+minimal":**
+
+1. **Its own notification** — "How was today?" with **Fine day / Rough day**
+   buttons, its own switch + time in **Settings** (off by default). The Goals
+   check-in is **not touched**.
+2. **Fine day** = a confirmed "nothing went wrong" day. **Rough day** marks the
+   day covered but is **not an outcome** — it only prompts "add a symptom?".
+3. **Coverage only this cycle** — Insights shows "X of Y days covered"; the
+   correlation engine (`src/features/analysis/*`) is **unchanged**.
+4. **Additive table** `day_check_in`, one row per local day; backup → v4.
+   No stress/confounder fields (that's GH #23, later).
+5. Same flow as before: Sonnet executes, Opus reviews, device test later.
 
 ---
 
-## 0. Invariants — read twice (unchanged from Cycle A, now load-bearing)
+## 0. Invariants — read twice
 
-- **Nothing is ever inferred as taken.** Only the Create Entry form (and
-  backup restore) writes `medication_event` / `medication_dose`. No code
-  derives doses from `frequency`, start/end dates, or "active".
-- **A dose snapshots `dose` + `doseUnit` at log time.** Editing a medication's
-  default never rewrites a dose; editing a dose never touches the medication.
-- **Doses reference `medicationId`.** Inactive/renamed medications still show
-  their current name on old doses and remain in history and the Journal.
-- **Medications are never deleted.** A *dose entry* (event) may be deleted —
-  it's the user correcting their own log — with a confirm, removing the event
-  and its dose rows together in one transaction.
-- **Insights, Goals and meal review stay food-only.** They keep reading
-  `useAllEntries()` (logEntry). Medications appear in the **Journal only**;
-  correlation with outcomes is future work (#11 only prepares the data).
+- **The engine does not change.** No edits under `src/features/analysis/`,
+  `src/lib/chartData.ts`, `src/lib/report.ts`, or to `isOutcome`. A check-in is
+  never an outcome and never a log entry.
+- **One row per local day** (`date` = `'YYYY-MM-DD'`, unique). Answering again
+  the same day **updates** that row's status (Fine ↔ Rough); it never inserts
+  a second row. There is no delete path this cycle.
+- **An answer is recorded for the day the notification asked about** —
+  `content.data.date` — never `Date.now()`'s day. Tapping yesterday's
+  notification after midnight records yesterday.
+- **Nothing is inferred.** Only an explicit tap (Home card or notification
+  action) or a backup restore writes `day_check_in`. A day with no answer has
+  no row.
+- **Other notifications are untouched.** The day check-in uses its own slot;
+  its cancel step filters on that slot only (reminders + Goals check-in keep
+  their own). Scheduling never requests permission — only the Settings switch
+  does.
+- **Additive migration only** (CLAUDE.md §9): the generated SQL must be only
+  `CREATE TABLE` / `CREATE UNIQUE INDEX` for the new table. If drizzle-kit
+  emits anything touching an existing table, **stop and report**.
 - Stage files by path — never `git add -A` / `git add .`.
 
-## 1. Gear icon — owner-requested (do this first; it's small)
+## 1. Schema + migration
 
-The current `assets/icons/tab-settings.svg` is a 24-point zig-zag (reads as a
-spiky starburst) and its hub hole doesn't even render (the inner circle is
-wound the same way as the outline). Replace the file's contents **verbatim**
-with this — geometry-generated (8 flat-topped teeth, rounded joins, evenodd
-hub), already rendered and checked at 480px and 72px in the plan session:
-
-```svg
-<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-  <path fill="white" fill-rule="evenodd" stroke="white" stroke-width="1.1" stroke-linejoin="round"
-    d="M10.520 4.240 L10.940 1.654 L13.060 1.654 L13.480 4.240 A7.9 7.9 0 0 1 16.440 5.466 L16.440 5.466 L18.566 3.935 L20.065 5.434 L18.534 7.560 A7.9 7.9 0 0 1 19.760 10.520 L19.760 10.520 L22.346 10.940 L22.346 13.060 L19.760 13.480 A7.9 7.9 0 0 1 18.534 16.440 L18.534 16.440 L20.065 18.566 L18.566 20.065 L16.440 18.534 A7.9 7.9 0 0 1 13.480 19.760 L13.480 19.760 L13.060 22.346 L10.940 22.346 L10.520 19.760 A7.9 7.9 0 0 1 7.560 18.534 L7.560 18.534 L5.434 20.065 L3.935 18.566 L5.466 16.440 A7.9 7.9 0 0 1 4.240 13.480 L4.240 13.480 L1.654 13.060 L1.654 10.940 L4.240 10.520 A7.9 7.9 0 0 1 5.466 7.560 L5.466 7.560 L3.935 5.434 L5.434 3.935 L7.560 5.466 A7.9 7.9 0 0 1 10.520 4.240 Z M15.3 12 A3.3 3.3 0 1 0 8.7 12 A3.3 3.3 0 1 0 15.3 12 Z"/>
-</svg>
-```
-
-- **Fix `scripts/generate-icons.mjs`** (Cycle A follow-up): it still
-  rasterizes `assets/icons/icon.svg` / `icon-monochrome.svg`, deleted in
-  `65e7014`, so it throws before reaching the tab icons. Guard each
-  `rasterize` source with `existsSync` — skip with a clear
-  `console.warn('  – skipped (missing source): …')` — so the script runs
-  end-to-end with today's assets. Don't recreate or change the app icons.
-- Run `node scripts/generate-icons.mjs`. Commit `assets/icons/tab-settings.svg`
-  + `assets/images/tabIcons/settings{,@2x,@3x}.png`. If the run also rewrites
-  `insights*.png` / `meds*.png` / any other PNG, `git checkout` those — this
-  commit changes the gear only.
-- The gear PNG is used by `src/components/settings-button.tsx` (Settings is no
-  longer a tab); no code change needed there.
-
-## 2. Restore hardening — chunked inserts (Cycle A follow-up)
-
-`insertMedicationsPreservingIds` / `…Events…` / `…Doses…` in
-`repository.ts` do one `inArray(...)` lookup and one multi-row INSERT per
-table. SQLite caps bound variables at 32,766 — `medication_dose` (7 cols)
-hits it at ~4,700 rows. Add a small pure `chunk<T>(rows, size)` in
-`src/lib/` (unit-tested) and process ids/rows in chunks of **500 rows**
-(both the existence lookup and the insert). Behavior otherwise identical.
-
-## 3. Pure logic
-
-### 3.1 New `src/lib/medicationEntry.ts` — the entry form model (main test target)
+In `src/db/schema.ts`, after the medication tables:
 
 ```ts
-export interface DoseLineState { medicationId: string; selected: boolean; doseInput: string; doseUnit: string }
-export interface MedicationEntryFormState {
-  dateInput: string; timeInput: string; timeKnown: boolean;
-  lines: DoseLineState[]; notes: string;
+/** A day check-in answer (GitHub #13). */
+export const DAY_STATUSES = ['fine', 'rough'] as const;
+export type DayStatus = (typeof DAY_STATUSES)[number];
+
+export const dayCheckIn = sqliteTable('day_check_in', {
+  id: text('id').primaryKey(),
+  // Local calendar day 'YYYY-MM-DD' (formatDateInput) — one row per day.
+  date: text('date').notNull().unique(),
+  status: text('status', { enum: DAY_STATUSES }).notNull(),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+export type DayCheckIn = typeof dayCheckIn.$inferSelect;
+export type NewDayCheckIn = typeof dayCheckIn.$inferInsert;
+```
+
+Add a doc comment in the file's style stating the invariants above (one row per
+day, answer = the notification's day, never an outcome, rough ≠ symptom).
+
+Run **`npm run db:generate`** and commit everything it produces:
+`src/db/migrations/0010_*.sql`, `meta/0010_snapshot.json`, `meta/_journal.json`,
+`migrations.js`. Read the SQL — it must be exactly the new table + its unique
+index (see §0).
+
+## 2. Repository + live hook
+
+In `src/db/repository.ts`:
+
+- `upsertDayCheckIn(date: string, status: DayStatus): Promise<void>` — insert
+  with `createId()` + `createdAt/updatedAt = Date.now()`,
+  `.onConflictDoUpdate({ target: dayCheckIn.date, set: { status, updatedAt } })`.
+  Validate `date` with the same `YYYY-MM-DD` shape check as §4 (throw on bad
+  input — callers only pass generated keys).
+- `listAllDayCheckIns(): Promise<DayCheckIn[]>` (for export).
+- `insertDayCheckInsPreservingIds(rows): Promise<{ inserted; skipped }>` —
+  mirrors `insertMedicationsPreservingIds` (chunked by `RESTORE_CHUNK_SIZE`),
+  but **skip a row if its `date` already exists on the device *or* its `id`
+  does** — the device's own answer for a day wins over a backup's. Also
+  de-duplicate by `date` within `rows` (first wins) before inserting.
+
+New `src/features/checkin/useDayCheckIns.ts`: `useDayCheckIns(): DayCheckIn[]`
+via `useLiveQuery`, newest date first — mirrors `useAllEntries`.
+
+## 3. Pure logic (main test targets)
+
+### 3.1 `src/features/checkin/dayCheckInModel.ts` (no expo-notifications import)
+
+```ts
+export const DAY_CHECK_IN_SLOT = 'day-check-in';           // content.data.slot
+export const DAY_CHECK_IN_CATEGORY = 'day-check-in';       // categoryIdentifier
+export const DAY_CHECK_IN_ACTIONS = { fine: 'day-check-in-fine', rough: 'day-check-in-rough' } as const;
+export const DAY_CHECK_IN_TITLE = 'How was today?';
+export const DAY_CHECK_IN_BODY = 'Fine day or rough day? One tap keeps your insights honest.';
+
+/** Fire dates for the one-shot horizon: today at hour:minute when that's still
+ *  ahead of `now` and today isn't answered yet, then each of the next 6 days —
+ *  anchored on "today at hour:minute" exactly like checkInService.refreshCheckIn
+ *  (DST-safe Date mutation). */
+export function dayCheckInFireDates(now: number, hour: number, minute: number,
+  answeredToday: boolean): Date[]
+
+/** The minimal response shape we read. Returns null for anything that isn't one
+ *  of OUR two action buttons (a plain tap on the notification body, another
+ *  slot, a malformed/missing data.date → null). */
+export interface ResponseLike {
+  actionIdentifier: string;
+  notification: { request: { identifier: string; content: { data?: Record<string, unknown> | null } } };
 }
-export function defaultEntryState(activeMeds: readonly Medication[], now: number): MedicationEntryFormState
-export function entryStateFromEvent(event: MedicationEvent, doses: readonly MedicationDose[],
-  meds: readonly Medication[]): MedicationEntryFormState
-export function buildMedicationEntry(state: MedicationEntryFormState):
-  { valid: boolean; errors: MedicationEntryErrors;
-    event?: { takenAt: number; timeKnown: boolean; notes: string | null };
-    doses?: { medicationId: string; dose: number; doseUnit: string }[] }
+export function parseDayCheckInResponse(r: ResponseLike): { date: string; status: DayStatus } | null
 ```
 
-- `defaultEntryState`: date/time = now, `timeKnown: true`, one **unselected**
-  line per *active* medication, pre-filled with its `defaultDose` / `doseUnit`
-  (#7, #9). Order: same as the Meds list.
-- `entryStateFromEvent`: lines for every medication in the event (**including
-  inactive ones**, selected) + the other active meds (unselected).
-- Validation: ≥ 1 selected line ("Select at least one medication"); each
-  selected line's dose parses and is > 0 (partial doses like `0.5` fine) and
-  has a unit; valid date (+ time when `timeKnown`); notes via `validateNotes`.
-- `timeKnown: false` → `takenAt` = **local noon** of the date (so it lands on
-  the right day in every timezone-offset edge); the UI shows "time not set".
-- Never mutates medication defaults — it only returns event + dose payloads.
-
-### 3.2 `src/lib/journal.ts` — Journal items (additive)
+### 3.2 `src/lib/dayCoverage.ts`
 
 ```ts
-export type JournalItem =
-  | { kind: 'log'; id: string; loggedAt: number; entry: LogEntry }
-  | { kind: 'medication'; id: string /* eventId */; loggedAt: number; timeKnown: boolean;
-      summary: string /* "Omeprazole 20 mg · Ibuprofen 200 mg" */; notes: string | null };
-export function logEntriesToJournalItems(entries: readonly LogEntry[]): JournalItem[]
-export function medicationEventsToJournalItems(events, doses, meds): JournalItem[]
-export function filterJournalItems(items, filter: EntryTypeFilter): JournalItem[]
+export const COVERAGE_WINDOW_DAYS = 28;
+export interface DayCoverage { covered: number; total: number; checkedIn: number }
+export function dayCoverage(
+  entries: readonly { loggedAt: number }[],
+  checkIns: readonly { date: string }[],
+  now: number,
+  windowDays = COVERAGE_WINDOW_DAYS,
+): DayCoverage | null
 ```
 
-- Extend `EntryTypeFilter` with `'meds'`: `'all'` = everything, `'meds'` =
-  medication items only, `'food'|'bm'|'symptom'` = log items of that type only
-  (no medication items). Keep `filterByEntryType` working for its other callers.
-- Summary uses the medication's *current* name (inactive included) +
-  `formatDoseSummary`-style `"20 mg"` of the **dose's own snapshot**; an event
-  whose medication row is missing (shouldn't happen) shows "Unknown medication".
-- The existing generic `filterEntriesInRange` / `groupEntriesByDay` /
-  `entryDateKeys` already work on `{ loggedAt }` — reuse, don't fork.
+- Window = the last `windowDays` **local calendar days ending today**
+  (inclusive), built by stepping a `Date` back with `setDate` (DST-safe), keyed
+  with `formatDateInput`.
+- **Clip the window's start** to the earliest day with any activity (earliest
+  entry day or earliest check-in date, `'YYYY-MM-DD'` compares as a string) —
+  someone who started 10 days ago sees "of 10", not "of 28".
+- `covered` = window days with ≥ 1 entry **or** a check-in; `checkedIn` =
+  window days with a check-in. Entries/check-ins after today are ignored.
+- `null` when there's no activity at all (the UI hides the line).
 
-## 4. Repository + live hooks
+## 4. Backup v4 (`src/lib/backup.ts` + `settings.tsx`)
 
-- `createMedicationEvent(event, doses)` — one transaction, mints ids + timestamps.
-- `updateMedicationEvent(id, event, doses)` — one transaction: update the
-  event row, delete its dose rows, insert the new ones (bump `updatedAt`).
-- `deleteMedicationEvent(id)` — one transaction: its doses, then the event.
-- `getMedicationEvent(id)` → `{ event, doses } | undefined`.
-- New `src/features/medications/useMedicationData.ts`: `useMedications()`,
-  `useMedicationEvents()` (newest first), `useMedicationDoses()` via
-  `useLiveQuery`, mirroring `useAllEntries` — so the Meds tab, history and
-  Journal refresh automatically after a save/delete.
+- `BackupFile.dayCheckIns?: DayCheckIn[]` ("Absent before v4 … treated as []").
+  `entriesToJson(…, dayCheckIns = [])` writes `version: 4`.
+- `parseBackupJson` reads it like the medication arrays: `isValidDayCheckIn`
+  (non-empty string `id`; `date` matches `/^\d{4}-\d{2}-\d{2}$/`; `status` in
+  `DAY_STATUSES`; numeric `createdAt`/`updatedAt`) — invalid → `ok:false`,
+  `"Day check-in at index N has an invalid shape."`. `ParseResult` gains
+  `dayCheckIns`. v1/v2/v3 files still import (missing key → []).
+- `settings.tsx`: export includes `listAllDayCheckIns()`; import calls
+  `insertDayCheckInsPreservingIds(parsed.dayCheckIns)` after the medication
+  restore and appends `" Imported N day check-in(s) (M already existed)."` to
+  the summary only when the file had any (same shape as `medSummary`).
 
-## 5. Screens
+## 5. Notification service — `src/features/checkin/dayCheckInService.ts`
 
-- **Create / edit entry** — `src/app/medication/entry/new.tsx` and
-  `entry/[id].tsx` (Stack screens, titles "Log medication" / "Edit entry"),
-  sharing `src/features/medications/MedicationEntryForm.tsx`:
-  - `DateTimeField` (datetime mode) + a "Time not known" switch
-    (`accessibilityLabel="Time not known"`) that hides the time chip.
-  - One row per line: a checkbox-style `Pressable`
-    (`accessibilityRole="checkbox"`, `accessibilityState={{ checked }}`,
-    `accessibilityLabel="Took <name>"`, `testID="dose-line-<medicationId>"`);
-    when checked, a dose input (`accessibilityLabel="Dose of <name>"`,
-    pre-filled default) + unit shown/editable (reuse Cycle A's unit chips).
-    Inactive meds show an "inactive" tag (edit screen only).
-  - Notes (500, counter). Save → `createMedicationEvent` /
-    `updateMedicationEvent`, then back. Edit screen adds **Delete entry**
-    (confirm Alert, like `entry/[id].tsx`).
-  - Empty state when there are no active meds: "Add a medication first" +
-    button to `/medication/new`.
-- **Meds tab** (`meds.tsx`):
-  - **Create entry** `PrimaryButton` **fixed at the bottom** (outside the
-    ScrollView, above the tab bar — #6), `accessibilityLabel="Create entry"`,
-    → `/medication/entry/new`; disabled with the hint "Add a medication to
-    log doses" when there are no active meds. "Add medication" stays, as a
-    secondary button under the lists.
-  - **Recent doses** section (after the active list): the 5 newest events —
-    date + time (or "time not set"), summary, a notes glyph when notes exist;
-    tap → `/medication/entry/[id]`. "See all history" link →
-    `/medication/history`. Empty: "No doses logged yet."
-  - Scroll content gets bottom padding so the fixed button never covers the
-    last row.
-- **History** — `src/app/medication/history.tsx` (title "Medication history",
-  #10): all events newest first, grouped by day (reuse `groupEntriesByDay` on
-  journal items); filter chips "All" + one per medication that has doses
-  (inactive included, `SegmentedControl` like the Journal). Tap → edit entry.
-- **Journal** (`explore.tsx` + `EntryList.tsx`):
-  - Add a **"Meds"** filter chip after "Symptom".
-  - Merge `logEntriesToJournalItems(entries)` +
-    `medicationEventsToJournalItems(...)`, then filter/range/group as today.
-    Calendar dots come from the merged, filtered items.
-  - `EntryList` renders `JournalItem[]`: log items → existing `EntryRow`
-    (unchanged); medication items → new `MedicationEventRow` (time or "time
-    not set", "Medication" type label, summary, notes glyph;
-    `testID="journal-med-<eventId>"`; tap → edit entry). Keep `EntryList`'s
-    other callers working (adapt them via `logEntriesToJournalItems`).
-  - **Do not change** the week-strip sizing / today styling from `4a668e7`.
+Model it on `src/features/goals/checkInService.ts` (read it first), minus the
+adoption logic (this is new — prefs are simply the source of truth).
 
-## 6. Tests (same change, CLAUDE.md §4)
+- Prefs (`src/lib/prefs.ts` + `prefsStore.ts`): `dayCheckInEnabled: false`,
+  `dayCheckInHour: 21`, `dayCheckInMinute: 0` (21:00 so it never collides with
+  the Goals check-in's 20:00 default). Store action
+  `setDayCheckIn(enabled, hour, minute)` — sets + persists in one call, like
+  `setCheckIn`.
+- `ensureDayCheckInCategory()` — `Notifications.setNotificationCategoryAsync(
+  DAY_CHECK_IN_CATEGORY, [{ identifier: fine, buttonTitle: 'Fine day',
+  options: { opensAppToForeground: true } }, { identifier: rough, buttonTitle:
+  'Rough day', options: { opensAppToForeground: true } }])`.
+  **`opensAppToForeground: true` is required**: there's no background task
+  runner (no `expo-task-manager`, not approved), so our JS only runs if the
+  app opens.
+- `refreshDayCheckIn(hour, minute)` — cancel every scheduled notification whose
+  `content.data.slot === DAY_CHECK_IN_SLOT`; look up whether today is already
+  answered (repository: `getDayCheckIn(date)` — add it); `ensureAndroidChannel()`
+  (reuse `CHANNEL_ID`, no new channel); `ensureDayCheckInCategory()`; then
+  schedule each `dayCheckInFireDates(...)` date as a one-shot
+  (`SchedulableTriggerInputTypes.DATE`, `channelId: CHANNEL_ID`) with
+  `title/body` from the model, `categoryIdentifier: DAY_CHECK_IN_CATEGORY`,
+  `data: { slot, date: formatDateInput(fireDate), hour, minute }`.
+- `disableDayCheckIn()` — cancel the slot only.
+- `refreshDayCheckInIfEnabled()` — reads prefs; no-op when disabled.
+  Fire-and-forget at call sites.
+- `recordDayCheckIn(date, status)` — `upsertDayCheckIn` then
+  `void refreshDayCheckInIfEnabled()` (answering today drops today's pending
+  notification from the horizon).
 
-- `src/lib/__tests__/medicationEntry.test.ts` — defaults (active only,
-  unselected, defaults pre-filled); edit state includes inactive meds;
-  every validation branch; partial dose 0.5; override doesn't alter the
-  input medication objects (deep-equal before/after); `timeKnown: false` →
-  local noon.
-- `src/lib/__tests__/journal.test.ts` — item mapping, summary text (inactive
-  name, snapshot dose not the current default), `'meds'` filter + other
-  filters exclude meds, merged sort order, dots include med days.
-- `chunk` helper test; repository-level logic is exercised via mocked screen
-  tests as elsewhere (no DB test harness exists).
-- Screen tests (mock repository + hooks like siblings): entry form select /
-  override / save payload; delete confirm; Meds tab fixed Create entry
-  (enabled/disabled), recent doses + empty state; history filter; Journal
-  Meds chip shows only medication rows and "All" shows both.
-- Existing Journal/explore, meds, EntryList callers' tests stay green.
+Call `void refreshDayCheckInIfEnabled()` in `MigrationGate`'s success effect
+next to `refreshCheckInIfEnabled()`.
 
-## 7. Definition of done
+## 6. Handling the buttons — `src/features/checkin/useDayCheckInResponses.ts`
 
-- `npm run typecheck` && `npm run lint` clean; **`npm run bundle:check`**
-  (asset regeneration).
-- **Targeted Jest only (owner instruction — never the full suite):** every
-  test file you created or touched + `journal`, `backup`, `medications`,
-  `explore`, `meds`, `settings-button`, and any test of an `EntryList`
-  caller. `(tabs)` paths via `npx jest --runTestsByPath "<path>"`.
+```ts
+export function useDayCheckInResponses(): void
+```
+
+- `const response = Notifications.useLastNotificationResponse();` in an effect:
+  `parseDayCheckInResponse(response)` → null ⇒ do nothing (a body tap just
+  opens the app, as today). Otherwise, **once per
+  `request.identifier + actionIdentifier`** (track in a `useRef<Set>`):
+  `await recordDayCheckIn(date, status)`, then
+  `Notifications.dismissNotificationAsync(request.identifier)` (Android leaves
+  the notification up after an action tap) and
+  `Notifications.clearLastNotificationResponse()` (so a relaunch doesn't
+  re-apply it). Swallow + ignore errors from dismiss/clear; a failed record
+  must not crash the screen.
+- **Mounted from the Home screen** (`(tabs)/index.tsx`), not the root: Home is
+  the initial tab, so it's mounted whenever the app is, and only after the
+  migration gate — the write can't race the migrations. No navigation on
+  answer (keep it minimal; the Home card reflects the answer).
+
+## 7. Screens
+
+- **Home card** — new `src/features/checkin/DayCheckInCard.tsx`, rendered in
+  `(tabs)/index.tsx` between the action buttons and "Recent":
+  - Props `{ date: string }`. Home computes today's key in its existing
+    `useFocusEffect` (state, not `Date.now()` in render) so a day rollover
+    refreshes on focus. The card reads today's row via `useDayCheckIns()`.
+  - Heading "How was today?" + two side-by-side toggle buttons **"Fine day"**
+    / **"Rough day"** (`accessibilityRole="button"`,
+    `accessibilityState={{ selected }}`, labels **"Mark today as a fine day"**
+    / **"Mark today as a rough day"**, `testID="day-check-in-fine"` /
+    `"day-check-in-rough"`). The selected one is filled (theme `primary` /
+    `primaryText`, like the Scan CTA); tapping the other switches. Tap →
+    `recordDayCheckIn(date, status)` + `haptics` light tap if the wrapper
+    exposes one (`src/lib/haptics.ts`).
+  - When today is **rough**: one secondary line "Rough day noted." + a link
+    button **"Add a symptom"** (`accessibilityLabel="Add a symptom for today"`)
+    → `router.push('/symptom/new')`. ⚠ Do **not** reuse the label/text
+    "Log a symptom" — the existing 🤢 button owns it and Maestro flows tap it.
+  - Keep it compact (one row of buttons); no emoji (CLAUDE.md §7 scale is for
+    BM feel only).
+- **Settings** (`src/app/settings.tsx`) — a **"Day check-in"** section right
+  after the meal reminders: one line of copy ("An evening notification asking
+  whether today was a fine day or a rough day — answering takes one tap."),
+  a `Switch` (`accessibilityLabel="Day check-in"`) and a `TimeField`
+  (`accessibilityLabel="Day check-in time"`). Switch on → request permission
+  via `ensureNotificationPermission` (Alert on decline, same copy style as the
+  reminders), `setDayCheckIn(true, …)`, `refreshDayCheckIn`. Off →
+  `setDayCheckIn(false, …)`, `disableDayCheckIn`. Time change →
+  persist, refresh if enabled. Read state from `usePrefsStore`.
+  ⚠ Never name anything "Daily check-in" — that's the Goals tab's switch.
+- **Insights** (`(tabs)/insights.tsx`) — in the "Your journal so far" block,
+  under the existing counts line, when `dayCoverage(entries, checkIns, now)` is
+  non-null: `"Days covered: 19 of 28 (last 28 days) · 6 checked in"` (use the
+  real `total` in both places; singular "day" when total is 1), then a
+  `textSecondary` line "A day counts when you logged something or answered the
+  day check-in." `checkIns` from `useDayCheckIns()`. **Nothing else on the
+  screen changes.**
+
+## 8. Tests (same change, CLAUDE.md §4)
+
+- `src/lib/__tests__/dayCoverage.test.ts` — null with no activity; clip to
+  first activity; entries-only, check-ins-only and both on one day count once;
+  `checkedIn` counts; future items ignored; a DST-crossing window has exactly
+  `windowDays` keys (use a fixed `now`).
+- `src/features/checkin/__tests__/dayCheckInModel.test.ts` — fire dates: today
+  included only when ahead **and** unanswered; always 6 following days; hour/
+  minute honored. `parseDayCheckInResponse`: both actions; body tap
+  (`DEFAULT_ACTION_IDENTIFIER`-style id) → null; other slot → null; bad/missing
+  `date` → null.
+- `src/features/checkin/__tests__/dayCheckInService.test.ts` (mock
+  `expo-notifications`, repository, prefs like `checkInService.test.ts`) —
+  cancels only its own slot (a reminder + a goal check-in survive); schedules
+  7 or 6 one-shots with `categoryIdentifier` + `data.date`; answered today ⇒
+  no today fire; disabled ⇒ `refreshDayCheckInIfEnabled` schedules nothing;
+  `recordDayCheckIn` upserts then refreshes.
+- `useDayCheckInResponses` test — a fine action records the notification's
+  `date` (not today's), dismisses + clears; the same response twice records
+  once; a body tap records nothing.
+- `DayCheckInCard` test — tap Fine records `('<date>','fine')`; selected state;
+  rough shows "Add a symptom" → push `/symptom/new`.
+- `backup.test.ts` — v4 round-trip; v3 file (no key) → `dayCheckIns: []`;
+  invalid status/date → error message with index.
+- Update, don't weaken: `index.test.tsx` (mock the card + responder hook),
+  `insights.test.tsx` (coverage line shown/hidden), `settings.test.tsx`
+  (switch → permission + refresh; export includes check-ins; import summary),
+  `prefsStore`/`prefs` tests for the new fields.
+
+## 9. Definition of done
+
+- `npm run typecheck` && `npm run lint` clean; **`npm run bundle:check`** (the
+  new migration is imported through `migrations.js` — Metro must inline it).
+- **Targeted Jest only (owner instruction — never the full suite):** every test
+  file you created or touched + `backup`, `checkInService`, `checkInModel`,
+  `prefs`, `prefsStore`, `settings`, `index`, `insights`, `goals`.
+  `(tabs)` paths via `npx jest --runTestsByPath "<path>"` (plain path args
+  silently skip them).
 - No `@ts-ignore`, no lint disables, no `any` without `// reason:`, no new
-  deps, no schema change (if you think you need one, stop and report).
+  deps, no schema change beyond §1 (if you think you need one, stop and
+  report).
 - Do NOT run Maestro, EAS, or `npx expo start` (Metro runs on 8081 — leave
-  it). Do NOT edit `flows/`.
+  it). Do NOT edit `flows/`. Do NOT edit `CLAUDE.md` / `docs/` (the review
+  session updates them).
 - Commits (stage by path), suggested split:
-  `fix(icons): real gear glyph for Settings; make generate-icons runnable` ·
-  `fix(backup): chunk id-preserving medication restores` ·
-  `feat(meds): medication entry model + event repository + live hooks` ·
-  `feat(meds): log and edit medication entries; recent doses + history` ·
-  `feat(journal): medication entries in the Journal with a Meds filter` —
+  `feat(db): day_check_in table + additive migration 0010` ·
+  `feat(checkin): day check-in model, repository, coverage helper` ·
+  `feat(backup): include day check-ins (backup v4)` ·
+  `feat(checkin): day check-in notification with Fine/Rough actions + Settings switch` ·
+  `feat(checkin): Home check-in card and Insights day coverage` —
   each ending `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`.
   Do NOT push.
-- Execute summary: files per commit, hashes, rung + bundle:check results,
-  targeted Jest counts, deviations with reasons, review/device-test pointers.
+- Execute summary: files per commit, hashes, the generated SQL verbatim, rung +
+  bundle:check results, targeted Jest counts, deviations with reasons,
+  review/device-test pointers.
 
-## 8. After this (review + test session)
+## 10. After this (review + test session)
 
-- Opus review; re-run rungs + bundle:check.
-- New flow: log a two-medication entry with one dose overridden to half →
-  Recent doses shows it → Journal "Meds" chip shows it, "Food" hides it →
-  edit notes → delete (confirm) → gone everywhere; medication defaults
-  unchanged throughout.
-- Regression: `r-medications`, `journal-calendar`, `01d-browse-edit`,
-  `nav-tabs` (gear icon visual check in a screenshot).
+- Opus review: invariants (§0), migration SQL, slot isolation, the
+  answer-date rule, restore precedence; re-run rungs + bundle:check.
+- Update `CLAUDE.md` §6 (new entity) + §0 (decision note), `docs/PROGRESS.md`.
+- New Maestro flow (Opus writes it): Home card Fine → Rough → "Add a symptom"
+  opens the form → back; Insights shows the coverage line; Settings Day
+  check-in switch + time. Notification action buttons are a **manual** device
+  check (Maestro can't drive the shade reliably): enable, set time 1–2 min
+  ahead, tap "Rough day" from the shade → app opens, Home card shows Rough.
+- Regression (targeted): the Home flows (recent re-log, keyboard dismissal),
+  `nav-tabs`, the settings/backup flow, the Goals check-in flow.
