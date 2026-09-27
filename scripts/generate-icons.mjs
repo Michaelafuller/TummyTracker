@@ -1,7 +1,15 @@
-import { readFileSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { Resvg } from '@resvg/resvg-js';
 
 function rasterize(svgPath, outputPath, width, height, options = {}) {
+  // Some sources (the old icon.svg / icon-monochrome.svg) were deleted once the
+  // real app icon PNGs were committed directly (65e7014) — skip them instead of
+  // throwing, so this script still runs end-to-end for the assets that remain
+  // (tab icons in particular). Don't recreate or change the app icons here.
+  if (!existsSync(svgPath)) {
+    console.warn(`  – skipped (missing source): ${svgPath}`);
+    return;
+  }
   const svg = readFileSync(svgPath, 'utf8');
   const resvg = new Resvg(svg, {
     fitTo: { mode: 'width', value: width },
