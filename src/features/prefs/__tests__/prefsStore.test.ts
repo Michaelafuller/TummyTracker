@@ -16,6 +16,11 @@ beforeEach(() => {
     dayCheckInEnabled: false,
     dayCheckInHour: 21,
     dayCheckInMinute: 0,
+    autoBackupDirUri: null,
+    autoBackupDirName: null,
+    lastBackupAt: null,
+    lastAutoBackupAt: null,
+    autoBackupError: null,
     loaded: false,
   });
   jest.clearAllMocks();
@@ -27,6 +32,24 @@ describe('prefsStore.load', () => {
     await usePrefsStore.getState().load();
     expect(usePrefsStore.getState().offlineMode).toBe(true);
     expect(usePrefsStore.getState().loaded).toBe(true);
+  });
+
+  it('picks up the automatic-backup fields (GitHub #14)', async () => {
+    (loadPrefs as jest.Mock).mockResolvedValue({
+      autoBackupDirUri: 'content://tree/abc',
+      autoBackupDirName: 'Documents',
+      lastBackupAt: 1000,
+      lastAutoBackupAt: 900,
+      autoBackupError: 'Could not write.',
+    });
+    await usePrefsStore.getState().load();
+    expect(usePrefsStore.getState()).toMatchObject({
+      autoBackupDirUri: 'content://tree/abc',
+      autoBackupDirName: 'Documents',
+      lastBackupAt: 1000,
+      lastAutoBackupAt: 900,
+      autoBackupError: 'Could not write.',
+    });
   });
 
   it('marks loaded:true even when offlineMode is false', async () => {

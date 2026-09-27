@@ -71,6 +71,11 @@ const DEFAULT_TEST_PREFS: AppPrefs = {
   dayCheckInEnabled: false,
   dayCheckInHour: 21,
   dayCheckInMinute: 0,
+  autoBackupDirUri: null,
+  autoBackupDirName: null,
+  lastBackupAt: null,
+  lastAutoBackupAt: null,
+  autoBackupError: null,
 };
 
 function prefs(overrides: Partial<AppPrefs> = {}): AppPrefs {

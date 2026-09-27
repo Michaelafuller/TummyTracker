@@ -290,6 +290,17 @@ export async function listLogEntries(): Promise<LogEntry[]> {
 }
 
 /**
+ * True once the journal has at least one log entry — gates the automatic
+ * folder backup (never write an empty backup, HANDOFF.md §3, GitHub #14) and
+ * the Home "back up now" nudge (never nudge before there's anything to back
+ * up). `limit(1)` so this never scans the whole table.
+ */
+export async function hasAnyLogEntry(): Promise<boolean> {
+  const rows = await db.select({ id: logEntry.id }).from(logEntry).limit(1);
+  return rows.length > 0;
+}
+
+/**
  * Returns the most recent distinct-by-name food-type entries (newest first).
  * Used for the Home screen quick-add chips. Full rows are returned so the caller
  * can use `logEntryToFormState` to pre-fill a new entry with all prior nutrition.

@@ -24,6 +24,11 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
   dayCheckInEnabled: false,
   dayCheckInHour: 21,
   dayCheckInMinute: 0,
+  autoBackupDirUri: null,
+  autoBackupDirName: null,
+  lastBackupAt: null,
+  lastAutoBackupAt: null,
+  autoBackupError: null,
   loaded: false,
   load: async () => {
     const prefs = await loadPrefs();

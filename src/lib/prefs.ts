@@ -23,6 +23,16 @@ export type AppPrefs = {
   dayCheckInHour: number;
   /** Local minute (0-59) the day check-in fires at. */
   dayCheckInMinute: number;
+  /** SAF tree URI of the user's automatic-backup folder (Android), or null = off. */
+  autoBackupDirUri: string | null;
+  /** Folder display name for Settings ("Documents"), captured when picked. */
+  autoBackupDirName: string | null;
+  /** Epoch ms of the last successful backup of ANY kind (folder write or share-sheet export). */
+  lastBackupAt: number | null;
+  /** Epoch ms of the last successful AUTOMATIC folder backup — drives "once per day". */
+  lastAutoBackupAt: number | null;
+  /** Last automatic/folder backup failure message, cleared on the next success. */
+  autoBackupError: string | null;
 };
 
 const DEFAULT_PREFS: AppPrefs = {
@@ -35,6 +45,11 @@ const DEFAULT_PREFS: AppPrefs = {
   dayCheckInEnabled: false,
   dayCheckInHour: 21,
   dayCheckInMinute: 0,
+  autoBackupDirUri: null,
+  autoBackupDirName: null,
+  lastBackupAt: null,
+  lastAutoBackupAt: null,
+  autoBackupError: null,
 };
 const PREFS_FILENAME = 'prefs.json';
 
