@@ -30,7 +30,7 @@ jest.mock('@/db/repository', () => ({
   listAllMedicationEvents: jest.fn(),
   listAllMedicationDoses: jest.fn(),
   insertMedicationsPreservingIds: jest.fn(),
-  insertMedicationEventsPreservingIds: jest.fn(),
+  insertMedicationEventsPreservingIds: jest.fn().mockResolvedValue({ inserted: 0, skipped: 0, insertedIds: [] }),
   insertMedicationDosesPreservingIds: jest.fn(),
 }));
 

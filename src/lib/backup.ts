@@ -310,3 +310,18 @@ export function parseBackupJson(text: string): ParseResult {
 
 // Re-export so callers only need one import.
 export { FOOD_TYPES };
+
+/**
+ * Dose rows a restore may insert: only those whose event this same restore
+ * inserted. An event that already exists on the device is the source of truth
+ * for its own doses — editing an entry replaces its dose rows with fresh ids,
+ * so an older backup's dose rows for that event would otherwise be merged in
+ * as duplicates/stale doses. The event is the unit of restore.
+ */
+export function dosesForRestoredEvents<T extends { eventId: string }>(
+  doses: readonly T[],
+  insertedEventIds: readonly string[],
+): T[] {
+  const inserted = new Set(insertedEventIds);
+  return doses.filter((dose) => inserted.has(dose.eventId));
+}

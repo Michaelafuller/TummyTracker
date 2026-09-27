@@ -525,8 +525,8 @@ export async function insertMedicationsPreservingIds(
 /** Same chunked, id-preserving skip-if-exists behavior as {@link insertMedicationsPreservingIds}, for medication_event rows. */
 export async function insertMedicationEventsPreservingIds(
   rows: MedicationEvent[],
-): Promise<{ inserted: number; skipped: number }> {
-  if (rows.length === 0) return { inserted: 0, skipped: 0 };
+): Promise<{ inserted: number; skipped: number; insertedIds: string[] }> {
+  if (rows.length === 0) return { inserted: 0, skipped: 0, insertedIds: [] };
   const existingIds = new Set<string>();
   for (const idBatch of chunk(rows.map((row) => row.id), RESTORE_CHUNK_SIZE)) {
     const existing = await db
@@ -539,7 +539,14 @@ export async function insertMedicationEventsPreservingIds(
   for (const insertBatch of chunk(toInsert, RESTORE_CHUNK_SIZE)) {
     await db.insert(medicationEvent).values(insertBatch);
   }
-  return { inserted: toInsert.length, skipped: rows.length - toInsert.length };
+  return {
+    inserted: toInsert.length,
+    skipped: rows.length - toInsert.length,
+    // Restore gates dose rows on these (dosesForRestoredEvents): an event that
+    // already exists keeps ITS current doses — an edit re-mints dose ids, so a
+    // backup's older dose rows for that event would otherwise be re-added.
+    insertedIds: toInsert.map((row) => row.id),
+  };
 }
 
 /** Same chunked, id-preserving skip-if-exists behavior as {@link insertMedicationsPreservingIds}, for medication_dose rows. */

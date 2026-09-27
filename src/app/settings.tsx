@@ -30,7 +30,7 @@ import {
 } from '@/features/notifications/model';
 import { disableReminder, enableReminder, getReminders } from '@/features/notifications/service';
 import { usePrefsStore } from '@/features/prefs/prefsStore';
-import { entriesToJson, parseBackupJson } from '@/lib/backup';
+import { dosesForRestoredEvents, entriesToJson, parseBackupJson } from '@/lib/backup';
 import { useTheme } from '@/hooks/use-theme';
 import { buildReportHtml, REPORT_RANGES, type ReportRangeDays } from '@/lib/report';
 
@@ -145,8 +145,12 @@ export default function SettingsScreen() {
       // Medications preserve their ids on import (unlike log entries above) —
       // #11's dose records reference a stable medicationId (HANDOFF.md Cycle A).
       const medResult = await insertMedicationsPreservingIds(parsed.medications);
-      await insertMedicationEventsPreservingIds(parsed.medicationEvents);
-      await insertMedicationDosesPreservingIds(parsed.medicationDoses);
+      const eventResult = await insertMedicationEventsPreservingIds(parsed.medicationEvents);
+      // Only doses of events restored just now — an existing event keeps its own
+      // (possibly edited) doses; see dosesForRestoredEvents.
+      await insertMedicationDosesPreservingIds(
+        dosesForRestoredEvents(parsed.medicationDoses, eventResult.insertedIds),
+      );
 
       const medSummary =
         parsed.medications.length > 0

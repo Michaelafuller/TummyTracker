@@ -1,5 +1,5 @@
 import type { LogEntry, MealComponent, Medication, MedicationDose, MedicationEvent } from '@/db/schema';
-import { entriesToJson, parseBackupJson } from '../backup';
+import { dosesForRestoredEvents, entriesToJson, parseBackupJson } from '../backup';
 
 const BASE_ENTRY: LogEntry = {
   id: 'abc123',
@@ -290,5 +290,25 @@ describe('parseBackupJson error cases', () => {
     expect(result.entries[0].barcode).toBeNull();
     expect(result.entries[0].calories).toBeNull();
     expect(result.entries[0].servingG).toBeNull();
+  });
+});
+
+describe('dosesForRestoredEvents', () => {
+  const dose = (id: string, eventId: string) => ({ id, eventId });
+
+  it('keeps only doses whose event this restore inserted', () => {
+    const doses = [dose('d1', 'newEvent'), dose('d2', 'newEvent'), dose('d3', 'existingEvent')];
+    expect(dosesForRestoredEvents(doses, ['newEvent']).map((d) => d.id)).toEqual(['d1', 'd2']);
+  });
+
+  it('adds nothing to an event that already exists (an edit re-minted its dose ids)', () => {
+    // The device's edited event keeps its current doses; the backup's older
+    // dose rows for it (different ids) must not be merged in as duplicates.
+    const staleBackupDoses = [dose('old-d1', 'e1'), dose('old-d2', 'e1')];
+    expect(dosesForRestoredEvents(staleBackupDoses, [])).toEqual([]);
+  });
+
+  it('returns nothing for an empty backup', () => {
+    expect(dosesForRestoredEvents([], ['e1'])).toEqual([]);
   });
 });
