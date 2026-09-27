@@ -14,6 +14,22 @@ export interface DateTimeFieldProps {
   onDateChange: (value: string) => void;
   onTimeChange: (value: string) => void;
   error?: string;
+  /** FormField's own label. Defaults to "When" — every existing caller is unchanged. */
+  label?: string;
+  /**
+   * 'date' hides the time chip and the Now shortcut, for a date-only field
+   * (e.g. a medication's optional start/end date, HANDOFF.md §7). Defaults to
+   * 'datetime', so every existing caller renders exactly as before.
+   */
+  mode?: 'datetime' | 'date';
+  /** Shows a "Clear" link (when a date is set) that lets an optional date be emptied. */
+  onClear?: () => void;
+  /** Overrides the "Choose date" chip's accessibilityLabel — needed when two
+   *  DateTimeFields render on one screen (e.g. Start date / End date) so each
+   *  chip is uniquely findable. Defaults to "Choose date". */
+  dateAccessibilityLabel?: string;
+  /** Overrides the Clear link's accessibilityLabel. Defaults to "Clear date". */
+  clearAccessibilityLabel?: string;
 }
 
 /** Resolves the current date/time state as a Date object for the picker initial value. */
@@ -40,9 +56,15 @@ export function DateTimeField({
   onDateChange,
   onTimeChange,
   error,
+  label = 'When',
+  mode = 'datetime',
+  onClear,
+  dateAccessibilityLabel = 'Choose date',
+  clearAccessibilityLabel = 'Clear date',
 }: DateTimeFieldProps) {
   const theme = useTheme();
   const [pickerMode, setPickerMode] = useState<'date' | 'time' | null>(null);
+  const isDateOnly = mode === 'date';
 
   function commit(mode: 'date' | 'time', date: Date) {
     if (mode === 'date') {
@@ -80,32 +102,47 @@ export function DateTimeField({
   const isIos = Platform.OS === 'ios';
 
   return (
-    <FormField label="When" error={error}>
+    <FormField label={label} error={error}>
       <View style={styles.row}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Choose date"
+          accessibilityLabel={dateAccessibilityLabel}
           onPress={() => setPickerMode('date')}
           style={[chipStyle, styles.flex]}>
           <ThemedText type="small">{dateInput || 'Date'}</ThemedText>
         </Pressable>
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Choose time"
-          onPress={() => setPickerMode('time')}
-          style={chipStyle}>
-          <ThemedText type="small">{timeDisplay || 'Time'}</ThemedText>
-        </Pressable>
+        {!isDateOnly && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Choose time"
+            onPress={() => setPickerMode('time')}
+            style={chipStyle}>
+            <ThemedText type="small">{timeDisplay || 'Time'}</ThemedText>
+          </Pressable>
+        )}
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Set to now"
-          onPress={handleNow}
-          style={[chipStyle, styles.nowChip]}>
-          <ThemedText type="smallBold">Now</ThemedText>
-        </Pressable>
+        {!isDateOnly && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Set to now"
+            onPress={handleNow}
+            style={[chipStyle, styles.nowChip]}>
+            <ThemedText type="smallBold">Now</ThemedText>
+          </Pressable>
+        )}
       </View>
+
+      {onClear && dateInput ? (
+        <Pressable
+          onPress={onClear}
+          accessibilityRole="button"
+          accessibilityLabel={clearAccessibilityLabel}>
+          <ThemedText type="link" themeColor="textSecondary">
+            Clear
+          </ThemedText>
+        </Pressable>
+      ) : null}
 
       {pickerMode !== null && !isIos && (
         <DateTimePicker

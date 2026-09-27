@@ -110,3 +110,115 @@ describe('DateTimeField picker dismissal', () => {
     expect(onTimeChange).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('DateTimeField mode="date" (HANDOFF.md §7 — additive date-only mode)', () => {
+  it('hides the time chip and the Now shortcut, and keeps the date chip', async () => {
+    const { getByLabelText, queryByLabelText } = await render(
+      <DateTimeField
+        dateInput="2026-06-27"
+        timeInput="00:00"
+        onDateChange={jest.fn()}
+        onTimeChange={jest.fn()}
+        mode="date"
+      />,
+    );
+
+    expect(getByLabelText('Choose date')).toBeTruthy();
+    expect(queryByLabelText('Choose time')).toBeNull();
+    expect(queryByLabelText('Set to now')).toBeNull();
+  });
+
+  it('shows a Clear link when onClear is set and a date is present, and pressing it calls onClear', async () => {
+    const onClear = jest.fn();
+    const { getByLabelText } = await render(
+      <DateTimeField
+        dateInput="2026-06-27"
+        timeInput="00:00"
+        onDateChange={jest.fn()}
+        onTimeChange={jest.fn()}
+        mode="date"
+        onClear={onClear}
+      />,
+    );
+
+    await fireEvent.press(getByLabelText('Clear date'));
+    expect(onClear).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not show Clear when the date is empty, even with onClear set', async () => {
+    const { queryByLabelText } = await render(
+      <DateTimeField
+        dateInput=""
+        timeInput="00:00"
+        onDateChange={jest.fn()}
+        onTimeChange={jest.fn()}
+        mode="date"
+        onClear={jest.fn()}
+      />,
+    );
+
+    expect(queryByLabelText('Clear date')).toBeNull();
+  });
+
+  it('does not show Clear when onClear is omitted, even with a date set', async () => {
+    const { queryByLabelText } = await render(
+      <DateTimeField
+        dateInput="2026-06-27"
+        timeInput="00:00"
+        onDateChange={jest.fn()}
+        onTimeChange={jest.fn()}
+        mode="date"
+      />,
+    );
+
+    expect(queryByLabelText('Clear date')).toBeNull();
+  });
+
+  it('supports a custom label and a custom date-chip accessibility label, for two date fields on one screen', async () => {
+    const { getByText, getByLabelText } = await render(
+      <>
+        <DateTimeField
+          dateInput="2026-01-01"
+          timeInput="00:00"
+          onDateChange={jest.fn()}
+          onTimeChange={jest.fn()}
+          mode="date"
+          label="Start date"
+          dateAccessibilityLabel="Choose start date"
+        />
+        <DateTimeField
+          dateInput="2026-02-01"
+          timeInput="00:00"
+          onDateChange={jest.fn()}
+          onTimeChange={jest.fn()}
+          mode="date"
+          label="End date"
+          dateAccessibilityLabel="Choose end date"
+        />
+      </>,
+    );
+
+    expect(getByText('Start date')).toBeTruthy();
+    expect(getByText('End date')).toBeTruthy();
+    expect(getByLabelText('Choose start date')).toBeTruthy();
+    expect(getByLabelText('Choose end date')).toBeTruthy();
+  });
+});
+
+describe('DateTimeField default mode ("datetime") is unchanged', () => {
+  it('still shows the time chip and Now shortcut, with the default "When" label', async () => {
+    const { getByLabelText, getByText } = await render(
+      <DateTimeField
+        dateInput="2026-06-27"
+        timeInput="08:30"
+        onDateChange={jest.fn()}
+        onTimeChange={jest.fn()}
+      />,
+    );
+
+    expect(getByText('When')).toBeTruthy();
+    expect(getByLabelText('Choose date')).toBeTruthy();
+    expect(getByLabelText('Choose time')).toBeTruthy();
+    expect(getByLabelText('Set to now')).toBeTruthy();
+  });
+});

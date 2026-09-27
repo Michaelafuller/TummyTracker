@@ -33,6 +33,7 @@ import {
   type MedicationEvent,
   type NewLogEntry,
   type NewMealComponent,
+  type NewMedication,
   type WatchlistItem,
 } from './schema';
 
@@ -419,6 +420,54 @@ export async function upsertGoal(
 
 export async function removeGoal(nutrient: NutritionField): Promise<void> {
   await db.delete(goal).where(eq(goal.nutrient, nutrient));
+}
+
+/** Fields a caller supplies on create — id and timestamps are filled in here. */
+export type CreateMedicationInput = Omit<NewMedication, 'id' | 'createdAt' | 'updatedAt'>;
+
+/** Fields a caller may patch. id/createdAt are immutable; updatedAt is managed here. */
+export type UpdateMedicationInput = Partial<Omit<NewMedication, 'id' | 'createdAt' | 'updatedAt'>>;
+
+/** Every medication, active first, then alphabetical by name (HANDOFF.md #5 list order). */
+export async function listMedications(): Promise<Medication[]> {
+  return db.select().from(medication).orderBy(desc(medication.isActive), asc(medication.name));
+}
+
+export async function getMedication(id: string): Promise<Medication | undefined> {
+  const rows = await db.select().from(medication).where(eq(medication.id, id)).limit(1);
+  return rows[0];
+}
+
+export async function createMedication(input: CreateMedicationInput): Promise<Medication> {
+  const now = Date.now();
+  const row: NewMedication = {
+    ...input,
+    id: createId(),
+    createdAt: now,
+    updatedAt: now,
+  };
+  await db.insert(medication).values(row);
+  return row as Medication;
+}
+
+/**
+ * Patches a medication's own fields. Never touches `medication_dose` rows
+ * (invariant, HANDOFF.md §0) — a dose snapshots its own dose/unit at log time,
+ * so editing the medication here can never rewrite history.
+ */
+export async function updateMedication(id: string, patch: UpdateMedicationInput): Promise<void> {
+  await db
+    .update(medication)
+    .set({ ...patch, updatedAt: Date.now() })
+    .where(eq(medication.id, id));
+}
+
+/**
+ * Deactivate/reactivate only — there is no `deleteMedication` (invariant,
+ * HANDOFF.md §0: a medication is never deleted).
+ */
+export async function setMedicationActive(id: string, isActive: boolean): Promise<void> {
+  await db.update(medication).set({ isActive, updatedAt: Date.now() }).where(eq(medication.id, id));
 }
 
 /** All medication rows — used by the backup export (src/lib/backup.ts). */

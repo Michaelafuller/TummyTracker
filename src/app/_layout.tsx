@@ -50,6 +50,9 @@ export default function RootLayout() {
             <AnimatedSplashOverlay />
             <Stack>
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="settings" options={{ title: 'Settings' }} />
+              <Stack.Screen name="medication/new" options={{ title: 'Add medication', presentation: 'modal' }} />
+              <Stack.Screen name="medication/[id]" options={{ title: 'Edit medication' }} />
               <Stack.Screen name="entry/new" options={{ title: 'Add entry', presentation: 'modal' }} />
               <Stack.Screen name="bm/new" options={{ title: 'Log bowel movement', presentation: 'modal' }} />
               <Stack.Screen name="symptom/new" options={{ title: 'Log symptom', presentation: 'modal' }} />
