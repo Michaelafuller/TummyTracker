@@ -1,10 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, type ComponentType, type ReactNode } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, AppState, StyleSheet, View } from 'react-native';
 
 import { Spacing } from '@/constants/theme';
 import { useDatabaseMigrations } from '@/db/migrate';
 import { runTagBackfillOnce } from '@/db/tagBackfillRunner';
+import { runAutoBackupIfDue } from '@/features/backup/backupService';
 import { refreshDayCheckInIfEnabled } from '@/features/checkin/dayCheckInService';
 import { refreshCheckInIfEnabled } from '@/features/goals/checkInService';
 import { useGoalsStore } from '@/features/goals/goalsStore';
@@ -56,7 +57,22 @@ function MigrationGate({ children }: { children: ReactNode }) {
       void refreshCheckInIfEnabled();
       // Same re-arming for the day check-in (GitHub #13) — its own slot.
       void refreshDayCheckInIfEnabled();
+      // Automatic folder backup (GitHub #14, Android only) — once per local
+      // day, at app open.
+      void runAutoBackupIfDue();
     }
+  }, [success]);
+
+  // Foreground resume also triggers the automatic-backup check — app-open and
+  // resume can both fire, and `backUpToFolderNow`'s single-flight guard
+  // (HANDOFF.md §0) keeps that safe. Registered only once migrations have
+  // succeeded so this can never race the migration gate.
+  useEffect(() => {
+    if (!success) return;
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void runAutoBackupIfDue();
+    });
+    return () => subscription.remove();
   }, [success]);
 
   if (error) {
