@@ -68,6 +68,7 @@ export default function RootLayout() {
                 options={{ title: 'Edit component' }}
               />
               <Stack.Screen name="insight/detail" options={{ title: 'Finding' }} />
+              <Stack.Screen name="outcome/[id]" options={{ title: 'What came before' }} />
               <Stack.Screen
                 name="meal/component"
                 options={{ title: 'Confirm item', presentation: 'modal' }}

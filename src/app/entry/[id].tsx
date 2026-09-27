@@ -15,6 +15,7 @@ import {
   getMealComponents,
   updateLogEntry,
 } from '@/db/repository';
+import { isOutcome } from '@/features/analysis/temporal';
 import { BmForm } from '@/features/bm/BmForm';
 import { bmEntryToFormState, type BuiltBmEntry } from '@/features/bm/formModel';
 import type { BuiltLogEntry } from '@/features/logging/formModel';
@@ -147,8 +148,28 @@ export default function EditEntryScreen() {
     );
   }
 
+  // Rough-outcome entry point (GitHub #15): only BMs/symptoms flagged by the
+  // engine's own isOutcome get the "See what came before" banner — never food
+  // entries, sitting beside (not inside) the watched-ingredient banner logic
+  // above, which is food-only.
+  const showsOutcomeBanner =
+    (entry.type === 'bowel_movement' || entry.type === 'symptom') && isOutcome(entry);
+
   return (
     <FormScrollView>
+      {showsOutcomeBanner ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="See what came before"
+          testID="see-what-came-before"
+          onPress={() => router.push(`/outcome/${entry.id}`)}
+          style={[styles.outcomeBanner, { backgroundColor: theme.backgroundSelected, borderColor: theme.border }]}>
+          <ThemedText type="smallBold">Rough outcome</ThemedText>
+          <ThemedText type="link" themeColor="link">
+            See what came before
+          </ThemedText>
+        </Pressable>
+      ) : null}
       {watchedMatches.length > 0 ? (
         <View
           accessibilityRole="alert"
@@ -279,6 +300,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   watchBanner: {
+    gap: Spacing.half,
+    padding: Spacing.three,
+    borderRadius: Spacing.three,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  outcomeBanner: {
     gap: Spacing.half,
     padding: Spacing.three,
     borderRadius: Spacing.three,

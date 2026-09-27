@@ -209,3 +209,71 @@ describe('EditEntryScreen watched-ingredient banner', () => {
     expect(await findByText('soy — matched: soybeans')).toBeTruthy();
   });
 });
+
+describe('EditEntryScreen "See what came before" banner', () => {
+  it('shows the banner for a rough (bad-Bristol) BM', async () => {
+    (getLogEntry as jest.Mock).mockResolvedValue({
+      ...BASE_ENTRY,
+      type: 'bowel_movement',
+      name: 'BM',
+      bristolScale: 2,
+    });
+    const { findByTestId } = await render(<EditEntryScreen />);
+    expect(await findByTestId('see-what-came-before')).toBeTruthy();
+  });
+
+  it('shows the banner for a severity-3 symptom', async () => {
+    (getLogEntry as jest.Mock).mockResolvedValue({
+      ...BASE_ENTRY,
+      type: 'symptom',
+      name: 'Symptom',
+      severity: 3,
+    });
+    const { findByTestId } = await render(<EditEntryScreen />);
+    expect(await findByTestId('see-what-came-before')).toBeTruthy();
+  });
+
+  it('hides the banner for a food entry', async () => {
+    (getLogEntry as jest.Mock).mockResolvedValue(BASE_ENTRY);
+    const { queryByTestId, findByText } = await render(<EditEntryScreen />);
+    await findByText('Lunch');
+    expect(queryByTestId('see-what-came-before')).toBeNull();
+  });
+
+  it('hides the banner for a non-rough BM (Bristol 4, feel 4)', async () => {
+    (getLogEntry as jest.Mock).mockResolvedValue({
+      ...BASE_ENTRY,
+      type: 'bowel_movement',
+      name: 'BM',
+      bristolScale: 4,
+      sentiment: 4,
+    });
+    const { queryByTestId, findByText } = await render(<EditEntryScreen />);
+    await findByText('Bristol type (optional)'); // BmForm has no name field — wait on a stable label instead
+    expect(queryByTestId('see-what-came-before')).toBeNull();
+  });
+
+  it('hides the banner for a non-rough (severity-2) symptom', async () => {
+    (getLogEntry as jest.Mock).mockResolvedValue({
+      ...BASE_ENTRY,
+      type: 'symptom',
+      name: 'Symptom',
+      severity: 2,
+    });
+    const { queryByTestId, findByText } = await render(<EditEntryScreen />);
+    await findByText('Severity (optional)'); // SymptomForm has no name field — wait on a stable label instead
+    expect(queryByTestId('see-what-came-before')).toBeNull();
+  });
+
+  it('pushes to the outcome screen when tapped', async () => {
+    (getLogEntry as jest.Mock).mockResolvedValue({
+      ...BASE_ENTRY,
+      type: 'bowel_movement',
+      name: 'BM',
+      bristolScale: 2,
+    });
+    const { findByTestId } = await render(<EditEntryScreen />);
+    await fireEvent.press(await findByTestId('see-what-came-before'));
+    expect(mockPush).toHaveBeenCalledWith('/outcome/e1');
+  });
+});
