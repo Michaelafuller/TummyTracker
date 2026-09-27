@@ -1,0 +1,147 @@
+appId: com.tummytracker.app.dev
+# S — Medications, Cycle B (GitHub #6–#10, 2026-09-26).
+#   - Create entry is disabled until a medication exists
+#   - Log one entry with TWO medications, one dose overridden to half (#7, #9);
+#     the summary lists medications in Meds-list (A–Z) order
+#   - Recent doses on the Meds tab shows it (#6)
+#   - Journal: "Meds" chip shows it, "Food" hides it (Journal integration)
+#   - Edit the entry's notes (#8), then delete it (confirm) → gone everywhere
+#   - The medications' defaults are unchanged throughout (#9)
+---
+- launchApp:
+    clearState: true
+- runFlow: _helpers/reconnect-dev-client.yaml
+
+- tapOn:
+    id: "tab-meds"
+- waitForAnimationToEnd
+- assertVisible:
+    text: "Create entry"
+    enabled: false
+
+# --- Two medications with defaults ---
+- tapOn: "Add medication"
+- tapOn: "Medication name"
+- inputText: "Omeprazole"
+- hideKeyboard
+- tapOn: "Default dose"
+- inputText: "20"
+- hideKeyboard
+- tapOn: "mg"
+- scrollUntilVisible:
+    element:
+      text: "Save"
+    direction: DOWN
+- tapOn: "Save"
+- waitForAnimationToEnd
+
+- tapOn: "Add medication"
+- tapOn: "Medication name"
+- inputText: "Ibuprofen"
+- hideKeyboard
+- tapOn: "Default dose"
+- inputText: "400"
+- hideKeyboard
+- tapOn: "mg"
+- scrollUntilVisible:
+    element:
+      text: "Save"
+    direction: DOWN
+- tapOn: "Save"
+- waitForAnimationToEnd
+- assertVisible: "No doses logged yet."
+
+# --- Log both; Ibuprofen at half (400 → 200) ---
+- tapOn: "Create entry"
+- waitForAnimationToEnd
+- tapOn: "Took Omeprazole"
+- tapOn: "Took Ibuprofen"
+- tapOn: "Dose of Ibuprofen"
+- repeat:
+    times: 3
+    commands:
+      - pressKey: Backspace
+- inputText: "200"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Save"
+    direction: DOWN
+- tapOn: "Save"
+- waitForAnimationToEnd
+
+# Recent doses shows the event with the overridden snapshot dose
+- scrollUntilVisible:
+    element:
+      text: ".*Ibuprofen 200 mg · Omeprazole 20 mg.*"
+    direction: DOWN
+
+# Defaults untouched: the inventory row still says 400 mg
+- scrollUntilVisible:
+    element:
+      text: "400 mg"
+    direction: UP
+
+# --- Journal: Meds chip shows it, Food hides it ---
+- tapOn:
+    id: "tab-journal"
+- waitForAnimationToEnd
+- tapOn: "Meds"
+- scrollUntilVisible:
+    element:
+      text: ".*Ibuprofen 200 mg · Omeprazole 20 mg.*"
+    direction: DOWN
+- tapOn: "Food"
+- assertNotVisible: ".*Ibuprofen 200 mg.*"
+- tapOn: "All"
+- scrollUntilVisible:
+    element:
+      text: ".*Ibuprofen 200 mg · Omeprazole 20 mg.*"
+    direction: DOWN
+
+# --- Edit notes from the Journal row ---
+- tapOn: ".*Ibuprofen 200 mg · Omeprazole 20 mg.*"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "Notes"
+    direction: DOWN
+- tapOn: "Notes"
+- waitForAnimationToEnd
+# One character at a time: a burst inputText into this bottom multiline field
+# jumps focus into the Dose field above after 2 chars while the keyboard-aware
+# scroll settles — verified human-paced typing stays put (env, not app;
+# same class as the eraseText finding in docs/E2E.md, 2026-09-26).
+- inputText: "F"
+- inputText: "i"
+- inputText: "n"
+- inputText: "e"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      text: "Save changes"
+    direction: DOWN
+- tapOn: "Save changes"
+- waitForAnimationToEnd
+
+# --- Delete (confirm) → gone from the Journal and Recent doses ---
+- tapOn: ".*Ibuprofen 200 mg · Omeprazole 20 mg.*"
+- waitForAnimationToEnd
+# Notes sit below every dose line's unit chips — scroll to them
+- scrollUntilVisible:
+    element:
+      text: "Fine"
+    direction: DOWN
+- scrollUntilVisible:
+    element:
+      text: "Delete entry"
+    direction: DOWN
+- tapOn: "Delete entry"
+- tapOn: "Delete"
+- waitForAnimationToEnd
+- assertNotVisible: ".*Ibuprofen 200 mg · Omeprazole 20 mg.*"
+- tapOn:
+    id: "tab-meds"
+- waitForAnimationToEnd
+- assertVisible: "No doses logged yet."
+- assertVisible: "400 mg"

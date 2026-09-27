@@ -120,6 +120,7 @@ maestro test flows/ --format junit --output flows/results.xml
 | P — servings stepper on meal review: +/− in half steps rescales row kcal + aggregate live, "−" disables at 0.5×, saved journal row carries the stepped total | `flows/p-review-servings.yaml` | ✅ Automated (authored + verified green 2026-09-26 on the Pixel 5, Metro 8081; targeted re-runs `f-serving-size` ✅ and `01b-manual-entry` ✅ — the latter's first run hit the known ADB input truncation at 41/67 chars, green on re-run) |
 | Q — re-use a saved meal then adjust it: Recent tap seeds 2 items, stepper 1×→2× on a copied item rescales row + aggregate, Remove the other, save → new 400 kcal entry + untouched 300 kcal 2-item original | `flows/q-reuse-adjust.yaml` | ✅ Automated (authored + verified green ×2 2026-09-26 on the Pixel 5) |
 | R — Medications Cycle A: empty Meds tab → add (name, dose + unit chip, frequency) → row summary → edit dose → Mark inactive ("No active medications." + "Inactive (1)") → Mark active → persists across restart | `flows/r-medications.yaml` | ✅ Automated (authored 2026-09-26; backup v3 medication round trip is Jest-covered — file-picker import stays manual like I) |
+| S — Medications Cycle B: Create entry disabled until a med exists → log 2 meds with one dose halved → Recent doses shows the snapshot dose, defaults unchanged → Journal "Meds" shows it, "Food" hides it → add a note → delete (confirm) → gone | `flows/s-medication-entry.yaml` | ✅ Automated (authored + verified green 2026-09-26; note typed per-character — see the burst-typing finding) |
 | Root error boundary — themed fallback + Try again on a screen render error | — | ❌ Jest-only (`src/components/__tests__/root-error-boundary.test.tsx`) — no deterministic way to inject a render error on-device without app code |
 | Goals — floor/cap thresholds, cap notice, removal | `flows/goal-editor.yaml` | ✅ Automated |
 | Check-in persistence + 7-day horizon | `flows/checkin-persistence.yaml` | ✅ Automated |
@@ -145,6 +146,17 @@ immediately after **every** `launchApp` step, which:
 1. Waits for "Development Build" (confirms the connect screen actually showed).
 2. `openLink`s the explicit deep link `<scheme>://expo-development-client/?url=http://localhost:<metro-port>` — this reconnects regardless of prior state, since the URL is in the intent itself, not read from any remembered preference.
 3. Handles two more wrinkles that show up after the link fires, both harmless no-ops when absent: a one-time "This is the developer menu" tooltip (`tapOn: "Continue", optional: true`) on the very first connection after a data wipe, and the dev-menu sheet (Reload / Go home / Tools) that re-opening the same link while already connecting can pop instead of landing directly on the app (`tapOn: "Close", optional: true` — **not** "Go home", which navigates the dev client itself back to the connect screen, and **not** the hardware Back key, which can exit the app entirely to whatever was behind it).
+**Finding — burst text injection jumps focus in bottom multiline fields
+(2026-09-26).** On the Pixel 5, a multi-character `inputText` (and
+`eraseText`) into a multiline field near the bottom of a keyboard-aware form
+moves focus to another input after ~2 characters while the scroll settles —
+e.g. the medication entry's Notes → the Dose field above ("20k with
+breakfast"). Waiting for animations first does NOT help; typing one character
+per `inputText` does, and human-paced typing was verified to stay in the
+field. Environment/automation, not an app bug. Pattern: per-key
+`pressKey: Backspace` instead of `eraseText`, per-character `inputText` into
+bottom multiline fields.
+
 **Finding — the Expo dev-tools bubble covers the Settings gear (2026-09-26).**
 Since Settings moved to a top-right gear (`open-settings`), the dev client's
 floating "Tools button" bubble sits exactly on top of it on dev builds, so a
