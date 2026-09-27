@@ -17,6 +17,7 @@ import type { TagBackfillRowUpdate } from '@/lib/tagBackfill';
 import type { NutritionField } from '@/lib/validation';
 import { db } from './client';
 import {
+  dayCheckIn,
   FOOD_TYPES,
   goal,
   logEntry,
@@ -25,6 +26,8 @@ import {
   medicationDose,
   medicationEvent,
   watchlistItem,
+  type DayCheckIn,
+  type DayStatus,
   type Goal,
   type GoalDirection,
   type LogEntry,
@@ -39,6 +42,9 @@ import {
   type NewMedicationEvent,
   type WatchlistItem,
 } from './schema';
+
+/** 'YYYY-MM-DD' shape check shared by every day-check-in write path (§4 of HANDOFF.md). */
+const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Fields a caller supplies on create — id and timestamps are filled in here. */
 export type CreateLogEntryInput = Omit<NewLogEntry, 'id' | 'createdAt' | 'updatedAt'>;
@@ -667,4 +673,76 @@ export async function getMedicationEvent(
   if (!event) return undefined;
   const doses = await db.select().from(medicationDose).where(eq(medicationDose.eventId, id));
   return { event, doses };
+}
+
+/** This day's answer, or undefined when nothing has been recorded for it yet. */
+export async function getDayCheckIn(date: string): Promise<DayCheckIn | undefined> {
+  const rows = await db.select().from(dayCheckIn).where(eq(dayCheckIn.date, date)).limit(1);
+  return rows[0];
+}
+
+/**
+ * Records (or updates) the day's answer (GitHub #13). One row per `date`
+ * (unique) — answering again the same day updates `status`/`updatedAt`
+ * in place rather than inserting a second row. Callers only ever pass a
+ * generated 'YYYY-MM-DD' key (src/lib/datetime.ts `formatDateInput`), so a
+ * malformed `date` throws rather than silently persisting garbage.
+ */
+export async function upsertDayCheckIn(date: string, status: DayStatus): Promise<void> {
+  if (!DATE_KEY_RE.test(date)) {
+    throw new Error(`upsertDayCheckIn: invalid date "${date}" — expected YYYY-MM-DD.`);
+  }
+  const now = Date.now();
+  const row: DayCheckIn = { id: createId(), date, status, createdAt: now, updatedAt: now };
+  await db
+    .insert(dayCheckIn)
+    .values(row)
+    .onConflictDoUpdate({ target: dayCheckIn.date, set: { status, updatedAt: now } });
+}
+
+/** All day_check_in rows, newest date first — used by the backup export (src/lib/backup.ts). */
+export async function listAllDayCheckIns(): Promise<DayCheckIn[]> {
+  return db.select().from(dayCheckIn).orderBy(desc(dayCheckIn.date));
+}
+
+/**
+ * Inserts pre-built day_check_in rows PRESERVING their ids — mirrors
+ * {@link insertMedicationsPreservingIds}, but skips a row if its `date`
+ * already exists on the device *or* its `id` does (the device's own answer
+ * for a day wins over a backup's). Also de-duplicates by `date` within
+ * `rows` before inserting (first wins) — a malformed/duplicated backup file
+ * must never violate the `date` unique index mid-restore.
+ */
+export async function insertDayCheckInsPreservingIds(
+  rows: DayCheckIn[],
+): Promise<{ inserted: number; skipped: number }> {
+  if (rows.length === 0) return { inserted: 0, skipped: 0 };
+
+  const seenDates = new Set<string>();
+  const deduped: DayCheckIn[] = [];
+  for (const row of rows) {
+    if (seenDates.has(row.date)) continue;
+    seenDates.add(row.date);
+    deduped.push(row);
+  }
+
+  const existingIds = new Set<string>();
+  const existingDates = new Set<string>();
+  for (const idBatch of chunk(deduped.map((row) => row.id), RESTORE_CHUNK_SIZE)) {
+    const existing = await db.select({ id: dayCheckIn.id }).from(dayCheckIn).where(inArray(dayCheckIn.id, idBatch));
+    for (const row of existing) existingIds.add(row.id);
+  }
+  for (const dateBatch of chunk(deduped.map((row) => row.date), RESTORE_CHUNK_SIZE)) {
+    const existing = await db
+      .select({ date: dayCheckIn.date })
+      .from(dayCheckIn)
+      .where(inArray(dayCheckIn.date, dateBatch));
+    for (const row of existing) existingDates.add(row.date);
+  }
+
+  const toInsert = deduped.filter((row) => !existingIds.has(row.id) && !existingDates.has(row.date));
+  for (const insertBatch of chunk(toInsert, RESTORE_CHUNK_SIZE)) {
+    await db.insert(dayCheckIn).values(insertBatch);
+  }
+  return { inserted: toInsert.length, skipped: rows.length - toInsert.length };
 }
