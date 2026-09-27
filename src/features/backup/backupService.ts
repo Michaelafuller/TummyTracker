@@ -89,24 +89,40 @@ async function performFolderBackup(): Promise<{ ok: true } | { ok: false; error:
   try {
     const dir = new Directory(prefs.autoBackupDirUri);
     const now = Date.now();
+    // Gather first: a failure here must not leave an empty, validly-named
+    // file behind — it would count toward the newest 7 and push out a real one.
+    const json = await buildBackupJson();
     // Always create a new file (never overwrite, HANDOFF.md §0) — some
     // Android storage providers don't truncate on rewrite, which would leave
     // stale bytes at the end of a shorter file.
     const file = dir.createFile(autoBackupFileName(now), 'application/json');
-    file.write(await buildBackupJson());
+    try {
+      file.write(json);
+    } catch (e) {
+      try {
+        file.delete(); // Don't leave a truncated backup behind.
+      } catch {
+        // Best-effort; the outer catch still reports the failure.
+      }
+      throw e;
+    }
 
     // The write succeeded — record it before pruning, so a prune failure
     // below can never make a successful backup look like it didn't happen.
     await patchPrefs({ lastBackupAt: now, lastAutoBackupAt: now, autoBackupError: null });
 
     try {
-      const names = dir
-        .list()
-        .filter((entry): entry is File => entry instanceof File)
-        .map((entry) => entry.name);
-      for (const name of autoBackupsToPrune(names)) {
+      // Delete the File objects the listing returns: on Android a picked
+      // folder is a SAF content:// tree, whose children's URIs can't be built
+      // by joining a name onto the folder URI (`new File(dir, name)` would
+      // point nowhere and every delete would silently fail).
+      const files = new Map<string, File>();
+      for (const entry of dir.list()) {
+        if (entry instanceof File) files.set(entry.name, entry);
+      }
+      for (const name of autoBackupsToPrune([...files.keys()])) {
         try {
-          new File(dir, name).delete();
+          files.get(name)?.delete();
         } catch {
           // A single stale file failing to delete never blocks the rest —
           // the backup already succeeded (HANDOFF.md §0).
@@ -173,6 +189,9 @@ export async function chooseBackupFolder(): Promise<'chosen' | 'cancelled' | 'fa
   return result.ok ? 'chosen' : 'failed';
 }
 
+/** In-flight guard for {@link runAutoBackupIfDue}. */
+let autoRunInFlight: Promise<void> | null = null;
+
 /**
  * Fire-and-forget hook for app-open/foreground-resume. No-op unless: running
  * on Android, a folder is set, a day has passed since the last automatic
@@ -180,7 +199,17 @@ export async function chooseBackupFolder(): Promise<'chosen' | 'cancelled' | 'fa
  * (never write an empty backup). Catches everything — a failed automatic run
  * must never throw into its caller or block the app (HANDOFF.md §0).
  */
-export async function runAutoBackupIfDue(): Promise<void> {
+export function runAutoBackupIfDue(): Promise<void> {
+  // Single-flight over the WHOLE check-then-write, not just the write:
+  // app-open and a quick resume could otherwise both pass the "due" check
+  // before either records its backup, writing two files in one day.
+  autoRunInFlight ??= checkAndRunAutoBackup().finally(() => {
+    autoRunInFlight = null;
+  });
+  return autoRunInFlight;
+}
+
+async function checkAndRunAutoBackup(): Promise<void> {
   try {
     if (Platform.OS !== 'android') return;
     const prefs = await loadPrefs();

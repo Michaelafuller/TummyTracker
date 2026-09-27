@@ -198,6 +198,49 @@ describe('backUpToFolderNow', () => {
     expect(autoNames).toHaveLength(7); // 6 kept old + 1 new
   });
 
+  it('prunes by deleting the listed File objects, not a URI rebuilt from folder + name', async () => {
+    // On Android the folder is a SAF content:// tree: a child's URI can't be
+    // derived by joining its name onto the folder's. Model that by listing
+    // files that physically live in ANOTHER directory — only deleting the
+    // listed objects themselves removes them.
+    const dir = freshDirectory();
+    const elsewhere = freshDirectory();
+    const listed = [1, 2, 3, 4, 5, 6, 7, 8].map((day) =>
+      elsewhere.createFile(`tummytracker-auto-2020-01-0${day}-000000.json`, 'application/json'),
+    );
+    usePrefsStore.setState({ autoBackupDirUri: dir.uri });
+    jest.spyOn(Directory.prototype, 'list').mockReturnValue(listed);
+
+    await backUpToFolderNow();
+
+    expect(listed[0].exists).toBe(false);
+    expect(listed.slice(1).every((f) => f.exists)).toBe(true);
+  });
+
+  it('creates no file when gathering the data fails', async () => {
+    const dir = freshDirectory();
+    usePrefsStore.setState({ autoBackupDirUri: dir.uri });
+    (listLogEntries as jest.Mock).mockRejectedValueOnce(new Error('db locked'));
+
+    const result = await backUpToFolderNow();
+
+    expect(result.ok).toBe(false);
+    expect(dir.list().filter(isFile)).toHaveLength(0);
+  });
+
+  it('removes the new file again when writing it fails, so no empty backup counts toward the 7', async () => {
+    const dir = freshDirectory();
+    usePrefsStore.setState({ autoBackupDirUri: dir.uri });
+    jest.spyOn(File.prototype, 'write').mockImplementation(() => {
+      throw new Error('disk full');
+    });
+
+    const result = await backUpToFolderNow();
+
+    expect(result.ok).toBe(false);
+    expect(dir.list().filter(isFile)).toHaveLength(0);
+  });
+
   it('on failure, records the friendly error, prunes nothing, and leaves lastBackupAt/lastAutoBackupAt untouched', async () => {
     // Never created — Directory#createFile throws "Parent directory does not exist".
     const missingUri = `${Paths.cache.uri}never-created-${Date.now()}`;
@@ -351,6 +394,30 @@ describe('runAutoBackupIfDue', () => {
 
     expect(dir.list().filter(isFile)).toHaveLength(1);
     expect(usePrefsStore.getState().lastAutoBackupAt).not.toBeNull();
+  });
+
+  it('overlapping runs back up once, even when the first finishes before the second is checked', async () => {
+    const dir = freshDirectory();
+    usePrefsStore.setState({ autoBackupDirUri: dir.uri, lastAutoBackupAt: null });
+    let release: (value: boolean) => void = () => undefined;
+    const gate = new Promise<boolean>((resolve) => {
+      release = resolve;
+    });
+    // App-open's run sails through; a quick resume's run is slow to check for
+    // data, so it would pass the "due" check before the first recorded its backup.
+    (hasAnyLogEntry as jest.Mock).mockResolvedValueOnce(true).mockReturnValueOnce(gate);
+    // Count attempts, not files: a second attempt in the same clock second
+    // would collide on the name and fail, hiding the double run.
+    const createFile = jest.spyOn(Directory.prototype, 'createFile');
+
+    const first = runAutoBackupIfDue();
+    const second = runAutoBackupIfDue();
+    await first;
+    release(true);
+    await second;
+
+    expect(createFile).toHaveBeenCalledTimes(1);
+    expect(dir.list().filter(isFile)).toHaveLength(1);
   });
 
   it('never throws, even when the write fails', async () => {
