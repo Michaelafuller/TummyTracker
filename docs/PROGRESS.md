@@ -136,14 +136,33 @@ Completed tiers are collapsed to a single line; their detail lives in git.
 
 ## 📌 Pinned — next up
 
-1. **Medications (GitHub epic #4, stories #5–#11, planned 2026-09-26), two
-   cycles.** **A (spec: `docs/HANDOFF.md`):** medication / medication_event /
-   medication_dose tables (additive 0009, owner-approved), inventory
-   add/edit/deactivate (never delete), Meds tab, Settings moved to a gear
-   button, backup v3, #11 analysis-ready pure helpers. **B (next plan):**
-   Create Entry form (multi-med event, dose override incl. partial, notes),
-   recent-doses list + history, doses in the Journal timeline + dots.
-   Invariant for both: nothing is ever inferred as taken.
+1. **Medications (GitHub epic #4, stories #5–#11), two cycles.**
+   **✅ Cycle A shipped 2026-09-26** (Opus planned/reviewed, Sonnet executed,
+   on-device verified): medication / medication_event / medication_dose
+   tables (additive 0009), inventory add/edit/deactivate (never delete), Meds
+   tab, Settings moved to a top-right gear (`open-settings`), backup v3 with
+   id-preserving restore, #11 pure analysis-ready helpers. Targeted Jest 161+
+   green, `bundle:check` green; Maestro green: `nav-tabs`, `r-medications`
+   (new), `settings-smoke`, `i-backup`, `01e-reminders`, `n-doctor-report`.
+   **Cycle B (next plan):** Create Entry form (multi-med event, dose override
+   incl. partial, notes), recent-doses list + history, doses in the Journal
+   timeline + dots. Invariant for both: nothing is ever inferred as taken.
+
+   **Cycle A follow-ups (from execute + review):**
+   - **Chunk the id-preserving restore inserts** (`insertMedication…PreservingIds`
+     in `repository.ts`): one multi-row INSERT per table hits SQLite's 32,766
+     bound-variable cap at ~4,700 dose rows (7 cols) — years of daily use.
+     Do it in Cycle B, before doses exist in volume. S.
+   - **`scripts/generate-icons.mjs` is broken** — it still references
+     `assets/icons/icon.svg` / `icon-monochrome.svg`, deleted in `65e7014`
+     ("new app icon"), so app/adaptive/splash icons can't be regenerated
+     (the Meds tab PNGs were rendered with the same Resvg call standalone). S.
+   - **`Collapsible` can't render under Jest** (reanimated worklets not
+     initialised) — `meds.test.tsx` mocks it locally; a shared jest mock
+     would let any screen test use it. S.
+   - Dev builds: the Expo tools bubble covers the Settings gear — handled in
+   the reconnect helper for tests (docs/E2E.md finding); owner can drag the
+   bubble aside or switch it off once in the dev menu.
 
 **✅ Shipped 2026-09-26 (GitHub #1 re-log + Add item, + servings stepper —
 Opus planned/reviewed, Sonnet executed, on-device verified same day):**
