@@ -22,109 +22,50 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
 
 ## Status
 
-- **Everything through the 2026-08-16 cycles is on `main`** and running on the
-  Pixel 5 via the development-profile dev client (installed 2026-08-16).
-  Feature surface: manual & barcode entry, meal builder, browse/edit with
-  calendar, reminders, BM + symptom logging, insights v2, serving-size scaling,
-  backup/restore, 5-tab nav (incl. Goals), offline mode, OFF Search-a-licious
-  search, trigger watchlist, threshold goals + daily check-in.
-- **Health:** rungs green at HEAD (74 suites / 648 tests) + `bundle:check`.
-  **Maestro full regression 2026-08-24: 24/24 — the last clean baseline**
-  (pre-dates the 2026-08-28 keyboard + outcome-insights cycle below, which is
-  code-complete but not yet re-run on-device — see that cycle's owed items).
-  The dev-client reconnect gap is handled by flow infra
-  (`flows/_helpers/reconnect-dev-client.yaml` — hardcodes Metro port 8081;
-  update per session).
-- **✅ Shipped 2026-08-28 (keyboard + outcome-insights cycle, code-complete):**
-  1. **Keyboard** — `react-native-keyboard-controller` added behind a
-     graceful seam (`src/lib/keyboard.ts`, sync TurboModule probe — CLAUDE.md
-     §0 explains why this seam is sync where haptics/print are async);
-     `FormScrollView`/`KeyboardShiftView`
-     (`src/components/keyboard-aware-screen.tsx`) replaced the 7 hand-rolled
-     form-screen KAV setups and now also cover Home/Insights/Goals;
-     `android.softwareKeyboardLayoutMode: 'resize'` pinned in
-     `app.config.ts`. The upside (fields staying visible above the keyboard)
-     only lights up once the owner's next EAS development build ships the
-     native module — on the current client the seam returns null and every
-     screen falls back to exactly today's behavior. `npm audit`: unchanged.
-  2. **Outcome-based insights, meal sentiment removed** — `isOutcome` v2 (bad
-     BM Bristol 1/2/6/7, OR BM feel ≤ 2, OR symptom severity ≥ 3; food
-     entries are never outcomes — Decision 4). A new generic engine
-     (`analyzeOutcomeRates`/`tagHitRates`/`mealsFollowedByOutcome` in
-     `temporal.ts`) backs five insights.ts analyses (ingredients, foods,
-     pairs, nutrients, summary), replacing the four sentiment analyses +
-     histogram + `analyzeTemporalTriggers` (all deleted). The Insights tab,
-     drill-down, and the doctor PDF report all follow the same engine.
-     `LogEntryForm`/meal review no longer show a sentiment selector; the edit
-     path is regression-tested to never clobber a stored historical rating.
-     The `sentiment` column is RETAINED (CLAUDE.md §0/§6) — BMs still write
-     it, history/backups still read it.
-  Rungs green (74 suites / 648 tests) + `bundle:check`. **Owed:**
-  (a) **Maestro rework, later test session** — `01b-manual-entry.yaml` and
-  `01d-browse-edit.yaml` (the latter's purpose was editing a meal's
-  sentiment; repurpose to a different edit field), seed helpers
-  `seed-two-meals` / `seed-meals-for-insights` / `seed-ingredient-reactions`
-  (must seed symptom/BM outcomes instead of sentiment to produce findings),
-  and the `m-finding-drilldown` / `e-temporal-insights` /
-  `d-ingredient-insights` assertions (summary-line + finding-card text
-  changed shape); `02-bm-tracking.yaml` is unaffected (BM rating untouched).
-  The ~45 `hideKeyboard` workarounds across the flow suite (docs/E2E.md
-  gotcha #2) stay until the new build ships keyboard-controller, then a test
-  session should re-check which are still needed. (b) **Owner's next EAS
-  development build now carries THREE natives** — `expo-print`,
-  `expo-haptics` (both already owed from the 2026-08-24 cycle), and
-  `react-native-keyboard-controller` — one build covers all three; install
-  alongside the existing dev client per CLAUDE.md §0's signing caveat.
-  (c) On-device keyboard QA checklist — already written up in `docs/E2E.md`
-  ("Manual items that stay on your desk" #6–7).
-- **Still owed (test sessions):** manual-only items per `docs/E2E.md` (camera
-  loop, notification timing, dictation double-text check on both platforms,
-  light/dark visual walkthrough, import round-trip content, migration
-  spot-checks 0006–0008 against the real DB), plus the doctor-PDF device
-  items carried from 2026-08-24 (old-client safety spot-check —
-  `settings-smoke` + `i-backup` re-run, Pixel dropped off adb mid-session,
-  reconnect USB — then `n-doctor-report.yaml` once the EAS build above
-  lands). The automated flow backlog is otherwise **clear** as of 2026-08-24
-  aside from the 2026-08-28 rework in the block above.
-- **Shipped 2026-08-21 to 2026-08-24 (five cycles — detail collapsed, full
-  history in `git log`):** meal-component drill-down + edit/delete with
-  re-aggregation · build-variant split (`com.tummytracker.app.dev`) + frozen
-  Home hero/scrolling Recent · Goals tally drill-down + "Today" header ·
-  multi-symptom logging (one save → N entries) · BM "Digestion" insights
-  section (remediation: chart `accessible` fix `8872c4e`) · intake charts ·
-  per-food/ingredient drill-down (remediation: tag-matching food-gated
-  `9478e90`). Full Maestro regression 24/24 on 2026-08-24 — the suite's
-  clean baseline (superseded for the sentiment-touching flows by the
-  2026-08-28 rework above).
-- **Carried recommendations (RESULTS 2026-08-16/17):** ~~root-level React error
-  boundary around the tab navigator~~ — **shipped 2026-08-29** as
-  `src/components/root-error-boundary.tsx`, mounted above `ThemeProvider` in
-  `src/app/_layout.tsx`. Remaining: "Insights" subtitle heading for
-  label-consistency · **dev-mode mount-warning ("Can't perform a React state
-  update on a component that hasn't mounted yet") — not reproducible
-  2026-08-29: zero occurrences across dozens of launches (including two full
-  Maestro suites) on the new build/host with the current code; likely
-  incidentally fixed by an intervening cycle; closing unless it resurfaces.**
-- **New low-priority finding (2026-08-29):** `DateTimePicker: onChange is
-  deprecated. Use onValueChange, onDismiss...` warned once at launch.
-  `src/components/date-time-field.tsx` and `src/components/time-field.tsx`
-  both use the deprecated `onChange` prop — candidate small fix for a future
-  cycle.
-- **Owner on-device checklist (carried):** iOS app icon (needs EAS build), iOS
-  time-picker Done-button feel, light-mode look, and the full scan →
-  add-next → finish-meal → review → save loop (camera).
+- **On `main`** through the 2026-09-26 session (see below). Feature surface:
+  manual & barcode entry, multi-item meal builder with re-log-from-history,
+  "Add item" and a servings stepper; browse/edit with a day/week/month
+  Journal; BM + symptom logging; outcome-based insights + drill-downs;
+  Goals tally + thresholds + daily check-in; trigger watchlist; reminders;
+  backup/restore (v3); doctor PDF report; **medications** (inventory, dose
+  logging, history, Journal integration); Settings behind a top-right gear;
+  app-wide keyboard toolbar. Tabs: Home · Journal · Meds · Insights · Goals.
+- **Device + build:** Pixel 5 dev client = the **2026-08-29 EAS development
+  build** — `expo-print`, `expo-haptics` and `react-native-keyboard-controller`
+  natives all present. Metro on 8081; the reconnect helper also switches off
+  the dev-client tools bubble on fresh installs (it covers the Settings gear —
+  `docs/E2E.md` finding).
+- **Test baseline:** the last **full** Maestro regression is **29/29 on
+  2026-08-29** (the new build). The 2026-09-26 session ran **targeted** flows
+  and **targeted** Jest only (owner preference): suite is now **34 flows**,
+  with `h`, `j`, `nav-tabs` and the five Settings flows reworked and `p`, `q`,
+  `r`, `s` new. Full `npm test` last ran 2026-08-29 (74 suites / 648 tests).
+  → **A full regression + full Jest run is owed** — pinned #1.
+- **Owed device checks:** iOS pass (the #2 keyboard items below + carried: iOS
+  app icon, time-picker Done feel), light-mode walkthrough, camera scan loop,
+  and the manual items in `docs/E2E.md`. **Owner sequencing from the
+  2026-08-21 build-variant split — unconfirmed:** a preview/production build
+  should reclaim the real `com.tummytracker.app` package for the owner's
+  journal (dev client stays `…app.dev`); confirm or re-pin.
+- **Low-priority findings (carried):** `DateTimePicker onChange` deprecation
+  warning (`date-time-field.tsx`, `time-field.tsx`) · Insights has no
+  "Insights" subtitle heading (label consistency).
 
-### Shipped last cycle (overwrite each plan cycle; full history = `git log`)
+### Shipped last cycle — 2026-09-26 (one session: Opus plan/review, Sonnet execute; full history = `git log`)
 
-2026-08-24 (doctor PDF report + haptics rider, planned + executed + reviewed):
-- **Doctor / dietitian PDF report** — range picker (14/30/90 days) +
-  printable HTML summary (findings + day-grouped journal + disclaimer) via
-  `expo-print`, shared via `expo-sharing`; both new deps dynamic-import-only
-  (grep-verified) so the old dev client stays crash-safe until the next build.
-- **Haptics** — tactile feedback on delete/save via `expo-haptics`, graceful
-  no-op wrapper `src/lib/haptics.ts`.
-- Fable review: no code remediation. Rungs green (72 suites / 630 tests) +
-  `bundle:check`. Device items owed — folded into Status above.
+- **Re-log a past meal + Add item (GitHub #1)**, **servings stepper** on meal
+  review, Recent double-tap guard.
+- **Journal week strip** aligned to its frame (pixel-exact width) + a distinct
+  "today" marker.
+- **Medications epic (GitHub #4–#11)** in two cycles: tables (additive 0009),
+  inventory (never deleted), dose logging with per-dose snapshots, history,
+  Journal "Meds" filter, backup v3 with id-preserving + event-gated restore;
+  Settings moved to a gear (redrawn icon); `generate-icons.mjs` runnable.
+  Invariant: nothing is ever inferred as taken; Insights/Goals stay food-only.
+- **Keyboard dismissal (GitHub #2):** toolbar with Done (the only way to close
+  iOS number pads), tap-outside on Home, iOS drag-to-dismiss.
+- GitHub issues **#1, #2, #4–#11 are done but still open** on GitHub — close
+  them (the owner; this environment can read issues but not update them).
 
 ---
 
@@ -132,174 +73,80 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
 
 Ranked by value-add to the north star. **Effort:** S (hours) · M (a session) · L (multi-session).
 **⚠ = new dependency** — allowed, but CVE-inventory it and justify the value first.
-Completed tiers are collapsed to a single line; their detail lives in git.
+Completed work is collapsed to a single line; its detail lives in git.
 
-## 📌 Pinned — next up
+## 📌 Pinned — next up (ranked)
 
-0. **✅ Keyboard dismissal (GitHub #2) shipped 2026-09-26** (Opus, direct):
-   app-wide keyboard toolbar (prev / next / **Done**, themed) — the only way
-   to close iOS number pads (`decimal-pad` has no return key); tap-outside
-   dismiss on Home (the one non-scrolling screen); iOS drag-to-dismiss on
-   forms. Toolbar hidden on Home, where it covered the Recent search box.
-   Jest green; on the Pixel 5: toolbar + Done on text and numeric keyboards,
-   tap-outside on Home, and `h-recent-foods`, `01b-manual-entry`,
-   `s-medication-entry`, `f-serving-size`, `watchlist` green.
-   **Owed: an iOS check** (no iOS device/Mac here) — Done on a number pad,
-   tap-outside on Home, drag-to-dismiss on a form.
-
-1. **Medications (GitHub epic #4, stories #5–#11), two cycles.**
-   **✅ Cycle A shipped 2026-09-26** (Opus planned/reviewed, Sonnet executed,
-   on-device verified): medication / medication_event / medication_dose
-   tables (additive 0009), inventory add/edit/deactivate (never delete), Meds
-   tab, Settings moved to a top-right gear (`open-settings`), backup v3 with
-   id-preserving restore, #11 pure analysis-ready helpers. Targeted Jest 161+
-   green, `bundle:check` green; Maestro green: `nav-tabs`, `r-medications`
-   (new), `settings-smoke`, `i-backup`, `01e-reminders`, `n-doctor-report`.
-   **✅ Cycle B shipped 2026-09-26** (Opus planned/reviewed, Sonnet executed,
-   on-device verified): Create Entry (multi-med event, dose override incl.
-   partial, notes, optional time), edit/delete of an entry, fixed Create entry
-   button + Recent doses, Medication history, doses in the Journal with a
-   "Meds" filter (Insights/Goals stay food-only), real gear icon,
-   generate-icons runnable again, chunked restores. Review fix: restore only
-   adds doses for events it inserts (an edit re-mints dose ids, so an older
-   backup would have re-added stale doses). Targeted Jest 254 green,
-   `bundle:check` green; Maestro green: `s-medication-entry` (new),
-   `r-medications`, `nav-tabs`, `journal-calendar`, `01d-browse-edit`.
-   Invariant for both cycles holds: nothing is ever inferred as taken.
-
-   **Cycle A follow-ups (from execute + review):**
-   - ~~Chunk restore inserts~~ · ~~generate-icons broken~~ — both fixed in
-     Cycle B (`3721423`, `b3fb985`). App/adaptive/splash icon sources are
-     still missing (the script now skips them with a warning). S.
-   - **Entry form is scroll-heavy:** every ticked medication shows all 10
-     unit chips, though the unit is almost always the medication's default.
-     Show the unit as text with a "Change unit" affordance instead. S.
-   - **`Collapsible` can't render under Jest** (reanimated worklets not
-     initialised) — `meds.test.tsx` mocks it locally; a shared jest mock
-     would let any screen test use it. S.
-   - Dev builds: the Expo tools bubble covers the Settings gear — handled in
-   the reconnect helper for tests (docs/E2E.md finding); owner can drag the
-   bubble aside or switch it off once in the dev menu.
-
-**✅ Shipped 2026-09-26 (GitHub #1 re-log + Add item, + servings stepper —
-Opus planned/reviewed, Sonnet executed, on-device verified same day):**
-Recent tap seeds the meal builder (copy, never edit) → meal review with an
-"Add item" button into the scan/manual flow; "Finish meal" uses
-`router.dismissTo` so the mounted review keeps its edits; Home CTAs clear a
-stale builder; ± servings stepper on every review row. Targeted Jest 7
-suites / 78 tests + typecheck + lint green. Maestro green on the Pixel 5:
-`h-recent-foods` (reworked), `p-review-servings` (new), `j-component-drilldown`
-(review assertion updated), `01b-manual-entry`, `f-serving-size`. Full
-regression not yet re-run (owner asked for targeted runs only).
-
-**Follow-ups from review (unranked):**
-- **Add item needs the camera screen:** "Enter manually" is only reachable
-  after camera permission is granted, so a user who denied camera can't add
-  a manual item from review. Home has a separate manual CTA; review doesn't.
-- ~~Recent tap double-tap / unhandled load failure~~ — fixed 2026-09-26
-  (`b02acc9` + `f7035bd`: in-flight ref guard, "Couldn't open that meal"
-  alert, mutation-checked test).
-- **Stale auto-generated meal name (owner-approved for backlog, S):** the
-  review screen's name is set once at mount (`defaultMealReviewState` /
-  copied `reviewPrefill`) and never follows the item list, so re-using
-  "Rice + 1 more" and removing Beans saves a 1-item meal still called
-  "Rice + 1 more" (seen in `q-reuse-adjust`). Pre-existing on the normal
-  scan path too; re-use makes it common. Fix: while the name still equals
-  the auto-default for the *current or original* items (i.e. the user
-  hasn't typed their own), recompute it via `defaultMealName` as items are
-  added/removed; a user-typed name is never overwritten. Pure helper +
-  review test; update `q-reuse-adjust` to assert the saved name.
-- Retire `entry/new` + `prefillStore` — no callers left (owner decision).
-
-**✅ Shipped 2026-08-29 (error boundary + watchlist cycle — Sonnet executed,
-Fable reviewed, on-device verified same day):**
-1. **Root error boundary** — `src/components/root-error-boundary.tsx`
-   (documented CLAUDE.md §8 class-component carve-out), mounted above
-   `ThemeProvider` in `_layout.tsx`; themed "Something went wrong" + Try
-   again. Jest-covered (no deterministic on-device trigger exists). Riders:
-   removed the edge-to-edge-ignored KeyboardProvider translucency props
-   (launch warning gone); mount-warning closed as not-reproducible.
-2. **Watchlist badges** — journal/calendar rows with a watched ingredient
-   show a "watch" pill + a11y clause (`entryWatchedMatches` exported in
-   `src/lib/watchlist.ts`, food-entries-only gate). Home recents
-   deliberately unbadged (separate component — optional follow-on).
-3. **Watched-term editing** — in-place rename (`renameWatchlistItem` +
-   store `rename`, GoalsSection-style inline editor) preserving `createdAt`
-   and therefore the "since watching" stats.
-Rungs green (75 suites / 672 tests). New flow `o-watchlist-edit.yaml`
-(badge + rename, verified ×2); targeted re-runs green (watchlist,
-c-symptom-logging, 01d-browse-edit). Suite = 30 flows.
-
-**Recently shipped (2026-08-24/28):** doctor PDF report + haptics ✅ ·
-multi-symptom logging ✅ · BM "Digestion" section ✅ · intake charts ✅ ·
-per-food/ingredient drill-down ✅ · keyboard handling ✅ (incl. the
-2026-08-29 `meal/component` scroll-anchor fix + all-10-screens QA pass) ·
-outcome-based insights, meal sentiment removed ✅ — detail in Status.
+1. **Full regression: all 34 Maestro flows + full `npm test`** — S–M, a test
+   session. 2026-09-26 touched cross-cutting code (navigation, the meal
+   builder's `dismissTo`, the keyboard wrappers, backup) and verified it only
+   with targeted runs. Re-baseline before building more on top. Same session:
+   audit the suite's ~45 `hideKeyboard` workarounds now that the keyboard
+   native module is installed — on Android `hideKeyboard` is a Back press and
+   can exit the app from a tab root (`docs/E2E.md` finding); prefer
+   tap-outside / per-key input.
+2. **iOS check for GitHub #2** — S, owner (no iOS device/Mac here): Done on a
+   number pad, tap-outside on Home, drag-to-dismiss on a form.
+3. **Medication entry form is scroll-heavy** — S. Every ticked medication shows
+   all 10 unit chips, though the unit is almost always its default: show the
+   unit as text with a "Change unit" affordance.
+4. **Stale auto-generated meal name** — S (owner-approved). Review sets the
+   name once, so re-using "Rice + 1 more" and removing Beans saves a 1-item
+   meal still named "Rice + 1 more". While the name still equals the
+   auto-default, recompute it (`defaultMealName`) as items change; never
+   overwrite a user-typed name. Update `q-reuse-adjust` to assert it.
+5. **"Add item" needs the camera screen** — S. From meal review, "Enter
+   manually" only appears once camera permission is granted; offer a manual
+   path directly.
+6. **Small cleanups** (bundle into any cycle): retire `entry/new` +
+   `prefillStore` (no callers — owner decision) · shared Jest mock for
+   `Collapsible` (reanimated worklets can't init under Jest) · app / adaptive /
+   splash icon SVG sources are missing (`generate-icons.mjs` skips them) ·
+   `DateTimePicker onChange` deprecation.
 
 ## Tier 0 — Foundations · ✅ complete
 Saturated fat, backup/export-import, native date/time picker, serving-size scaling,
 recent quick-add — all shipped.
 
-## Tier 1 — The differentiator (the actual product)
+## Tier 1 — The differentiator · ✅ complete
+Ingredient/allergen capture, outcome-based correlation (ingredients, foods, pairs,
+nutrients, timing), symptom logging, ingredient-capture hardening + tag backfill,
+trigger watchlist with badges and term editing, **medication tracking** — all
+shipped. Next frontier: correlate medication use with outcomes (the #11 helpers
+make the data ready; the engine deliberately doesn't read it yet) — L, plan first.
 
-Ingredient/allergen capture, ingredient→sentiment correlation, symptom logging,
-temporal meal→outcome correlation, and ingredient-capture hardening (2026-08-15)
-are **✅ shipped**. Remaining:
+## Tier 2 — The payoff · core ✅ shipped
+Trend charts, confidence labels, pair analysis, Goals tally + thresholds + check-in,
+per-food/ingredient drill-down, BM "Digestion" and intake charts, meal-component
+editing, doctor PDF report — all shipped. Remaining follow-ons:
 
-| Item | Why it matters | Effort | Notes |
-|------|----------------|:--:|------|
-| **Trigger watchlist / elimination mode** | Mark suspected ingredients, flag entries, track reactions | M | **✅ shipped 2026-08-15** — device checks owed (see Status); follow-on candidates: browse/calendar list badges, term editing |
-| **Historical tag re-derive (backfill)** | Recover parenthetical sub-ingredient tags for entries saved before the hardening fix | S | **✅ shipped 2026-08-15** — one-launch device check owed (see Status) |
-
-## Tier 2 — The payoff (turn data into trust + motivation)
-
-Trend chart (shipped 2026-07-02 as a sentiment trend chart; reworked
-2026-08-28 into outcome-rate `CountBars`), confidence labeling, and
-ingredient-pair analysis **✅ shipped**. Remaining:
-
-| Item | Why | Effort | Notes |
-|------|-----|:--:|------|
-| **Goals tab: daily nutrition tally** | 5th nav tab aggregating today's nutrients | S–M | **✅ shipped 2026-08-15** — missing-data caveats included; follow-on: 7-day mini-trend (see intake-charts row) |
-| **Nutrient threshold goals + daily check-in** | Floors (≥) and caps (≤) per nutrient, one daily check-in | M | **✅ shipped 2026-08-15** (migration 0008) — floors notify / caps alert at save; **persistence bug found 2026-08-16, fix planned (see Status)**; follow-on: cap alert on the entry-**edit** path |
-| **Per-food / ingredient drill-down** | Tap a finding → every instance + outcomes | S–M | **✅ shipped + device-verified 2026-08-24** — see Status; pair-finding drill-down deferred |
-| **BM-regularity charts** | Complete the trends story beyond BM logging | S–M | **✅ shipped 2026-08-24** (as the Insights "Digestion" section — regularity line, weekly count bars, Bristol histogram) |
-| **Intake charts (nutrient trends)** | The other half of the old combined row — weekly intake bars (fiber/calories) reusing the same chart components | S | **✅ shipped 2026-08-24** (as the Insights "Intake" section) |
-| **Meal-component editing after save** | v1 meal builder saves components immutably; edit/remove with re-aggregation is the obvious next ask | S–M | **✅ shipped 2026-08-21** (edit + re-aggregate; removal + single-component-meal drill-down deferred) — Maestro flow owed |
-| **Doctor / dietitian PDF report** | Share a date range + insights with a pro | M | **✅ shipped 2026-08-24** (⚠ `expo-print` owner-approved) — device items owed, see Status |
+| Item | Why | Effort |
+|------|-----|:--:|
+| **7-day mini-trend on Goals** | Today's tally has no context without a week | S |
+| **Cap alert on the entry-edit path** | Caps only alert at save today, not on edit | S |
+| **Pair-finding drill-down** | Single findings drill down; pairs don't | S |
 
 ## Tier 3 — Quality of life
-- **Medication reminders (owner-requested enhancement, 2026-09-26):** local
-  scheduled notifications per medication from its frequency, via the already
-  approved `expo-notifications`. Deliberately out of the Medications epic:
-  a reminder must never become a dose record — only an explicit entry is
-  "taken" (#10/#11). Needs a structured schedule (times/days) rather than
-  today's free-text frequency. M.
-
-**OFF search-by-name + unbranded re-ranking — ✅ shipped (2026-07-03), but the
-endpoint under it is dying.** Recovers buried generic entries (e.g. "banana") but
-can't manufacture ones OFF lacks entirely (e.g. "apple"); see Decision 6.
-
-| Item | Why it matters | Effort | Notes |
-|------|----------------|:--:|------|
-| **Search migration → Search-a-licious** | Legacy `cgi/search.pl` was 503-ing and returned native-language names | S | **✅ shipped 2026-08-15** — device smoke owed (see Status). Re-test the apple/orange generic gap in real use before any USDA layer (Decision 6) |
-
-Remaining Tier 3: photo attachment ⚠ · save-confirmation toasts + haptics ·
-onboarding + better empty states · swipe-to-delete · reminder **deep-link** into
-the add-entry form · settings (force theme, first-day-of-week — currently
-hardcoded Sunday, default meal slot by time of day).
+- **Medication reminders** (owner-requested, 2026-09-26) — M. Local scheduled
+  notifications from a medication's schedule via the approved
+  `expo-notifications`. Needs a structured schedule (times/days), not today's
+  free-text frequency. A reminder must never become a dose record — only an
+  explicit entry is "taken" (#10/#11).
+- Remaining: photo attachment ⚠ · save-confirmation toasts · onboarding +
+  better empty states · reminder **deep-link** into the add-entry form ·
+  settings (force theme, first-day-of-week — hardcoded Sunday, default meal
+  slot by time of day) · watchlist badges on Home recents.
+- ✅ shipped (collapsed): OFF search-by-name → Search-a-licious migration,
+  swipe-to-delete, haptics. Re-test the apple/orange generic-food gap in real
+  use before any USDA layer (Decision 6).
 
 ## Tier 4 — Platform / infra
-
-| Item | Why it matters | Effort | Notes |
-|------|----------------|:--:|------|
-| **Build-variant split (dev vs. real app)** | The dev client and preview build share `com.tummytracker.app`, so they displace each other — and Maestro's `clearState` wipes whichever app holds the identity, i.e. the owner's real journal (bit us 2026-08-16; backup existed). A `com.tummytracker.app.dev` variant makes both coexist and walls automation off from real data permanently. | S–M | **✅ shipped 2026-08-21** — app.config.ts (resolver inlined: `@expo/config` transpiles only the entry file, so no runtime imports; tested at `__tests__/app.config.test.ts`), eas.json dev env, `tummytracker-dev` scheme, all 27 flow appIds. Icon badge skipped. **Owner sequencing owed (HANDOFF §3): dev build → install alongside → preview build reclaims the real package.** |
-
-Also: iOS pass (BUILD_PLAN "iOS crossover"; the icon, picker, and light-mode blockers
-are all now addressed) · **finish the Maestro backlog** (see Status + RESULTS.md for
-the current run state) · root-level React error boundary (RESULTS.md 2026-08-16
-recommendation — one screen's render error currently blanks the whole app) ·
-screen-level RNTL tests · `bundle:check` in a pre-push hook · `FlashList` virtualization
-once entry volume grows.
+- **iOS pass** (BUILD_PLAN "iOS crossover") — icon, picker and light-mode
+  blockers addressed; now also the #2 keyboard checks. M.
+- `bundle:check` in a pre-push hook · `FlashList` virtualization once entry
+  volume grows · more screen-level RNTL coverage.
+- ✅ shipped (collapsed): build-variant split (`com.tummytracker.app.dev`),
+  root error boundary.
 
 ---
 
