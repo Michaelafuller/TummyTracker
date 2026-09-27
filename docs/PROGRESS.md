@@ -144,9 +144,12 @@ Completed tiers are collapsed to a single line; their detail lives in git.
    id-preserving restore, #11 pure analysis-ready helpers. Targeted Jest 161+
    green, `bundle:check` green; Maestro green: `nav-tabs`, `r-medications`
    (new), `settings-smoke`, `i-backup`, `01e-reminders`, `n-doctor-report`.
-   **Cycle B (next plan):** Create Entry form (multi-med event, dose override
-   incl. partial, notes), recent-doses list + history, doses in the Journal
-   timeline + dots. Invariant for both: nothing is ever inferred as taken.
+   **Cycle B (spec: `docs/HANDOFF.md`, planned 2026-09-26):** Create Entry
+   form (multi-med event, dose override incl. partial, notes, optional time),
+   fixed Create entry button + recent doses, history screen, doses in the
+   Journal with a "Meds" filter (Insights/Goals stay food-only), plus the
+   owner-requested real gear icon and the chunked-restore + icon-script
+   follow-ups below. Invariant for both: nothing is ever inferred as taken.
 
    **Cycle A follow-ups (from execute + review):**
    - **Chunk the id-preserving restore inserts** (`insertMedication…PreservingIds`
