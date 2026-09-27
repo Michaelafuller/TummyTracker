@@ -107,6 +107,19 @@ describe('MedicationsScreen', () => {
     expect(queryByTestId('med-row-med2')).toBeNull();
   });
 
+  it('says "No active medications." when every medication is inactive', async () => {
+    (listMedications as jest.Mock).mockResolvedValue([
+      makeMedication({ id: 'med2', name: 'Old Med', isActive: false }),
+    ]);
+
+    const { findByText, queryByText } = await renderScreen(<MedicationsScreen />);
+
+    expect(await findByText('No active medications.')).toBeTruthy();
+    expect(await findByText('Inactive (1)')).toBeTruthy();
+    // Not the "nothing at all" message — an inactive medication still exists.
+    expect(queryByText('No medications yet.')).toBeNull();
+  });
+
   it('"Add medication" navigates to the new-medication screen', async () => {
     (listMedications as jest.Mock).mockResolvedValue([]);
     const { findByLabelText } = await renderScreen(<MedicationsScreen />);

@@ -76,7 +76,15 @@ export default function MedicationsScreen() {
           </ThemedText>
         ) : (
           <>
-            {active.length > 0 ? <View style={styles.section}>{active.map(renderRow)}</View> : null}
+            {active.length > 0 ? (
+              <View style={styles.section}>{active.map(renderRow)}</View>
+            ) : (
+              // Only inactive ones left — say so, rather than leaving a blank
+              // gap above the "Inactive (n)" section.
+              <ThemedText type="small" themeColor="textSecondary">
+                No active medications.
+              </ThemedText>
+            )}
 
             {inactive.length > 0 ? (
               <Collapsible title={`Inactive (${inactive.length})`}>
