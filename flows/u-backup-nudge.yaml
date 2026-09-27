@@ -1,0 +1,39 @@
+appId: com.tummytracker.app.dev
+# U — Backup nudge + automatic-backup settings (GitHub #14, 2026-09-27).
+#   - A fresh install with an empty journal shows no nudge
+#   - After logging something, Home shows "Never backed up" + "Back up now"
+#   - Settings shows the last-backup line and "Choose backup folder" (Android)
+# MANUAL (the system folder picker and real storage aren't driven here):
+#   1. Settings → Choose backup folder → pick/create Documents/TummyTracker →
+#      "Use this folder" → Allow → Alert "Backup saved to …"; a file
+#      tummytracker-auto-<date>-<time>.json appears in Files; Home nudge gone;
+#      Settings says "Last backup: today".
+#   2. Force-stop + reopen the same day → no second file.
+#   3. Set the phone's date one day ahead, reopen → a new file (restore the
+#      date afterwards). With 8+ auto files, the oldest auto one is deleted and
+#      any other file in the folder (e.g. a manual export) is untouched.
+#   4. Import one of the auto files via Settings → Import data → succeeds.
+#   5. Optional: the whole point — uninstall, reinstall, Import from the folder.
+---
+- launchApp:
+    clearState: true
+- runFlow: _helpers/reconnect-dev-client.yaml
+
+# Empty journal: nothing worth backing up yet, so no nudge.
+- assertNotVisible: "Never backed up"
+
+- runFlow: _helpers/seed-two-meals.yaml
+
+- assertVisible: "Never backed up"
+- assertVisible: "Back up now"
+
+- tapOn:
+    id: "open-settings"
+- waitForAnimationToEnd
+- assertVisible: "Never backed up"
+- scrollUntilVisible:
+    element:
+      text: "Choose backup folder"
+    centerElement: true
+- assertVisible: "Automatic backup"
+- assertVisible: "Choose backup folder"

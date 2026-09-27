@@ -116,6 +116,17 @@
   background task runner (`expo-task-manager` is not approved) — our JS only
   runs once the app opens. An answer is always recorded for the day the
   notification asked about (`content.data.date`), never "now".
+- **Automatic backup = daily-on-open to a user-picked folder (2026-09-27,
+  GitHub #14).** No background runner is approved, so on Android the app
+  writes one backup per local day when it opens or resumes, into a folder
+  chosen with `Directory.pickDirectoryAsync()` (a persisted SAF grant — no
+  manifest permission; survives uninstall). Rules: always a **new** timestamped
+  file (some SAF providers don't truncate on rewrite); prune only our own
+  `tummytracker-auto-*.json` names, newest 7 kept, deleting the **File objects
+  `list()` returns** — a SAF child's URI can't be built from folder + name;
+  a failure deletes nothing and only records `autoBackupError`. iOS gets the
+  nudge + share export only (folder persistence unverified). Backup state
+  lives in prefs, not the DB.
 
 ## 1. What this project is
 

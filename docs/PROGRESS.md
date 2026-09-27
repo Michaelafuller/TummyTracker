@@ -29,7 +29,9 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   Goals tally + thresholds + daily check-in; trigger watchlist; reminders;
   backup/restore (v4); doctor PDF report; **medications** (inventory, dose
   logging, history, Journal integration); **day check-in** (fine/rough day:
-  Home card, notification buttons, Insights day coverage); Settings behind a
+  Home card, notification buttons, Insights day coverage); **automatic
+  backups** (Android daily-on-open to a chosen folder, newest 7) + a
+  "last backup" nudge; Settings behind a
   top-right gear;
   app-wide keyboard toolbar. Tabs: Home · Journal · Meds · Insights · Goals.
 - **Device + build:** Pixel 5 dev client = the **2026-08-29 EAS development
@@ -47,6 +49,10 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   `p-review-servings`), `nav-tabs`, `settings-smoke`, `01e-reminders`,
   `i-backup`, `checkin-persistence`, `03-insights`. JS-only + migration 0010
   — no new build; Metro into the installed dev client.
+- **Owed device check — automatic backups (GH #14, 2026-09-27):** run
+  `flows/u-backup-nudge.yaml` + the manual folder/daily/prune/reinstall steps
+  in its header; regression: `settings-smoke`, `i-backup`, and the Home flows
+  above. JS-only — no new build.
 - **Owed device checks:** iOS pass (the #2 keyboard items below + carried: iOS
   app icon, time-picker Done feel), light-mode walkthrough, camera scan loop,
   and the manual items in `docs/E2E.md`. **Owner sequencing from the
@@ -66,9 +72,16 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   Coverage only — the correlation engine is unchanged; Rough is never an
   outcome. Review fixes: serialized notification refreshes (a cold-start
   answer doubled the horizon), Home card rolls to the new day on resume.
+- **Automatic backups + "last backup" nudge (GitHub #14):** Android picks a
+  folder once; a new timestamped backup is written once per day on app
+  open/resume, newest 7 kept (only our own files ever pruned); Home nudges
+  after 7 days without a backup; Settings shows the last-backup line.
+  Review fixes: pruning deleted nothing on real SAF storage, a failed write
+  could leave an empty "backup" among the 7, a same-day double run, and an
+  unhandled share failure from the nudge.
 - Earlier (2026-09-26): re-log + Add item (#1), medications epic (#4–#11),
   keyboard dismissal (#2), Settings gear, #12 re-baseline. Issues **#1, #2,
-  #4–#11, #13** are done but still open on GitHub — the owner closes them.
+  #4–#11, #13, #14** are done but still open on GitHub — the owner closes them.
 
 ---
 
@@ -99,7 +112,8 @@ analysis.
    notification) makes the baseline real and gives an honest count of
    covered days. Same principle as medications: missing data is never a
    confirmed negative. Needs a small additive migration (owner, §9).
-3. **Automatic backups + staleness nudge** (GH #14) — S–M. The whole journal lives on
+3. ~~**Automatic backups + staleness nudge** (GH #14)~~ — **✅ shipped
+   2026-09-27** (device check owed, see Status). Original rationale: S–M. The whole journal lives on
    one phone; backup is manual, and a signing-mismatch reinstall wipes it
    (CLAUDE.md §0). Scheduled automatic backup to a user-chosen location, or at
    minimum a "last backup: 34 days ago" nudge on Home/Settings.

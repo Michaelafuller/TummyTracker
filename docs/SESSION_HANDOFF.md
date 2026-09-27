@@ -5,8 +5,8 @@
 > Written 2026-09-27 at the end of a long Opus session (2026-09-26 → 27) so the
 > next session can continue without the transcript. `docs/HANDOFF.md` is a
 > *different* file: the execute-session spec for Sonnet — it currently holds the
-> finished day check-in (GH #13) spec and gets overwritten by the next plan.
-> **Updated 2026-09-27 (later session):** GH #13 shipped — see §1/§2.
+> finished automatic-backups (GH #14) spec and gets overwritten by the next plan.
+> **Updated 2026-09-27 (later session):** GH #13 and #14 shipped — see §1/§2.
 
 ## 1. Where things stand
 
@@ -16,6 +16,10 @@
   `dcf96c8..e22cdc3`, then docs + `flows/t-day-check-in.yaml`. Rungs,
   `bundle:check` and targeted Jest (14 suites / 179 tests) green. **Device
   check owed** (Android, Metro — no build): see PROGRESS Status.
+- **Also committed, NOT pushed:** GH #14 automatic backups — plan `94e847d`,
+  Sonnet `ed7bcdb..9bea002`, review fixes `75d9dca`, `22f8570`, then docs +
+  `flows/u-backup-nudge.yaml`. Rungs, `bundle:check`, targeted Jest (10
+  suites / 173 tests) green. Device check owed (see PROGRESS Status).
 - **Test baseline (2026-09-27, GitHub #12):** full Maestro **34/34** on the
   Pixel 5 + full Jest **95 suites / 887 tests**, typecheck, lint,
   `bundle:check` all green. **0 app regressions.** Details: `docs/RESULTS.md`.
@@ -32,12 +36,11 @@
 
 The ranked backlog is `docs/PROGRESS.md` → "📌 Pinned — next up" (#1–7) and
 "Ranked backlog — continued" (#8–19). Each item names its GitHub issue.
-**#1 (GH #12) and #2 (GH #13) are done** (#13 still owes its device check),
-so the next item is:
+**#1–#3 (GH #12–#14) are done** (#13 and #14 still owe device checks), so
+the next item is:
 
-- **#3 — Automatic backups + staleness nudge (GH #14).** Plan session first;
-  note backup is now **v4** (adds `dayCheckIns`).
-- Then #4 work backwards from a bad day (GH #15), #5 quick-win polish (GH #16), …
+- **#4 — Work backwards from a bad day (GH #15).** Plan session first.
+- Then #5 quick-win polish (GH #16), …
 
 ## 3. How the owner likes to work (confirmed across the session)
 
