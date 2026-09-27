@@ -78,7 +78,7 @@ export function validateMedication(input: MedicationInput): MedicationValidation
 }
 
 /** Formats a dose number without trailing zeros (0.5, not 0.50; 10, not 10.00). */
-function formatDoseNumber(value: number): string {
+export function formatDoseNumber(value: number): string {
   if (Number.isInteger(value)) return String(value);
   return String(parseFloat(value.toFixed(2)));
 }

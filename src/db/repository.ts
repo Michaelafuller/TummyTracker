@@ -35,6 +35,8 @@ import {
   type NewLogEntry,
   type NewMealComponent,
   type NewMedication,
+  type NewMedicationDose,
+  type NewMedicationEvent,
   type WatchlistItem,
 } from './schema';
 
@@ -558,4 +560,104 @@ export async function insertMedicationDosesPreservingIds(
     await db.insert(medicationDose).values(insertBatch);
   }
   return { inserted: toInsert.length, skipped: rows.length - toInsert.length };
+}
+
+/** Fields a caller supplies on create — id and timestamps are filled in here. */
+export type CreateMedicationEventInput = Omit<NewMedicationEvent, 'id' | 'createdAt' | 'updatedAt'>;
+
+/** One dose line within an event (#9) — id/eventId/timestamps are filled in here. */
+export interface MedicationDoseInput {
+  medicationId: string;
+  dose: number;
+  doseUnit: string;
+}
+
+/**
+ * Creates a "took these" event and its dose rows in one transaction (#7, #9).
+ * The only write path (besides backup restore) that ever creates
+ * `medication_event`/`medication_dose` rows (invariant, HANDOFF.md §0) — every
+ * dose here snapshots its own `dose`/`doseUnit` at log time.
+ */
+export async function createMedicationEvent(
+  event: CreateMedicationEventInput,
+  doses: readonly MedicationDoseInput[],
+): Promise<{ event: MedicationEvent; doses: MedicationDose[] }> {
+  const now = Date.now();
+  const eventRow: NewMedicationEvent = {
+    ...event,
+    id: createId(),
+    createdAt: now,
+    updatedAt: now,
+  };
+  const doseRows: NewMedicationDose[] = doses.map((dose) => ({
+    ...dose,
+    id: createId(),
+    eventId: eventRow.id,
+    createdAt: now,
+    updatedAt: now,
+  }));
+
+  await db.transaction(async (tx) => {
+    await tx.insert(medicationEvent).values(eventRow);
+    if (doseRows.length > 0) {
+      await tx.insert(medicationDose).values(doseRows);
+    }
+  });
+
+  return { event: eventRow as MedicationEvent, doses: doseRows as MedicationDose[] };
+}
+
+/**
+ * Updates an event and replaces its dose rows in one transaction: the event
+ * row is patched, its existing doses are deleted, and the new ones inserted
+ * (fresh ids/timestamps) — never a per-row diff, since a dose has no identity
+ * worth preserving across an edit (only the event/medication ids matter).
+ */
+export async function updateMedicationEvent(
+  id: string,
+  event: CreateMedicationEventInput,
+  doses: readonly MedicationDoseInput[],
+): Promise<void> {
+  const now = Date.now();
+  const doseRows: NewMedicationDose[] = doses.map((dose) => ({
+    ...dose,
+    id: createId(),
+    eventId: id,
+    createdAt: now,
+    updatedAt: now,
+  }));
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(medicationEvent)
+      .set({ ...event, updatedAt: now })
+      .where(eq(medicationEvent.id, id));
+    await tx.delete(medicationDose).where(eq(medicationDose.eventId, id));
+    if (doseRows.length > 0) {
+      await tx.insert(medicationDose).values(doseRows);
+    }
+  });
+}
+
+/**
+ * Deletes an event and its dose rows together (the user correcting their own
+ * log, HANDOFF.md §0) — one transaction so a delete never leaves orphaned
+ * dose rows.
+ */
+export async function deleteMedicationEvent(id: string): Promise<void> {
+  await db.transaction(async (tx) => {
+    await tx.delete(medicationDose).where(eq(medicationDose.eventId, id));
+    await tx.delete(medicationEvent).where(eq(medicationEvent.id, id));
+  });
+}
+
+/** An event with its dose rows, or undefined when the id doesn't resolve. */
+export async function getMedicationEvent(
+  id: string,
+): Promise<{ event: MedicationEvent; doses: MedicationDose[] } | undefined> {
+  const eventRows = await db.select().from(medicationEvent).where(eq(medicationEvent.id, id)).limit(1);
+  const event = eventRows[0];
+  if (!event) return undefined;
+  const doses = await db.select().from(medicationDose).where(eq(medicationDose.eventId, id));
+  return { event, doses };
 }

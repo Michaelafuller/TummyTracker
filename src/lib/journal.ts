@@ -1,5 +1,7 @@
 // Pure helpers for browsing entries by day/week/month and grouping them by day.
 // All date math is local-time. Ranges are half-open: [start, end).
+import type { LogEntry, Medication, MedicationDose, MedicationEvent } from '@/db/schema';
+import { formatDoseNumber } from '@/lib/medications';
 import { formatDateInput, MONTHS_LONG } from './datetime';
 
 export type CalendarMode = 'day' | 'week' | 'month';
@@ -115,19 +117,111 @@ export function formatPeriodLabel(anchorMs: number, mode: CalendarMode): string 
   return `${MONTHS_LONG[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-export type EntryTypeFilter = 'all' | 'food' | 'bm' | 'symptom';
+/** 'meds' is a Journal-item-only filter (medication events have no `type` field) — see filterJournalItems. */
+export type EntryTypeFilter = 'all' | 'food' | 'bm' | 'symptom' | 'meds';
 
 const FOOD_TYPES_SET = new Set(['meal', 'snack']);
 
-/** Filter entries to all, just food (meal/snack), bowel movements, or symptoms. */
+/**
+ * Filter log entries to all, just food (meal/snack), bowel movements, or
+ * symptoms. `'meds'` has no log-entry meaning (there is no medication
+ * `type` value here) and returns everything, same as `'all'` — callers that
+ * also carry medication items filter those separately via
+ * `filterJournalItems`, which is `'meds'`'s real home.
+ */
 export function filterByEntryType<T extends { type: string }>(
   entries: readonly T[],
   filter: EntryTypeFilter,
 ): T[] {
-  if (filter === 'all') return [...entries];
   if (filter === 'bm') return entries.filter((e) => e.type === 'bowel_movement');
   if (filter === 'symptom') return entries.filter((e) => e.type === 'symptom');
-  return entries.filter((e) => FOOD_TYPES_SET.has(e.type));
+  if (filter === 'food') return entries.filter((e) => FOOD_TYPES_SET.has(e.type));
+  return [...entries];
+}
+
+/**
+ * One row in the merged Journal (HANDOFF.md §3.2, §5): either a `logEntry`
+ * (food/BM/symptom, unchanged) or a medication event summarizing its doses.
+ * `loggedAt` on both variants is what every range/day-grouping helper below
+ * already keys on, so the merged list reuses `filterEntriesInRange` /
+ * `groupEntriesByDay` / `entryDateKeys` without a fork.
+ */
+export type JournalItem =
+  | { kind: 'log'; id: string; loggedAt: number; entry: LogEntry }
+  | {
+      kind: 'medication';
+      /** The event's id. */
+      id: string;
+      loggedAt: number;
+      timeKnown: boolean;
+      /** e.g. "Omeprazole 20 mg · Ibuprofen 200 mg", built from each dose's own snapshot. */
+      summary: string;
+      notes: string | null;
+    };
+
+/** Wraps log entries as Journal items — unchanged, just re-shaped so they merge with medication items. */
+export function logEntriesToJournalItems(entries: readonly LogEntry[]): JournalItem[] {
+  return entries.map((entry) => ({ kind: 'log', id: entry.id, loggedAt: entry.loggedAt, entry }));
+}
+
+/**
+ * Maps medication events to Journal items, one per event, newest-in/newest-
+ * out order preserved. The summary uses each medication's CURRENT name
+ * (inactive included — HANDOFF.md #11 invariant: never deleted, still shown)
+ * with the DOSE'S OWN snapshot `dose`/`doseUnit` — never the medication's
+ * current default, so a later dosage change never rewrites history. An event
+ * whose medication row can't be found (shouldn't happen — medications are
+ * never deleted) shows "Unknown medication" defensively.
+ */
+export function medicationEventsToJournalItems(
+  events: readonly MedicationEvent[],
+  doses: readonly MedicationDose[],
+  meds: readonly Medication[],
+): JournalItem[] {
+  const medsById = new Map(meds.map((med) => [med.id, med] as const));
+  const dosesByEvent = new Map<string, MedicationDose[]>();
+  for (const dose of doses) {
+    const existing = dosesByEvent.get(dose.eventId);
+    if (existing) {
+      existing.push(dose);
+    } else {
+      dosesByEvent.set(dose.eventId, [dose]);
+    }
+  }
+
+  return events.map((event) => {
+    const eventDoses = dosesByEvent.get(event.id) ?? [];
+    const summary = eventDoses
+      .map((dose) => {
+        const name = medsById.get(dose.medicationId)?.name ?? 'Unknown medication';
+        return `${name} ${formatDoseNumber(dose.dose)} ${dose.doseUnit}`;
+      })
+      .join(' · ');
+
+    return {
+      kind: 'medication',
+      id: event.id,
+      loggedAt: event.takenAt,
+      timeKnown: event.timeKnown,
+      summary,
+      notes: event.notes,
+    };
+  });
+}
+
+/**
+ * Filters merged Journal items. `'all'` keeps everything; `'meds'` keeps only
+ * medication items; `'food'|'bm'|'symptom'` keep only log items of that type
+ * (medication items are excluded, matching the design contract: medications
+ * appear in the Journal only under the dedicated "Meds" chip).
+ */
+export function filterJournalItems(items: readonly JournalItem[], filter: EntryTypeFilter): JournalItem[] {
+  if (filter === 'all') return [...items];
+  if (filter === 'meds') return items.filter((item) => item.kind === 'medication');
+
+  const logItems = items.filter((item): item is Extract<JournalItem, { kind: 'log' }> => item.kind === 'log');
+  const keepIds = new Set(filterByEntryType(logItems.map((item) => item.entry), filter).map((entry) => entry.id));
+  return logItems.filter((item) => keepIds.has(item.entry.id));
 }
 
 /** The palette slice the Journal calendars are themed from (both modes share these keys). */
