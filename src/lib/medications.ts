@@ -4,8 +4,11 @@
 // (invariant, HANDOFF.md §0): they only ever summarize rows a caller already
 // has (Cycle B writes those rows; the UI and any future insights consume them).
 
-import { DOSE_UNITS, type MedicationDose, type MedicationEvent } from '@/db/schema';
+import { DOSE_UNITS, type Medication, type MedicationDose, type MedicationEvent } from '@/db/schema';
+import { formatDateInput } from '@/lib/datetime';
 import { validateNotes } from '@/lib/validation';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const MAX_MEDICATION_NAME_LENGTH = 100;
 export const MAX_OTHER_UNIT_LENGTH = 20;
@@ -203,4 +206,126 @@ export function wasTakenOn(
     (record) =>
       record.medicationId === medicationId && record.takenAt >= dayStartMs && record.takenAt < dayEndMs,
   );
+}
+
+export interface MedicationUseRange {
+  start: number;
+  end: number;
+}
+
+/**
+ * Per-medication use summary for the doctor report (GitHub #17). Every count
+ * comes only from logged dose rows — never `frequency`, `startDate`/`endDate`
+ * or `isActive` (HANDOFF.md §0 invariant: "nothing is inferred as taken").
+ */
+export interface MedicationUseSummary {
+  medicationId: string;
+  name: string;
+  isActive: boolean;
+  /** As the user typed it, for context only — never used to compute a count. */
+  frequency: string | null;
+  /** Dose rows in range. */
+  dosesLogged: number;
+  /** Distinct local days (formatDateInput) in range with >= 1 dose. */
+  daysWithDose: number;
+  /** Local days in range, clipped to the medication's own dates and clamped
+   *  up to daysWithDose (see summarizeMedicationUse). */
+  daysInRange: number;
+  /** Distinct snapshot amounts, most frequent first; ties keep first-seen order. */
+  amounts: { label: string; count: number }[];
+}
+
+/** Counts local calendar days in the half-open [startMs, endMs) range, stepping
+ *  a Date (DST-safe) rather than dividing by a fixed day length. */
+function countLocalDays(startMs: number, endMs: number): number {
+  if (endMs <= startMs) return 0;
+  const cursor = new Date(startMs);
+  cursor.setHours(0, 0, 0, 0);
+  let count = 0;
+  while (cursor.getTime() < endMs) {
+    count++;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return count;
+}
+
+/**
+ * The days-in-range denominator for one medication: the report's own
+ * [range.start, range.end) window, clipped to the medication's own
+ * startDate/endDate when set (both local-midnight epoch ms; endDate is
+ * inclusive of that day, so its exclusive boundary is endDate + 1 day), and
+ * never less than `daysWithDose` — a dose logged outside the stated dates
+ * still counts, so the denominator is clamped up rather than hiding it.
+ */
+function computeDaysInRange(
+  range: MedicationUseRange,
+  med: Pick<Medication, 'startDate' | 'endDate'>,
+  daysWithDose: number,
+): number {
+  const effectiveStart = med.startDate != null ? Math.max(range.start, med.startDate) : range.start;
+  const effectiveEnd = med.endDate != null ? Math.min(range.end, med.endDate + DAY_MS) : range.end;
+  return Math.max(countLocalDays(effectiveStart, effectiveEnd), daysWithDose);
+}
+
+/** Distinct dose-snapshot amounts, most frequent first; ties keep first-seen order
+ *  (Map iteration order + a stable sort). */
+function summarizeAmounts(records: readonly DoseRecord[]): { label: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const record of records) {
+    const label = `${formatDoseNumber(record.dose)} ${record.doseUnit}`;
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
+/**
+ * Summarizes logged medication use over `range` for the doctor report
+ * (GitHub #17). Includes every medication with >= 1 dose in range (active or
+ * not — an inactive medication's dose history is still real, #11 invariant),
+ * plus every active medication with none (so a clinician sees "Omeprazole —
+ * no doses logged"). An inactive medication with no doses in range is left
+ * out entirely. Ordered: medications with doses first (most `dosesLogged`
+ * first), then the active ones with none (A–Z).
+ */
+export function summarizeMedicationUse(
+  meds: readonly Medication[],
+  events: readonly MedicationEvent[],
+  doses: readonly MedicationDose[],
+  range: MedicationUseRange,
+): MedicationUseSummary[] {
+  const recordsInRange = filterDoseRecordsInRange(flattenDoseRecords(events, doses), range);
+  const byMedication = groupDoseRecordsByMedication(recordsInRange);
+
+  const withDoses: MedicationUseSummary[] = [];
+  const withoutDoses: MedicationUseSummary[] = [];
+
+  for (const med of meds) {
+    const records = byMedication.get(med.id) ?? [];
+    if (records.length === 0 && !med.isActive) continue;
+
+    const daysWithDose = new Set(records.map((record) => formatDateInput(record.takenAt))).size;
+    const summary: MedicationUseSummary = {
+      medicationId: med.id,
+      name: med.name,
+      isActive: med.isActive,
+      frequency: med.frequency,
+      dosesLogged: records.length,
+      daysWithDose,
+      daysInRange: computeDaysInRange(range, med, daysWithDose),
+      amounts: summarizeAmounts(records),
+    };
+
+    if (records.length > 0) {
+      withDoses.push(summary);
+    } else {
+      withoutDoses.push(summary);
+    }
+  }
+
+  withDoses.sort((a, b) => b.dosesLogged - a.dosesLogged);
+  withoutDoses.sort((a, b) => a.name.localeCompare(b.name));
+
+  return [...withDoses, ...withoutDoses];
 }
