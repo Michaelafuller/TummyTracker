@@ -29,6 +29,13 @@ jest.mock('@/db/repository', () => ({
   removeWatchlistItem: jest.fn(),
 }));
 
+// The Watchlist section's "Start experiment" entry point (GitHub #19) reads
+// the active experiment via a live-query hook that ultimately opens the real
+// expo-sqlite client — mock it out the same way.
+jest.mock('@/features/experiments/useExperiments', () => ({
+  useActiveExperiment: () => undefined,
+}));
+
 const TEST_INSETS: Metrics = {
   frame: { x: 0, y: 0, width: 320, height: 640 },
   insets: { top: 0, left: 0, right: 0, bottom: 0 },

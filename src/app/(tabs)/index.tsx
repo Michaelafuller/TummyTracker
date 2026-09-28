@@ -12,6 +12,7 @@ import { getMealComponents, hasAnyLogEntry, listRecentFoodEntries } from '@/db/r
 import { BackupNudge } from '@/features/backup/BackupNudge';
 import { DayCheckInCard } from '@/features/checkin/DayCheckInCard';
 import { useDayCheckInResponses } from '@/features/checkin/useDayCheckInResponses';
+import { ExperimentHomeCard } from '@/features/experiments/ExperimentHomeCard';
 import { useMealBuilderStore } from '@/features/logging/mealBuilderStore';
 import { RecentFoodPicker } from '@/features/logging/RecentFoodPicker';
 import { useTheme } from '@/hooks/use-theme';
@@ -167,6 +168,8 @@ export default function HomeScreen() {
               </Link>
             </ThemedView>
           </ThemedView>
+
+          <ExperimentHomeCard now={now} />
 
           <BackupNudge hasData={hasData} now={now} />
 

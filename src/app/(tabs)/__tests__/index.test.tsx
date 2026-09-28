@@ -47,6 +47,13 @@ jest.mock('@/features/backup/BackupNudge', () => ({
   BackupNudge: () => null,
 }));
 
+// The active-experiment row (GitHub #19) is exercised by its own test
+// (features/experiments/__tests__/ExperimentHomeCard.test.tsx) — mocked here
+// so this screen test never touches the real (native-only) expo-sqlite client.
+jest.mock('@/features/experiments/ExperimentHomeCard', () => ({
+  ExperimentHomeCard: () => null,
+}));
+
 // The day check-in card and its notification-response hook are exercised by
 // their own tests (features/checkin/__tests__) — mocked here so this screen
 // test never touches the real (native-only) expo-sqlite client.

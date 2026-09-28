@@ -1,3 +1,4 @@
+import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -5,6 +6,7 @@ import { ThemedTextInput } from '@/components/form-fields';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import type { LogEntry, WatchlistItem } from '@/db/schema';
+import { useActiveExperiment } from '@/features/experiments/useExperiments';
 import { useTheme } from '@/hooks/use-theme';
 import { computeWatchStats, normalizeWatchTerm, type WatchStats } from '@/lib/watchlist';
 import { useWatchlistStore } from './watchlistStore';
@@ -39,10 +41,15 @@ const INVALID_TERM_MESSAGE = 'Enter at least 2 letters or numbers.';
  */
 export function WatchlistSection({ entries, now }: { entries: readonly LogEntry[]; now: number }) {
   const theme = useTheme();
+  const router = useRouter();
   const items = useWatchlistStore((state) => state.items);
   const add = useWatchlistStore((state) => state.add);
   const remove = useWatchlistStore((state) => state.remove);
   const rename = useWatchlistStore((state) => state.rename);
+  // Elimination experiments (GitHub #19): at most one active at a time —
+  // every item offers "Start experiment" except the one already under test,
+  // which links to its running experiment instead.
+  const activeExperiment = useActiveExperiment();
 
   const [term, setTerm] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -143,6 +150,22 @@ export function WatchlistSection({ entries, now }: { entries: readonly LogEntry[
                 <ThemedText type="small" themeColor="textSecondary">
                   {watchStatsSentence(item, stats)}
                 </ThemedText>
+
+                {activeExperiment?.term === item.term ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open ${item.term} experiment`}
+                    onPress={() => router.push(`/experiment/${activeExperiment.id}`)}>
+                    <ThemedText type="link">Experiment running</ThemedText>
+                  </Pressable>
+                ) : activeExperiment == null ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Start experiment on ${item.term}`}
+                    onPress={() => router.push({ pathname: '/experiment/new', params: { term: item.term } })}>
+                    <ThemedText type="link">Start experiment</ThemedText>
+                  </Pressable>
+                ) : null}
 
                 {isEditing ? (
                   <View style={styles.editor}>

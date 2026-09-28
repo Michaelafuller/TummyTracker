@@ -1,7 +1,7 @@
 import { fireEvent, render } from '@testing-library/react-native';
 
 import { addWatchlistItem, listWatchlistItems, removeWatchlistItem, renameWatchlistItem } from '@/db/repository';
-import type { LogEntry, WatchlistItem } from '@/db/schema';
+import type { Experiment, LogEntry, WatchlistItem } from '@/db/schema';
 import { useWatchlistStore } from '../watchlistStore';
 import { WatchlistSection } from '../WatchlistSection';
 
@@ -10,6 +10,19 @@ jest.mock('@/db/repository', () => ({
   addWatchlistItem: jest.fn(),
   removeWatchlistItem: jest.fn(),
   renameWatchlistItem: jest.fn(),
+}));
+
+const mockPush = jest.fn();
+jest.mock('expo-router', () => ({
+  useRouter: () => ({ push: mockPush }),
+}));
+
+// GitHub #19: the Watchlist section's "Start experiment" / "Experiment
+// running" entry point reads the active experiment live — mocked here like
+// every other live-query hook this component doesn't own.
+let mockActiveExperiment: Experiment | undefined;
+jest.mock('@/features/experiments/useExperiments', () => ({
+  useActiveExperiment: () => mockActiveExperiment,
 }));
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -45,8 +58,27 @@ function entry(overrides: Partial<LogEntry> = {}): LogEntry {
   };
 }
 
+function experimentRow(overrides: Partial<Experiment> = {}): Experiment {
+  return {
+    id: 'exp1',
+    term: 'soy',
+    startDate: '2026-04-01',
+    baselineDays: 14,
+    eliminationDays: 14,
+    challengeDays: 3,
+    observationDays: 3,
+    status: 'active',
+    verdictJson: null,
+    endedAt: null,
+    createdAt: 0,
+    updatedAt: 0,
+    ...overrides,
+  };
+}
+
 beforeEach(() => {
   useWatchlistStore.setState({ items: [], loaded: false });
+  mockActiveExperiment = undefined;
   jest.clearAllMocks();
 });
 
@@ -187,5 +219,40 @@ describe('WatchlistSection', () => {
     useWatchlistStore.setState({ items: [soy], loaded: true });
     const { getByText } = await render(<WatchlistSection entries={[]} now={0} />);
     expect(getByText('soy')).toBeTruthy();
+  });
+});
+
+describe('WatchlistSection — elimination-experiment entry point (GitHub #19)', () => {
+  it('shows "Start experiment" on every item when no experiment is active', async () => {
+    const soy: WatchlistItem = { id: 'w1', term: 'soy', createdAt: 0 };
+    const dairy: WatchlistItem = { id: 'w2', term: 'dairy', createdAt: 0 };
+    useWatchlistStore.setState({ items: [soy, dairy], loaded: true });
+    const { getByLabelText } = await render(<WatchlistSection entries={[]} now={0} />);
+    expect(getByLabelText('Start experiment on soy')).toBeTruthy();
+    expect(getByLabelText('Start experiment on dairy')).toBeTruthy();
+  });
+
+  it('tapping "Start experiment" navigates to the new-experiment screen with the term', async () => {
+    const soy: WatchlistItem = { id: 'w1', term: 'soy', createdAt: 0 };
+    useWatchlistStore.setState({ items: [soy], loaded: true });
+    const { getByLabelText } = await render(<WatchlistSection entries={[]} now={0} />);
+    await fireEvent.press(getByLabelText('Start experiment on soy'));
+    expect(mockPush).toHaveBeenCalledWith({ pathname: '/experiment/new', params: { term: 'soy' } });
+  });
+
+  it('the item under test shows "Experiment running" instead, linking to it', async () => {
+    const soy: WatchlistItem = { id: 'w1', term: 'soy', createdAt: 0 };
+    const dairy: WatchlistItem = { id: 'w2', term: 'dairy', createdAt: 0 };
+    useWatchlistStore.setState({ items: [soy, dairy], loaded: true });
+    mockActiveExperiment = experimentRow({ id: 'exp1', term: 'soy' });
+    const { getByLabelText, queryByLabelText } = await render(<WatchlistSection entries={[]} now={0} />);
+
+    await fireEvent.press(getByLabelText('Open soy experiment'));
+    expect(mockPush).toHaveBeenCalledWith('/experiment/exp1');
+
+    // Neither the running item nor any other item offers "Start experiment"
+    // while one is already active (at most one active, invariant).
+    expect(queryByLabelText('Start experiment on soy')).toBeNull();
+    expect(queryByLabelText('Start experiment on dairy')).toBeNull();
   });
 });
