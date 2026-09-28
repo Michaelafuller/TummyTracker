@@ -7,6 +7,7 @@ appId: com.tummytracker.app.dev
 #   - Journal: "Meds" chip shows it, "Food" hides it (Journal integration)
 #   - Edit the entry's notes (#8), then delete it (confirm) → gone everywhere
 #   - The medications' defaults are unchanged throughout (#9)
+#   - Each ticked line shows its unit as text + "Change unit" (#16)
 ---
 - launchApp:
     clearState: true
@@ -56,6 +57,9 @@ appId: com.tummytracker.app.dev
 - waitForAnimationToEnd
 - tapOn: "Took Omeprazole"
 - tapOn: "Took Ibuprofen"
+# Units show as text with "Change unit", not a row of chips (GitHub #16).
+- assertVisible: "Change unit for Ibuprofen"
+- assertNotVisible: "capsule"
 - tapOn: "Dose of Ibuprofen"
 - repeat:
     times: 3

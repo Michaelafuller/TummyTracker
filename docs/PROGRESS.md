@@ -57,15 +57,22 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
 - **Owed device check — "What came before" (GH #15, 2026-09-27):** run
   `flows/v-what-came-before.yaml`; regression: `01d-browse-edit`,
   `c-symptom-logging`, `02-bm-tracking`, `m-finding-drilldown`. JS-only.
+- **Owed device check — polish bundle (GH #16, 2026-09-27):** run
+  `q-reuse-adjust`, `s-medication-entry` (both updated), `ux3-scan-screen`;
+  by hand: deny camera → "Enter manually" works from Home Scan and from meal
+  review's "Add item"; every date/time picker (entry edit, meal review, BM,
+  symptom, medication entry + inventory dates, Settings/Goals time chips) —
+  pick, cancel, pick again (the picker API moved off the deprecated
+  `onChange`). Regression: `g-datetime-picker`, `01e-reminders`,
+  `checkin-persistence`, `r-medications`. JS-only.
 - **Owed device checks:** iOS pass (the #2 keyboard items below + carried: iOS
   app icon, time-picker Done feel), light-mode walkthrough, camera scan loop,
   and the manual items in `docs/E2E.md`. **Owner sequencing from the
   2026-08-21 build-variant split — unconfirmed:** a preview/production build
   should reclaim the real `com.tummytracker.app` package for the owner's
   journal (dev client stays `…app.dev`); confirm or re-pin.
-- **Low-priority findings (carried):** `DateTimePicker onChange` deprecation
-  warning (`date-time-field.tsx`, `time-field.tsx`) · Insights has no
-  "Insights" subtitle heading (label consistency).
+- **Low-priority findings (carried):** Insights has no "Insights" subtitle
+  heading (label consistency).
 
 ### Shipped last cycle — 2026-09-27 (Opus plan/review, Sonnet execute; full history = `git log`)
 
@@ -89,9 +96,16 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   gives it ("No pattern yet" otherwise; meds listed, never scored). Engine
   unchanged. Review fixes: meal rows were hidden from screen readers, and a
   previous-day untimed dose read "Same day".
+- **Quick-win polish (GitHub #16):** medication units as text + "Change
+  unit"; an auto meal name follows its items (typed names never change);
+  "Enter manually" without camera permission; pickers off the deprecated
+  `onChange`; retired `entry/new` + `prefillStore` (owner); shared
+  Collapsible test mock; `generate-icons.mjs` now owns tab icons only (the
+  app icons are the owner's raster exports — owner). Review fix: meds with a
+  custom default unit still showed every chip.
 - Earlier (2026-09-26): re-log + Add item (#1), medications epic (#4–#11),
   keyboard dismissal (#2), Settings gear, #12 re-baseline. Issues **#1, #2,
-  #4–#11, #13–#15** are done but still open on GitHub — the owner closes them.
+  #4–#11, #13–#16** are done but still open on GitHub — the owner closes them.
 
 ---
 
@@ -132,7 +146,8 @@ analysis.
    everything eaten *and taken* in the preceding 24–72 h, with the engine's
    existing suspicion for each. The reverse of today's food → outcomes
    drill-down; reuses existing data and helpers.
-5. **Quick-win polish** (GH #16) — S each, bundle into one cycle:
+5. ~~**Quick-win polish** (GH #16)~~ — **✅ shipped 2026-09-27** (device check
+   owed). Original list, for reference:
    - *Medication entry "Change unit":* every ticked med shows all 10 unit
      chips though the unit is almost always its default — show it as text
      with a "Change unit" affordance.

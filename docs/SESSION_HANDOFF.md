@@ -5,8 +5,8 @@
 > Written 2026-09-27 at the end of a long Opus session (2026-09-26 → 27) so the
 > next session can continue without the transcript. `docs/HANDOFF.md` is a
 > *different* file: the execute-session spec for Sonnet — it currently holds the
-> finished "what came before" (GH #15) spec and gets overwritten by the next plan.
-> **Updated 2026-09-27 (later session):** GH #13, #14 and #15 shipped — see §1/§2.
+> finished quick-win polish (GH #16) spec and gets overwritten by the next plan.
+> **Updated 2026-09-27 (later session):** GH #13–#16 shipped — see §1/§2.
 
 ## 1. Where things stand
 
@@ -24,6 +24,10 @@
   Sonnet `85f1dce`, `c0156e5`, review fix `4efbda2`, then docs +
   `flows/v-what-came-before.yaml`. Rungs, `bundle:check`, targeted Jest (9
   suites / 128 tests) green. Device check owed.
+- **Also committed, NOT pushed:** GH #16 polish bundle — plan `aad4c82`,
+  Sonnet `d52b784..a932e7f`, review fix `a6aabe0`, then docs + updated
+  `q-reuse-adjust` / `s-medication-entry`. Rungs, `bundle:check`, targeted
+  Jest (17 suites / 182 tests) green. Device check owed.
 - **Typed routes:** `.expo/types/router.d.ts` (gitignored) only regenerates
   under `npx expo start`; a new route won't typecheck on a machine that
   hasn't run Metro since. Sonnet hand-added `/outcome/[id]` locally; the next
@@ -44,13 +48,11 @@
 
 The ranked backlog is `docs/PROGRESS.md` → "📌 Pinned — next up" (#1–7) and
 "Ranked backlog — continued" (#8–19). Each item names its GitHub issue.
-**#1–#4 (GH #12–#15) are done** (#13–#15 still owe device checks), so the
-next item is:
+**#1–#5 (GH #12–#16) are done** (#13–#16 still owe device checks — one
+Pixel session can cover all four), so the next item is:
 
-- **#5 — Quick-win polish bundle (GH #16).** Plan session first; it includes
-  an owner decision already made (stale auto meal name) and one still open
-  (retire `entry/new` + `prefillStore`, §5).
-- Then #6 onward (see PROGRESS).
+- **#6 — Doctor PDF report: add medications (GH #17).** Plan session first.
+- Then #7 onward (see PROGRESS).
 
 ## 3. How the owner likes to work (confirmed across the session)
 
@@ -109,7 +111,6 @@ next item is:
 
 ## 5. Open owner decisions (don't act without an answer)
 
-- Retire `src/app/entry/new.tsx` + `prefillStore.ts` (no callers left)?
 - Build sequencing from 2026-08-21: has a preview/production build reclaimed
   the real `com.tummytracker.app` package? (Unconfirmed.)
 - iOS verification of #2 (no iOS device/Mac in this environment).

@@ -6,6 +6,8 @@ appId: com.tummytracker.app.dev
 #   - Recent tap → review seeded with both items (Aggregate 300)
 #   - Rice 1× → 2× rescales the row (400) and aggregate (500)
 #   - Remove Beans → one item left, aggregate 400
+#   - The auto-generated name follows the items: "Rice + 1 more" → "Rice"
+#     after Remove (GitHub #16, 2026-09-27)
 #   - Save → journal holds the new 400 kcal entry AND the untouched 300 kcal
 #     two-item original (copy, never edit)
 ---
@@ -95,3 +97,9 @@ appId: com.tummytracker.app.dev
 - waitForAnimationToEnd
 - assertVisible: ".*400 kcal.*"
 - assertVisible: ".*300 kcal.*"
+# The new entry is named for its one remaining item — the auto name followed
+# the Remove — while the original keeps its two-item name.
+- assertVisible:
+    id: "entry-row-rice"
+- assertVisible:
+    id: "entry-row-rice-1-more"
