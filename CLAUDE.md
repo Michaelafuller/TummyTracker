@@ -127,6 +127,22 @@
   a failure deletes nothing and only records `autoBackupError`. iOS gets the
   nudge + share export only (folder persistence unverified). Backup state
   lives in prefs, not the DB.
+- **Repository transactions must be synchronous (2026-09-27, GitHub #18).**
+  `drizzle-orm/expo-sqlite`'s `db.transaction()` runs `BEGIN`, calls the
+  callback, and `COMMIT`s as soon as it *returns* — it never awaits. An
+  `async` callback commits before its awaited queries run, so nothing inside
+  was atomic until this fix. Rule: inside `db.transaction((tx) => …)` use only
+  the sync builders (`.run()`, `.all()`, `.get()`), never `await`; compute ids
+  and timestamps before the transaction. The repository tests
+  (`src/db/__tests__/repository.atomicity.test.ts`) fail if this regresses.
+- **Real-SQLite repository tests (2026-09-27, GitHub #18).** `jest/expo-sqlite-node.ts`
+  is a Jest-only fake `expo-sqlite` backed by Node's built-in `node:sqlite`
+  (**Node ≥ 22.13 to run the tests**; no dependency). A DB test file starts
+  with `jest.mock('expo-sqlite', () => jest.requireActual('<path>/jest/expo-sqlite-node'))`,
+  then uses `src/db/testUtils/testDb.ts` (`migrateTestDb`, `resetTestDb`,
+  `closeTestDb`) — the real client, schema, migrations and repository run
+  against an in-memory database. Helpers live outside `__tests__/` because
+  Jest collects every file there as a suite. Never import either from app code.
 
 ## 1. What this project is
 

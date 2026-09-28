@@ -5,8 +5,8 @@
 > Written 2026-09-27 at the end of a long Opus session (2026-09-26 → 27) so the
 > next session can continue without the transcript. `docs/HANDOFF.md` is a
 > *different* file: the execute-session spec for Sonnet — it currently holds the
-> finished doctor-report medications (GH #17) spec and gets overwritten by the next plan.
-> **Updated 2026-09-27 (later session):** GH #13–#17 shipped — see §1/§2.
+> finished repository-tests (GH #18) spec and gets overwritten by the next plan.
+> **Updated 2026-09-27 (later session):** GH #13–#18 shipped — see §1/§2.
 
 ## 1. Where things stand
 
@@ -32,6 +32,9 @@
   Sonnet `e1dc153`, `dfda2f3`, review fix `262ef2c`, then docs. Rungs,
   `bundle:check`, targeted Jest (5 suites / 148 tests) green. Device check
   owed (manual — share sheet).
+- **Also committed, NOT pushed:** GH #18 repository DB tests + atomic
+  transactions — plan `f65d78d`, Sonnet `c2d4fe6..17d056a`, review fix
+  `660148d`, then docs. 64 DB tests + 103 adjacent green; rungs clean.
 - **Typed routes:** `.expo/types/router.d.ts` (gitignored) only regenerates
   under `npx expo start`; a new route won't typecheck on a machine that
   hasn't run Metro since. Sonnet hand-added `/outcome/[id]` locally; the next
@@ -52,12 +55,13 @@
 
 The ranked backlog is `docs/PROGRESS.md` → "📌 Pinned — next up" (#1–7) and
 "Ranked backlog — continued" (#8–19). Each item names its GitHub issue.
-**#1–#6 (GH #12–#17) are done** (#13–#17 still owe device checks — one
-Pixel session can cover all five), so the next item is:
-
-- **#7 — Database-level tests for `repository.ts` (GH #18).** Plan session
-  first (likely needs a SQLite test harness — check for a dependency ask).
-- Then #8 onward (see PROGRESS).
+**#1–#7 (GH #12–#18) are done** (#13–#18 still owe device checks — one
+Pixel session can cover all six), so the pinned list is finished. Next is
+the "Ranked backlog — continued" table in PROGRESS, starting at **#8
+(GH #19)**. Plan session first.
+- **Worth doing first:** a full `npm test` run. Seven cycles have run only
+  targeted Jest since the 95/887 baseline; a full run before starting #8 is
+  cheap insurance (the owner decides).
 
 ## 3. How the owner likes to work (confirmed across the session)
 

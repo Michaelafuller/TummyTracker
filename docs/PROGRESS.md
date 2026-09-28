@@ -70,6 +70,10 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   dose) + one active with no doses → Create PDF, 30 days → Medications table
   ("N of 30", "No doses logged in this range", amounts), dose rows in the
   Journal by time. Regression: `n-doctor-report`. JS-only.
+- **Owed device check — atomic repository writes (GH #18, 2026-09-27):**
+  behavior only changes on a mid-write failure, so a regression of the save
+  paths is enough: `q-reuse-adjust`, `j-component-drilldown` (edit/delete a
+  meal item), `s-medication-entry` (create/edit/delete), `i-backup`. JS-only.
 - **Owed device checks:** iOS pass (the #2 keyboard items below + carried: iOS
   app icon, time-picker Done feel), light-mode walkthrough, camera scan loop,
   and the manual items in `docs/E2E.md`. **Owner sequencing from the
@@ -114,9 +118,17 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   report's Journal. Wording is "logged" only — never "missed". Review fix: the
   report window used fixed 24 h steps, so across a spring-forward change it
   pulled in the previous day's last hour and read "of 31" in a 30-day report.
+- **Repository tests against real SQLite + atomic transactions (GitHub #18):**
+  a Jest-only `node:sqlite` fake for `expo-sqlite` (no dependency) runs the
+  real client, migrations and repository; 64 DB tests incl. a 5,000-dose
+  restore. Found in planning: every repository "transaction" committed before
+  its writes ran (Drizzle's expo-sqlite transaction is synchronous; our
+  callbacks were async) — 8 of 9 multi-step writes could leave partial data
+  on a failure. All converted to sync callbacks; the atomicity tests went
+  red → green.
 - Earlier (2026-09-26): re-log + Add item (#1), medications epic (#4–#11),
   keyboard dismissal (#2), Settings gear, #12 re-baseline. Issues **#1, #2,
-  #4–#11, #13–#17** are done but still open on GitHub — the owner closes them.
+  #4–#11, #13–#18** are done but still open on GitHub — the owner closes them.
 
 ---
 
@@ -173,7 +185,8 @@ analysis.
 6. ~~**Doctor PDF report: add medications** (GH #17)~~ — **✅ shipped
    2026-09-27** (device check owed). Original rationale: S. The report covers food and
    outcomes; a clinician will want medication use and adherence alongside.
-7. **Database-level tests for `repository.ts`** (GH #18) — S–M. The repository is only
+7. ~~**Database-level tests for `repository.ts`** (GH #18)~~ — **✅ shipped
+   2026-09-27**. Original rationale: S–M. The repository is only
    exercised through mocks; both 2026-09-26 restore bugs (SQLite bound-
    variable cap, stale doses after an edit) were caught by review alone. An
    in-memory SQLite harness would catch that class automatically. Check
