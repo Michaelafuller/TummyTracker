@@ -31,7 +31,8 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   logging, history, Journal integration); **day check-in** (fine/rough day:
   Home card, notification buttons, Insights day coverage); **automatic
   backups** (Android daily-on-open to a chosen folder, newest 7) + a
-  "last backup" nudge; Settings behind a
+  "last backup" nudge; **"What came before"** a rough outcome (meals +
+  meds in the prior 24–72 h with existing suspicion); Settings behind a
   top-right gear;
   app-wide keyboard toolbar. Tabs: Home · Journal · Meds · Insights · Goals.
 - **Device + build:** Pixel 5 dev client = the **2026-08-29 EAS development
@@ -53,6 +54,9 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   `flows/u-backup-nudge.yaml` + the manual folder/daily/prune/reinstall steps
   in its header; regression: `settings-smoke`, `i-backup`, and the Home flows
   above. JS-only — no new build.
+- **Owed device check — "What came before" (GH #15, 2026-09-27):** run
+  `flows/v-what-came-before.yaml`; regression: `01d-browse-edit`,
+  `c-symptom-logging`, `02-bm-tracking`, `m-finding-drilldown`. JS-only.
 - **Owed device checks:** iOS pass (the #2 keyboard items below + carried: iOS
   app icon, time-picker Done feel), light-mode walkthrough, camera scan loop,
   and the manual items in `docs/E2E.md`. **Owner sequencing from the
@@ -79,9 +83,15 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   Review fixes: pruning deleted nothing on real SAF storage, a failed write
   could leave an empty "backup" among the 7, a same-day double run, and an
   unhandled share failure from the nudge.
+- **Work backwards from a bad day (GitHub #15):** a rough BM/symptom's edit
+  screen links to "What came before" — meals and medications in the prior
+  24/48/72 h, closest first, each meal with the suspicion Insights already
+  gives it ("No pattern yet" otherwise; meds listed, never scored). Engine
+  unchanged. Review fixes: meal rows were hidden from screen readers, and a
+  previous-day untimed dose read "Same day".
 - Earlier (2026-09-26): re-log + Add item (#1), medications epic (#4–#11),
   keyboard dismissal (#2), Settings gear, #12 re-baseline. Issues **#1, #2,
-  #4–#11, #13, #14** are done but still open on GitHub — the owner closes them.
+  #4–#11, #13–#15** are done but still open on GitHub — the owner closes them.
 
 ---
 
@@ -117,7 +127,8 @@ analysis.
    one phone; backup is manual, and a signing-mismatch reinstall wipes it
    (CLAUDE.md §0). Scheduled automatic backup to a user-chosen location, or at
    minimum a "last backup: 34 days ago" nudge on Home/Settings.
-4. **Work backwards from a bad day** (GH #15) — S. Tap a rough BM or symptom → see
+4. ~~**Work backwards from a bad day** (GH #15)~~ — **✅ shipped 2026-09-27**
+   (device check owed, see Status). Original rationale: S. Tap a rough BM or symptom → see
    everything eaten *and taken* in the preceding 24–72 h, with the engine's
    existing suspicion for each. The reverse of today's food → outcomes
    drill-down; reuses existing data and helpers.

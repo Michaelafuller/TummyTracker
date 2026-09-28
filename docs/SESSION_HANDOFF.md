@@ -5,8 +5,8 @@
 > Written 2026-09-27 at the end of a long Opus session (2026-09-26 → 27) so the
 > next session can continue without the transcript. `docs/HANDOFF.md` is a
 > *different* file: the execute-session spec for Sonnet — it currently holds the
-> finished automatic-backups (GH #14) spec and gets overwritten by the next plan.
-> **Updated 2026-09-27 (later session):** GH #13 and #14 shipped — see §1/§2.
+> finished "what came before" (GH #15) spec and gets overwritten by the next plan.
+> **Updated 2026-09-27 (later session):** GH #13, #14 and #15 shipped — see §1/§2.
 
 ## 1. Where things stand
 
@@ -20,6 +20,14 @@
   Sonnet `ed7bcdb..9bea002`, review fixes `75d9dca`, `22f8570`, then docs +
   `flows/u-backup-nudge.yaml`. Rungs, `bundle:check`, targeted Jest (10
   suites / 173 tests) green. Device check owed (see PROGRESS Status).
+- **Also committed, NOT pushed:** GH #15 "What came before" — plan `93aff7f`,
+  Sonnet `85f1dce`, `c0156e5`, review fix `4efbda2`, then docs +
+  `flows/v-what-came-before.yaml`. Rungs, `bundle:check`, targeted Jest (9
+  suites / 128 tests) green. Device check owed.
+- **Typed routes:** `.expo/types/router.d.ts` (gitignored) only regenerates
+  under `npx expo start`; a new route won't typecheck on a machine that
+  hasn't run Metro since. Sonnet hand-added `/outcome/[id]` locally; the next
+  `expo start` regenerates it properly.
 - **Test baseline (2026-09-27, GitHub #12):** full Maestro **34/34** on the
   Pixel 5 + full Jest **95 suites / 887 tests**, typecheck, lint,
   `bundle:check` all green. **0 app regressions.** Details: `docs/RESULTS.md`.
@@ -36,11 +44,13 @@
 
 The ranked backlog is `docs/PROGRESS.md` → "📌 Pinned — next up" (#1–7) and
 "Ranked backlog — continued" (#8–19). Each item names its GitHub issue.
-**#1–#3 (GH #12–#14) are done** (#13 and #14 still owe device checks), so
-the next item is:
+**#1–#4 (GH #12–#15) are done** (#13–#15 still owe device checks), so the
+next item is:
 
-- **#4 — Work backwards from a bad day (GH #15).** Plan session first.
-- Then #5 quick-win polish (GH #16), …
+- **#5 — Quick-win polish bundle (GH #16).** Plan session first; it includes
+  an owner decision already made (stale auto meal name) and one still open
+  (retire `entry/new` + `prefillStore`, §5).
+- Then #6 onward (see PROGRESS).
 
 ## 3. How the owner likes to work (confirmed across the session)
 

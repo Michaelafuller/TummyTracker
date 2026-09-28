@@ -1,0 +1,47 @@
+appId: com.tummytracker.app.dev
+# V — Work backwards from a bad day (GitHub #15, 2026-09-27).
+#   - A rough symptom's edit screen offers "See what came before"
+#   - The timeline lists the Wheat Bread meals eaten a few hours earlier,
+#     each with the suspicion Insights already gives Wheat Bread
+#   - The 8+-day-old Rice Bowl controls stay out even at 72 h
+#   - Tapping a meal opens that meal
+# Seed: _helpers/seed-meals-for-insights.yaml (5 Wheat Bread meals a few hours
+# ago, 2 Rice Bowl meals 8+ days ago, a severity-3 Bloating logged now —
+# the same data 03-insights uses to surface the "Wheat Bread" finding).
+---
+- launchApp:
+    clearState: true
+- runFlow: _helpers/reconnect-dev-client.yaml
+
+- runFlow: _helpers/seed-meals-for-insights.yaml
+
+- tapOn:
+    id: "tab-journal"
+- waitForAnimationToEnd
+- tapOn:
+    id: "entry-row-bloating"
+- waitForAnimationToEnd
+
+- assertVisible: "Rough outcome"
+- tapOn:
+    id: "see-what-came-before"
+- waitForAnimationToEnd
+- assertVisible: "What came before"
+
+# Meals within 24 h, each carrying the existing Wheat Bread suspicion.
+- assertVisible: "Wheat Bread"
+- assertVisible: ".* h before|Just before"
+- assertVisible: "Linked to rough outcomes: .*Wheat Bread.*"
+- assertNotVisible: "Rice Bowl"
+
+# Widening to 72 h still excludes the 8+-day-old controls.
+- tapOn: "72 h"
+- waitForAnimationToEnd
+- assertNotVisible: "Rice Bowl"
+
+# A meal row opens that meal.
+- tapOn:
+    id: "entry-row-wheat-bread"
+    index: 0
+- waitForAnimationToEnd
+- assertVisible: "Save changes"
