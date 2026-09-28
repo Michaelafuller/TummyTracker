@@ -61,6 +61,13 @@ export default function ScanScreen() {
           style={[styles.button, { backgroundColor: theme.primary }]}>
           <ThemedText style={{ color: theme.primaryText }}>Grant access</ThemedText>
         </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Enter product manually"
+          onPress={() => router.replace('/meal/component')}
+          style={[styles.secondaryButton, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+          <ThemedText>Enter manually</ThemedText>
+        </Pressable>
       </Centered>
     );
   }
@@ -120,6 +127,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.four,
     paddingVertical: Spacing.three,
     borderRadius: Spacing.three,
+  },
+  secondaryButton: {
+    paddingHorizontal: Spacing.four,
+    paddingVertical: Spacing.three,
+    borderRadius: Spacing.three,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   overlay: {
     position: 'absolute',
