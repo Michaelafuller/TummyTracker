@@ -1,183 +1,279 @@
-# HANDOFF.md — Execute session: Real-SQLite tests for `repository.ts` + atomic transactions, GitHub #18
+# HANDOFF.md — Execute session: Elimination experiment, Cycle A (the whole loop), GitHub #19
 
-> **Read first:** this file only. `CLAUDE.md` is auto-loaded (§4 rungs, §8
-> conventions, §9 guardrails). Adds a Jest-only SQLite harness (a fake
-> `expo-sqlite` backed by Node's built-in `node:sqlite`), repository tests
-> against it, and fixes every `db.transaction(...)` in
-> `src/db/repository.ts` to be genuinely atomic.
+> **Read first:** this file only. `CLAUDE.md` is auto-loaded — note §0's
+> **"repository transactions must be synchronous"** rule and the real-SQLite
+> repository test harness (use it for the new repository functions). Adds an
+> `experiment` table (**owner-approved 2026-09-27**, additive), a pure
+> experiment engine, repository + backup v5, and three screens.
 >
-> **No new dependency** (`node:sqlite` is built into Node ≥ 22.13; this
-> machine runs Node 26), no schema change, no permission, no native change,
-> no EAS build. App behavior changes only in that multi-row writes become
-> all-or-nothing, which is what every doc comment already claims.
+> **Pure JS/TS + one additive migration** — no new dependency, no new
+> permission, no native change, no EAS build. Notifications are **Cycle B**
+> (not this cycle).
 
 **Planned 2026-09-27 (Opus plan session) — GitHub
-Michaelafuller/TummyTracker#18.** Done-when (from the issue): "a DB test
-harness exists and covers create/update/delete/restore paths."
+Michaelafuller/TummyTracker#19.** Done-when (issue): "I can start, follow and
+finish an experiment and get a verdict with a confidence level." Owner
+decisions (2026-09-27):
 
-## ⚠ The bug this cycle fixes (found while planning — spike verified)
+1. **Standard protocol:** baseline = the **14 days before start**, read from
+   existing logs (no waiting); **avoid for 14 days** (user picks 7/14/21/28);
+   then **3 challenge days** (eat it once a day) + **3 observation days**.
+2. **Suspect = an ingredient term** matched against tags with the watchlist's
+   word-boundary rule (`matchesWatchTerm`). Starting an experiment adds the
+   term to the watchlist if absent, so save-time warnings work for free.
+3. **New `experiment` table** approved; backups → **v5**.
+4. **Loop first:** Cycle A = start, follow, reintroduce, verdict, abandon.
+   Cycle B (later) = phase notifications, past-experiment history on the
+   watchlist/Insights, experiments in the PDF, polish.
 
-`drizzle-orm/expo-sqlite`'s `transaction()` is **synchronous**
-(`node_modules/drizzle-orm/expo-sqlite/session.js`): it runs `BEGIN`, calls
-the callback, then runs `COMMIT` immediately. Every repository transaction
-passes an **`async`** callback and `await`s queries inside it. An `await`ed
-drizzle query executes in a later microtask — **after `COMMIT`** — so on the
-device none of these writes are inside the transaction, and a failure
-halfway leaves partial data (e.g. a meal row with no components, an event
-with only some doses). A throwaway spike in the plan session proved it
-against real SQLite: a failing async callback left its inserted row behind;
-the same failure in a sync callback rolled back.
-
-**Fix:** make every transaction callback **synchronous**, using the sync
-query API the expo-sqlite driver supports (`.run()`, `.all()`, `.get()` on
-`tx` builders — e.g. `tx.insert(t).values(v).run()`,
-`tx.select().from(t).where(...).all()`). The exported repository functions
-stay `async` (callers unchanged); compute everything that doesn't need the
-DB (ids, timestamps, aggregates) before the transaction. No `await` inside a
-transaction callback, ever.
+Plan-session judgment (flag in the summary; owner may override): an
+experiment **rough day** = a day with ≥ 1 `isOutcome` entry **or** a "rough"
+day check-in. The correlation engine is untouched (#13 rule stands there).
 
 ---
 
 ## 0. Invariants — read twice
 
-- **The harness never ships.** It lives under `jest/` and test files only;
-  nothing in `src/` (non-test) imports it or `node:sqlite`.
-- **Tests run the real code paths:** the real `src/db/client.ts` (with
-  `expo-sqlite` mocked by the harness), the real Drizzle schema, the real
-  migrations (`drizzle-orm/expo-sqlite/migrator`'s `migrate(db, migrations)`),
-  and the real repository functions. Don't mock the repository or Drizzle.
-- **Repository behavior is otherwise unchanged:** same return values, same
-  ordering, same skip/preserve semantics. The only change is atomicity.
-- **Each test file gets its own in-memory database** (Jest's per-file module
-  registry gives a fresh `client.ts`); tests within a file reset tables in
-  `beforeEach` so they're independent.
-- Stage files by path — never `git add -A` / `git add .`.
+- **The correlation engine does not change** (`src/features/analysis/*`,
+  `isOutcome`). The experiment engine *reads* `isOutcome`.
+- **Everything is by local calendar day** (`'YYYY-MM-DD'` via
+  `formatDateInput`, days stepped with `Date#setDate` — never ms/86 400 000).
+- **Nothing is inferred.** Exposure = a logged food entry whose tags match
+  the term. A day with no log and no check-in is **uncovered** — never
+  counted as fine or as avoided.
+- **At most one active experiment.** Enforced in the repository (inside one
+  synchronous transaction), not just the UI.
+- **A verdict is an observation, not a diagnosis.** Copy never says
+  "you are intolerant/allergic". Always shown with its confidence and the
+  numbers behind it.
+- **Safety copy on the start screen** (verbatim, §4). The app must not
+  encourage reintroducing a food that caused a severe reaction.
+- **Finishing freezes the verdict** (`verdictJson` snapshot) so later edits
+  to old logs don't silently rewrite a finished experiment.
+- Stage files by path — never `git add -A` / `git add .`. No `await` inside a
+  `db.transaction` callback.
 
-## 1. Harness — `jest/expo-sqlite-node.ts` + `src/db/__tests__/testDb.ts`
+## 1. Schema + migration
 
-`jest/expo-sqlite-node.ts` exports a stand-in for the `expo-sqlite` surface
-Drizzle uses (verified in the spike):
+`src/db/schema.ts`:
 
 ```ts
-openDatabaseSync(name, options?) → {
-  prepareSync(sql) → {
-    executeSync(params = []) → { changes, lastInsertRowId, getAllSync(), getFirstSync() },
-    executeForRawResultSync(params = []) → { getAllSync() /* rows as arrays */ },
-    finalizeSync(),
-  },
-  execSync(sql), closeSync(),
-}
-addDatabaseChangeListener() → { remove() }   // drizzle's useLiveQuery imports it
+export const EXPERIMENT_STATUSES = ['active', 'completed', 'abandoned'] as const;
+export type ExperimentStatus = (typeof EXPERIMENT_STATUSES)[number];
+
+export const experiment = sqliteTable('experiment', {
+  id: text('id').primaryKey(),
+  term: text('term').notNull(),                       // normalized (normalizeWatchTerm)
+  startDate: text('start_date').notNull(),            // 'YYYY-MM-DD', first elimination day
+  baselineDays: integer('baseline_days').notNull(),   // 14
+  eliminationDays: integer('elimination_days').notNull(), // 7 | 14 | 21 | 28
+  challengeDays: integer('challenge_days').notNull(), // 3
+  observationDays: integer('observation_days').notNull(), // 3
+  status: text('status', { enum: EXPERIMENT_STATUSES }).notNull(),
+  verdictJson: text('verdict_json'),                  // frozen ExperimentVerdict at finish; null otherwise
+  endedAt: integer('ended_at'),                       // finish or abandon time, epoch ms
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
 ```
 
-- Backed by `new DatabaseSync(':memory:')` from `node:sqlite` (ignore the
-  file name). Enable foreign keys only if the app's DB does (it doesn't set
-  the pragma — don't add it).
-- Row-returning vs write statements: use `statement.columns().length > 0`
-  (node:sqlite API), **not** a SQL regex. Row-returning → `stmt.all(...params)`
-  (objects) for `executeSync`, and `setReturnArrays(true)` for
-  `executeForRawResultSync` (reset it afterwards). Writes → `stmt.run(...)`,
-  mapping `changes`/`lastInsertRowid` to numbers.
-- Map any `boolean` param to `1/0` and `undefined` to `null` defensively
-  (node:sqlite rejects both), in one small helper.
-- Header comment: why it exists, that it mirrors only what Drizzle calls,
-  Node ≥ 22.13 requirement, and the transaction finding above.
+Doc-comment the invariants. `npm run db:generate` → commit
+`0011_*.sql` + snapshot + journal + `migrations.js`. The SQL must be only the
+new `CREATE TABLE` (stop and report otherwise). Add a harness test that the
+table exists after migrations.
 
-`src/db/__tests__/testDb.ts` (a helper, not a test — make sure Jest doesn't
-treat it as a test file: check `testMatch`/`testRegex` in `jest.config.js`
-and name/locate it accordingly) exports:
+## 2. Pure engine — `src/features/experiments/engine.ts` (main test target)
 
-- `installExpoSqliteFake()` is not needed if each DB test file simply starts
-  with `jest.mock('expo-sqlite', () => require('<rootDir-relative path to jest/expo-sqlite-node>'))`
-  — do that (Jest hoists `jest.mock`).
-- `migrateTestDb()` → `await migrate(db, migrations)`.
-- `resetTestDb()` → `DELETE FROM` every app table (list them from
-  `schema.ts`; keep `__drizzle_migrations`).
+Also: add `wilsonUpperBound(successes, n, z = 1.96)` to `src/lib/stats.ts`
+(mirror of the lower bound; 1 when n = 0), and export a small
+`entryMatchesTerm(entry, term)` from `src/lib/watchlist.ts` (food entries
+only, `matchesWatchTerm` over parsed tags — the private helper already
+there).
 
-## 2. Repository fix — `src/db/repository.ts`
+```ts
+export const DEFAULT_PROTOCOL = { baselineDays: 14, eliminationDays: 14, challengeDays: 3, observationDays: 3 };
+export const ELIMINATION_CHOICES = [7, 14, 21, 28] as const;
 
-Convert all 9 `db.transaction(async (tx) => { … await … })` sites to sync
-callbacks as described above. Keep each function's doc comment accurate
-(several say "one transaction" — now true). Where a transaction reads then
-writes (`updateMealComponentAndReaggregate`,
-`deleteMealComponentAndReaggregate`, `updateMedicationEvent`, …), the reads
-use `.all()`/`.get()` inside the callback. Return values that the callback
-used to `return` from an async function must still come out the same.
+export type Phase = 'elimination' | 'challenge' | 'observation' | 'ready';   // ready = observation over, verdict available
+export interface ExperimentSchedule {
+  baseline: string[]; elimination: string[]; challenge: string[]; observation: string[];
+  lastDay: string;    // last observation day
+}
+export function experimentSchedule(exp: ExperimentLike): ExperimentSchedule
+export function currentPhase(exp: ExperimentLike, todayKey: string):
+  { phase: Phase; dayOfPhase: number /* 1-based */; phaseLength: number }
+// Before startDate can't happen (start = today); treat as elimination day 1.
 
-## 3. Tests — `src/db/__tests__/repository.*.test.ts`
+export interface DayFacts { covered: boolean; rough: boolean; exposed: boolean }
+export function dayFacts(entries, checkIns, term): Map<string, DayFacts>
+// covered = any log entry (any type) or a check-in that day
+// rough   = any isOutcome entry that day, or a 'rough' check-in
+// exposed = any food entry that day matching the term (entryMatchesTerm)
 
-Split by area (e.g. `repository.entries.test.ts`, `.meals.test.ts`,
-`.medications.test.ts`, `.restore.test.ts`, `.misc.test.ts`) so failures
-point somewhere. Cover at least:
+export interface PhaseStats { days: number; covered: number; rough: number; rate: number | null /* rough/covered */ }
+export interface ExperimentEvaluation {
+  baseline: PhaseStats; elimination: PhaseStats; reintroduction: PhaseStats; // reintroduction = challenge + observation days
+  slipDays: string[];            // elimination days with exposure
+  challengeExposureDays: number; // challenge days with exposure
+  verdict: ExperimentVerdict | null; // null until phase === 'ready'
+}
+export type VerdictKind = 'likely-trigger' | 'likely-not-trigger' | 'inconclusive';
+export interface ExperimentVerdict {
+  kind: VerdictKind;
+  confidence: ConfidenceTier | null;   // null for inconclusive
+  reason: string;                      // one plain sentence, e.g. "Too few days logged while avoiding it."
+  baselineRate: number | null; eliminationRate: number | null; reintroductionRate: number | null;
+}
+export function evaluateExperiment(exp, entries, checkIns, todayKey): ExperimentEvaluation
+```
 
-- **Harness sanity:** all migrations apply to an empty DB; every table in
-  `schema.ts` exists.
-- **Log entries:** create (single + batch) → get/list ordering; update
-  (partial patch, `updatedAt` bumps); delete (also removes its meal
-  components); `listRecentFoodEntries` distinct-by-name; `hasAnyLogEntry`.
-- **Meals:** `createMealWithComponents` writes the entry + components with
-  sort order; `updateMealComponentAndReaggregate` updates totals/tags on the
-  parent; `deleteMealComponentAndReaggregate` re-aggregates and returns
-  `'last'` without deleting the final component.
-- **Atomicity (the fix):** for each transactional write, force a failure
-  after its first statement (e.g. a duplicate primary key in the second
-  insert, or a constraint violation) and assert **nothing** from that call
-  persisted. These tests must fail against the pre-fix code — run them once
-  before converting the transactions and note the failures in your summary.
-- **Medications:** create/update (rename, deactivate — never deleted);
-  events: create with doses, update **replaces** doses (the 2026-09-26
-  stale-doses class: old dose rows gone, new ones present, no duplicates),
-  delete removes event + doses, `getMedicationEvent`.
-- **Restore (2026-09-26 bound-variable class):**
-  `insertMedicationsPreservingIds`, `…EventsPreservingIds` (returns
-  `insertedIds`), `…DosesPreservingIds` keep ids, skip existing ids, and
-  succeed with **5,000 dose rows** in one call (above SQLite's 32,766
-  bound-variable cap at 7 columns if it weren't chunked);
-  `insertMealComponents`; `insertDayCheckInsPreservingIds` (device's date
-  wins, in-file duplicate dates, chunking).
-- **Other writes:** `upsertDayCheckIn` (one row per date; second call
-  updates), `getDayCheckIn`, `listAllDayCheckIns` order; watchlist
-  add/rename/remove + unique term; goals `upsertGoal` overwrite by nutrient,
-  `removeGoal`; `applyTagBackfill`.
+**Elimination stats exclude contaminated days:** each slip day **and the day
+after it** are dropped from the elimination phase's `days/covered/rough`
+(the reaction window spills over). Uncovered days never count.
 
-Don't test `useLiveQuery` hooks here.
+**Verdict rules** (named, exported constants; evaluate in this order):
 
-## 4. Definition of done
+1. `inconclusive` — "Too many slips": slip days > `max(1, floor(eliminationDays × 0.15))`.
+2. `inconclusive` — "You didn't log eating it on the challenge days":
+   `challengeExposureDays === 0`.
+3. `inconclusive` — "Not enough days logged": baseline covered < 7, **or**
+   elimination covered < `max(5, ceil(0.6 × elimination days counted))`,
+   **or** reintroduction covered < 4.
+4. `inconclusive` — "No rough days before the experiment, so there was
+   nothing to improve": baseline rough = 0.
+5. With `b`, `e`, `r` the three rates: `drop = b − e`, `rise = r − e`.
+   - `likely-trigger` when `drop ≥ 0.2` **and** `rise ≥ 0.2`.
+   - `likely-not-trigger` when `drop < 0.1` **and** `rise < 0.1`.
+   - otherwise `inconclusive` — "Mixed results: …" (say which half moved).
+6. **Confidence:**
+   - trigger: `high` when `wilsonUpperBound(e)` < `wilsonLowerBound(b)`
+     **and** < `wilsonLowerBound(r)`; `medium` when exactly one of those
+     holds; else `low`.
+   - not-trigger: `medium` when elimination covered ≥ 10 and
+     reintroduction covered ≥ 5 and `challengeExposureDays ≥ 2`; else `low`
+     (absence of an effect is never `high` from one experiment).
 
-- `npm run typecheck` && `npm run lint` clean; `npm run bundle:check` clean
-  (proves the harness isn't in the app bundle).
-- **Targeted Jest only (owner instruction — never the full suite):** all new
-  repository test files + `migrations`, plus every existing test file that
-  mocks `@/db/repository` is unaffected by definition — but run
-  `backup`, `settings` (`--runTestsByPath "src/app/__tests__/settings.test.tsx"`),
-  `backupService`, `dayCheckInService` and `tagBackfill` since they're
-  repository-adjacent.
-- Report the new tests' runtime (the 5,000-row case must stay fast; if a
-  file takes > 10 s, say so).
-- No `@ts-ignore`, no lint disables (a `// reason:` comment is fine where the
-  harness needs a loose type at the node:sqlite boundary), no new deps, no
-  schema change.
+## 3. Repository + backup v5
+
+`src/db/repository.ts` (sync transactions — CLAUDE.md §0):
+
+- `startExperiment({ term, eliminationDays }, now)` → normalizes the term
+  (`normalizeWatchTerm`; invalid → throw), in **one transaction**: throw
+  `ExperimentAlreadyActiveError` if an active one exists; insert the
+  experiment (`startDate = formatDateInput(now)`, protocol defaults); insert
+  the watchlist item if the term isn't watched yet. Returns the experiment.
+- `getActiveExperiment()`, `getExperiment(id)`, `listExperiments()` (newest first).
+- `finishExperiment(id, verdict, now)` → `status: 'completed'`,
+  `verdictJson`, `endedAt`. Only from `active`.
+- `abandonExperiment(id, now)` → `status: 'abandoned'`, `endedAt`. Only from `active`.
+- `insertExperimentsPreservingIds(rows)` for restore: skip existing ids; if a
+  restored row is `active` while the device already has an active one (or an
+  earlier row in the same file is active), import it as `abandoned` with
+  `endedAt = updatedAt`. Chunked like the others.
+- Live hooks `useActiveExperiment()` / `useExperiment(id)` via `useLiveQuery`
+  in `src/features/experiments/useExperiments.ts`.
+- Backup: `entriesToJson(..., experiments = [])` → **version 5**;
+  `parseBackupJson` validates `experiments` (ids, statuses, date keys,
+  positive day counts, `verdictJson` string-or-null); v1–v4 still import;
+  Settings export/import wire it in with a summary clause like the others.
+- Real-SQLite tests (`src/db/__tests__/repository.experiments.test.ts`):
+  start adds the watchlist term once; second start throws and writes
+  nothing; finish/abandon only from active; restore precedence.
+
+## 4. Screens
+
+- **Start — `src/app/experiment/new.tsx`** (modal, title "New experiment"),
+  opened with `?term=<term>`:
+  - "Test **lactose**" + a three-line plan built from the schedule with real
+    dates: "Avoid it: Sep 28 – Oct 11 · Eat it once a day: Oct 12 – 14 ·
+    Keep logging: Oct 15 – 17".
+  - Elimination length chips 7/14/21/28 (`SegmentedControl`, default 14).
+  - Baseline preview from `evaluateExperiment`-style facts over the 14 days
+    before today: "Your last 14 days: 9 logged, 4 rough." If covered < 7 or
+    rough = 0, a `textSecondary` warning that the verdict will likely be
+    inconclusive, and why — starting is still allowed.
+  - **Safety note (verbatim):** "Don't use this to test a food that has
+    caused a severe reaction — swelling, hives, trouble breathing or
+    vomiting. Talk to a clinician first."
+  - `PrimaryButton` "Start experiment" → `startExperiment` → replace to the
+    experiment screen. If one is already active: disabled + "Finish or end
+    your current experiment first."
+- **Follow — `src/app/experiment/[id].tsx`** (title "Experiment"):
+  - Header: "Testing **lactose**" + phase line: "Avoiding · day 5 of 14",
+    "Eat it once today · challenge day 2 of 3", "Keep logging · day 1 of 3".
+  - Today's instruction (one sentence per phase); on challenge days show
+    whether today's exposure is logged ("Logged today ✓" / "Not logged yet").
+  - Progress: slips so far ("1 slip — the day after is left out too"),
+    days logged per phase so far.
+  - "End experiment" (secondary, confirm Alert) → abandon → back.
+  - Phase `ready`: the verdict card (below) + "Finish experiment" →
+    `finishExperiment` with the evaluation's verdict.
+  - `completed`: the **frozen** verdict from `verdictJson`; `abandoned`:
+    "Ended early on <date>."
+  - **Verdict card:** headline per kind — "Likely a trigger" /
+    "Likely not a trigger" / "Inconclusive"; the confidence chip (reuse the
+    Insights colours); the reason sentence; the numbers: "Rough days: before
+    43% (6 of 14 logged) · while avoiding 7% (1 of 14) · after reintroducing
+    50% (3 of 6)"; and the disclaimer "An observation from your own logs, not
+    a diagnosis."
+- **Entry points:**
+  - Insights → Watchlist section: each item gets **"Start experiment"**
+    (`accessibilityLabel="Start experiment on <term>"`) when no experiment is
+    active; the item under test shows "Experiment running" linking to it.
+  - Home: when an experiment is active, a compact row above the backup nudge
+    — "Lactose experiment · Avoiding · day 5 of 14" (or "Verdict ready") —
+    `accessibilityLabel="Open lactose experiment"` → experiment screen. Don't
+    reuse existing Home labels.
+- Register both routes in `_layout.tsx`. Typed routes: `.expo/types/router.d.ts`
+  regenerates only under `expo start`; hand-patch locally if `tsc` needs it,
+  never commit it.
+
+## 5. Tests (same change)
+
+- `engine.test.ts`: schedule dates (incl. a DST-crossing start and a month
+  boundary); `currentPhase` at every boundary; `dayFacts` (covered by check-in
+  only, rough by check-in only, outcome beats a "fine" check-in, exposure only
+  from food entries); slip exclusion incl. the day after; every verdict rule
+  in order with a fixture that isolates it; confidence tiers for both
+  verdicts; `rate: null` when a phase has no covered days.
+- `stats` test for `wilsonUpperBound`; `watchlist` test for `entryMatchesTerm`.
+- Repository real-SQLite tests (§3); `backup` v5 round-trip + v4 file imports.
+- Screen tests: start (plan dates, chips, warnings, safety copy, disabled when
+  active); follow (each phase's copy, challenge-day logged indicator, end
+  confirm, ready → finish writes the verdict, completed shows the frozen
+  verdict even after entries change); Insights watchlist entry point; Home row.
+
+## 6. Definition of done
+
+- `npm run typecheck`, `npm run lint` (0 warnings), `npm run bundle:check` clean.
+- **Targeted Jest only (owner instruction — never the full suite):** every
+  test file you created or touched + `backup`, `stats`, `watchlist`,
+  `dayCoverage`, `settings`, `index`, `insights`, `_layout`, all
+  `src/db/__tests__/*`. `(tabs)`/`[id]` paths via
+  `npx jest --runTestsByPath "<path>"`.
+- No `@ts-ignore`, no lint disables, no `any` without `// reason:`, no new
+  deps, no schema change beyond §1.
 - Do NOT run Maestro, EAS, or `npx expo start`. Do NOT edit `flows/`,
   `CLAUDE.md` or `docs/`. Keep LF line endings.
 - Commits (stage by path), suggested split:
-  `test(db): in-memory SQLite harness for repository tests (node:sqlite)` ·
-  `test(db): repository tests for entries, meals, medications, restore` ·
-  `fix(db): make repository transactions atomic (sync callbacks)` —
-  put the atomicity tests in the **fix** commit so history shows red→green.
-  Each ending `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`.
+  `feat(db): experiment table + additive migration 0011` ·
+  `feat(experiments): pure schedule, day facts and verdict engine` ·
+  `feat(experiments): repository, live hooks and backup v5` ·
+  `feat(experiments): start, follow and verdict screens + entry points` —
+  each ending `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`.
   Do NOT push.
-- Execute summary: files per commit, hashes, rung + bundle:check results,
-  test counts + runtimes, the atomicity tests' pre-fix failures (names +
-  one-line reason), any repository function whose behavior you had to
-  touch beyond the transaction conversion (should be none), deviations with
-  reasons.
+- Execute summary: files per commit, hashes, the generated SQL verbatim, rung
+  results, targeted Jest counts, a worked example (fixture → evaluation →
+  verdict) pasted from a test, deviations with reasons, review pointers.
 
-## 5. After this (review + test session)
+## 7. After this
 
-- Opus review: every transaction callback sync (grep `transaction(async` →
-  none), harness fidelity to expo-sqlite, no harness in the app bundle.
-- Update CLAUDE.md §0/§4 (the harness, Node ≥ 22.13 for tests, the
-  "no `await` inside a transaction" rule).
-- Device: a normal regression pass is enough (behavior only changes on
-  failure) — the save paths: meal with several items, edit/delete a meal
-  item, medication entry create/edit/delete, backup import.
+- Opus review: invariants, verdict rules vs §2, day math, the one-active
+  rule, frozen verdicts, safety copy; CLAUDE.md §0/§6; PROGRESS.
+- Maestro (Opus): start from the watchlist → Home row → experiment screen;
+  end early. The full ~20-day loop can't run in real time on a device — the
+  verdict paths are Jest-covered; a device check of "ready"/verdict needs
+  backdated seed data (plan it in Cycle B's test session).
+- Cycle B plan: phase-change local notifications (own slot, like the day
+  check-in), experiment history on the watchlist item and Insights,
+  experiments in the PDF report, polish.
