@@ -109,7 +109,14 @@ function isFoodEntry(entry: LogEntry): boolean {
   return (FOOD_TYPES as readonly string[]).includes(entry.type);
 }
 
-function entryMatchesTerm(entry: LogEntry, term: string): boolean {
+/**
+ * Whether a food entry's tags match a (normalized) watch term — the
+ * elimination-experiment engine's exposure signal (`dayFacts`,
+ * src/features/experiments/engine.ts). Food entries only: a BM/symptom row
+ * can never itself be "exposure" to an ingredient.
+ */
+export function entryMatchesTerm(entry: LogEntry, term: string): boolean {
+  if (!isFoodEntry(entry)) return false;
   return parseTagsJson(entry.tagsJson).some((tag) => matchesWatchTerm(tag, term));
 }
 

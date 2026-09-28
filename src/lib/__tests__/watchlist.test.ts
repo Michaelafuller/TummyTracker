@@ -2,6 +2,7 @@ import type { LogEntry, WatchlistItem } from '@/db/schema';
 import {
   computeWatchStats,
   describeWatchedMatches,
+  entryMatchesTerm,
   entryWatchedMatches,
   findWatchedTags,
   findWatchedTagsInTags,
@@ -302,6 +303,30 @@ describe('entryWatchedMatches', () => {
   it('agrees with findWatchedTags on a food entry', () => {
     const meal = entry({ type: 'snack', tagsJson: JSON.stringify(['non-dairy', 'onion']) });
     expect(entryWatchedMatches(meal, items)).toEqual(findWatchedTags(meal.tagsJson, items));
+  });
+});
+
+describe('entryMatchesTerm', () => {
+  it('matches a food entry via tag prefix-at-word-boundary (elimination-experiment exposure signal)', () => {
+    const meal = entry({ type: 'meal', tagsJson: JSON.stringify(['soybeans', 'onion']) });
+    expect(entryMatchesTerm(meal, 'soy')).toBe(true);
+  });
+
+  it('is false for a non-food entry even with a matching tag', () => {
+    const bm = entry({ type: 'bowel_movement', tagsJson: JSON.stringify(['soybeans']) });
+    expect(entryMatchesTerm(bm, 'soy')).toBe(false);
+    const symptom = entry({ type: 'symptom', tagsJson: JSON.stringify(['soybeans']) });
+    expect(entryMatchesTerm(symptom, 'soy')).toBe(false);
+  });
+
+  it('is false when no tag matches', () => {
+    const meal = entry({ type: 'snack', tagsJson: JSON.stringify(['onion', 'garlic']) });
+    expect(entryMatchesTerm(meal, 'soy')).toBe(false);
+  });
+
+  it('is false for a food entry with no tags', () => {
+    const meal = entry({ type: 'meal', tagsJson: null });
+    expect(entryMatchesTerm(meal, 'soy')).toBe(false);
   });
 });
 

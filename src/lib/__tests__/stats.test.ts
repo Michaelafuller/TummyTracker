@@ -4,6 +4,7 @@ import {
   sd,
   seMeanDiff,
   wilsonLowerBound,
+  wilsonUpperBound,
 } from '../stats';
 
 describe('mean', () => {
@@ -50,6 +51,30 @@ describe('wilsonLowerBound', () => {
     const lower = wilsonLowerBound(50, 100);
     expect(lower).toBeLessThan(0.5);
     expect(lower).toBeGreaterThan(0.4);
+  });
+});
+
+describe('wilsonUpperBound', () => {
+  it('matches the hand-computed Wilson score upper bound for 2/10 (z=1.96), the mirror of the lower-bound fixture', () => {
+    // phat = 0.2, z^2 = 3.8416, denom = 1.38416, centre = 0.2 + 3.8416/20 = 0.39208
+    // margin = 1.96 * sqrt(0.2*0.8/10 + 3.8416/400) = 1.96 * sqrt(0.025604) = 0.31362449...
+    // upper = (0.39208 + 0.31362449...) / 1.38416 = 0.50984315...
+    expect(wilsonUpperBound(2, 10)).toBeCloseTo(0.5098431532792766, 10);
+  });
+
+  it('is the complement of wilsonLowerBound for a symmetric successes/failures swap', () => {
+    // Wilson bounds are symmetric around 0.5: upper(k, n) = 1 - lower(n - k, n).
+    expect(wilsonUpperBound(8, 10)).toBeCloseTo(1 - wilsonLowerBound(2, 10), 10);
+  });
+
+  it('returns 1 when n is 0 (mirror of wilsonLowerBound returning 0)', () => {
+    expect(wilsonUpperBound(0, 0)).toBe(1);
+  });
+
+  it('is close to the raw proportion for a large n with a moderate rate', () => {
+    const upper = wilsonUpperBound(50, 100);
+    expect(upper).toBeGreaterThan(0.5);
+    expect(upper).toBeLessThan(0.6);
   });
 });
 
