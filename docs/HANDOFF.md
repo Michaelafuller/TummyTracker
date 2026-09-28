@@ -1,158 +1,183 @@
-# HANDOFF.md — Execute session: Medications in the doctor PDF report, GitHub #17
+# HANDOFF.md — Execute session: Real-SQLite tests for `repository.ts` + atomic transactions, GitHub #18
 
 > **Read first:** this file only. `CLAUDE.md` is auto-loaded (§4 rungs, §8
-> conventions, §9 guardrails). Touches `src/lib/report.ts` (+ a pure helper
-> in `src/lib/medications.ts`), `src/app/settings.tsx`'s report handler, and
-> tests.
+> conventions, §9 guardrails). Adds a Jest-only SQLite harness (a fake
+> `expo-sqlite` backed by Node's built-in `node:sqlite`), repository tests
+> against it, and fixes every `db.transaction(...)` in
+> `src/db/repository.ts` to be genuinely atomic.
 >
-> **Pure JS/TS** — no new dependency, no schema change, no new permission,
-> no native change, no EAS build. `expo-print` stays a dynamic import.
+> **No new dependency** (`node:sqlite` is built into Node ≥ 22.13; this
+> machine runs Node 26), no schema change, no permission, no native change,
+> no EAS build. App behavior changes only in that multi-row writes become
+> all-or-nothing, which is what every doc comment already claims.
 
 **Planned 2026-09-27 (Opus plan session) — GitHub
-Michaelafuller/TummyTracker#17.** Done-when (from the issue): "the PDF has a
-medications section (what was taken, doses, days taken) for the chosen
-range." Reuse Cycle A's analysis prep in `src/lib/medications.ts`
-(`flattenDoseRecords`, `filterDoseRecordsInRange`,
-`groupDoseRecordsByMedication`) — it was built for this.
+Michaelafuller/TummyTracker#18.** Done-when (from the issue): "a DB test
+harness exists and covers create/update/delete/restore paths."
+
+## ⚠ The bug this cycle fixes (found while planning — spike verified)
+
+`drizzle-orm/expo-sqlite`'s `transaction()` is **synchronous**
+(`node_modules/drizzle-orm/expo-sqlite/session.js`): it runs `BEGIN`, calls
+the callback, then runs `COMMIT` immediately. Every repository transaction
+passes an **`async`** callback and `await`s queries inside it. An `await`ed
+drizzle query executes in a later microtask — **after `COMMIT`** — so on the
+device none of these writes are inside the transaction, and a failure
+halfway leaves partial data (e.g. a meal row with no components, an event
+with only some doses). A throwaway spike in the plan session proved it
+against real SQLite: a failing async callback left its inserted row behind;
+the same failure in a sync callback rolled back.
+
+**Fix:** make every transaction callback **synchronous**, using the sync
+query API the expo-sqlite driver supports (`.run()`, `.all()`, `.get()` on
+`tx` builders — e.g. `tx.insert(t).values(v).run()`,
+`tx.select().from(t).where(...).all()`). The exported repository functions
+stay `async` (callers unchanged); compute everything that doesn't need the
+DB (ids, timestamps, aggregates) before the transaction. No `await` inside a
+transaction callback, ever.
 
 ---
 
 ## 0. Invariants — read twice
 
-- **Nothing is inferred as taken** (Cycle B invariant). Every count comes
-  from logged dose rows only — never from `frequency`, start/end dates or
-  "active". The report's wording says **"logged"**: "Days with a logged
-  dose", "No doses logged in this range" — never "missed", "skipped" or an
-  adherence percentage that implies the user didn't take it.
-- **Doses print their own snapshot** (`dose` + `doseUnit` on the dose row),
-  never the medication's current default.
-- **The findings are unchanged.** `computeInsights` still runs over food
-  entries only; medications are reported, not correlated.
-- **Every user-authored string goes through `escapeHtml`** — medication
-  names, units (free-text "Other" units), frequency, event notes.
-- **Existing callers keep working:** the new parameter is optional and
-  defaults to "no medication data", which renders exactly today's report
-  (no Medications section at all — not an empty one).
+- **The harness never ships.** It lives under `jest/` and test files only;
+  nothing in `src/` (non-test) imports it or `node:sqlite`.
+- **Tests run the real code paths:** the real `src/db/client.ts` (with
+  `expo-sqlite` mocked by the harness), the real Drizzle schema, the real
+  migrations (`drizzle-orm/expo-sqlite/migrator`'s `migrate(db, migrations)`),
+  and the real repository functions. Don't mock the repository or Drizzle.
+- **Repository behavior is otherwise unchanged:** same return values, same
+  ordering, same skip/preserve semantics. The only change is atomicity.
+- **Each test file gets its own in-memory database** (Jest's per-file module
+  registry gives a fresh `client.ts`); tests within a file reset tables in
+  `beforeEach` so they're independent.
 - Stage files by path — never `git add -A` / `git add .`.
 
-## 1. Pure summary — `src/lib/medications.ts`
+## 1. Harness — `jest/expo-sqlite-node.ts` + `src/db/__tests__/testDb.ts`
+
+`jest/expo-sqlite-node.ts` exports a stand-in for the `expo-sqlite` surface
+Drizzle uses (verified in the spike):
 
 ```ts
-export interface MedicationUseSummary {
-  medicationId: string;
-  name: string;
-  isActive: boolean;
-  frequency: string | null;       // as the user typed it, for context only
-  dosesLogged: number;            // dose rows in range
-  daysWithDose: number;           // distinct LOCAL days (formatDateInput) in range with ≥ 1 dose
-  daysInRange: number;            // see below
-  /** Distinct snapshot amounts, most frequent first: [{ label: '20 mg', count: 12 }, { label: '10 mg', count: 2 }] */
-  amounts: { label: string; count: number }[];
+openDatabaseSync(name, options?) → {
+  prepareSync(sql) → {
+    executeSync(params = []) → { changes, lastInsertRowId, getAllSync(), getFirstSync() },
+    executeForRawResultSync(params = []) → { getAllSync() /* rows as arrays */ },
+    finalizeSync(),
+  },
+  execSync(sql), closeSync(),
 }
-
-export function summarizeMedicationUse(
-  meds: readonly Medication[],
-  events: readonly MedicationEvent[],
-  doses: readonly MedicationDose[],
-  range: { start: number; end: number },   // half-open, epoch ms — the report's own window
-): MedicationUseSummary[]
+addDatabaseChangeListener() → { remove() }   // drizzle's useLiveQuery imports it
 ```
 
-- Include every medication with **≥ 1 dose in range** (active or not), plus
-  every **active** medication with none (so a clinician sees "Omeprazole —
-  no doses logged"). Inactive medications with no doses in range are left
-  out.
-- `daysInRange`: the number of local days in `[start, end)`, clipped to the
-  medication's own `startDate`/`endDate` when set (both are local-midnight
-  epoch ms; `endDate` is inclusive of that day). Never less than
-  `daysWithDose` (a dose logged outside the stated dates still counts —
-  clamp the denominator up rather than hide it). Count days by stepping a
-  `Date` (DST-safe), not by dividing ms.
-- `amounts` label = `${formatDoseNumber(dose)} ${doseUnit}`; ties keep first-
-  seen order.
-- Order: medications with doses first (most `dosesLogged` first), then the
-  active ones with none (A–Z).
+- Backed by `new DatabaseSync(':memory:')` from `node:sqlite` (ignore the
+  file name). Enable foreign keys only if the app's DB does (it doesn't set
+  the pragma — don't add it).
+- Row-returning vs write statements: use `statement.columns().length > 0`
+  (node:sqlite API), **not** a SQL regex. Row-returning → `stmt.all(...params)`
+  (objects) for `executeSync`, and `setReturnArrays(true)` for
+  `executeForRawResultSync` (reset it afterwards). Writes → `stmt.run(...)`,
+  mapping `changes`/`lastInsertRowid` to numbers.
+- Map any `boolean` param to `1/0` and `undefined` to `null` defensively
+  (node:sqlite rejects both), in one small helper.
+- Header comment: why it exists, that it mirrors only what Drizzle calls,
+  Node ≥ 22.13 requirement, and the transaction finding above.
 
-## 2. Report — `src/lib/report.ts`
+`src/db/__tests__/testDb.ts` (a helper, not a test — make sure Jest doesn't
+treat it as a test file: check `testMatch`/`testRegex` in `jest.config.js`
+and name/locate it accordingly) exports:
 
-- Signature becomes
-  `buildReportHtml(entries, now, rangeDays, medications?: { meds; events; doses })`.
-  Same window as today (`start`/`end` already computed there) — pass that
-  range to `summarizeMedicationUse`.
-- **Medications section** (`<h2>Medications</h2>`), placed after the findings
-  and before the Journal, only when `medications` was passed **and** the
-  summary is non-empty:
-  - One sentence first: "Doses the user logged in this range. Only logged
-    doses are counted; a day without a logged dose may simply not have been
-    recorded."
-  - A table: **Medication** (name, + " (inactive)" when inactive) ·
-    **Doses logged** · **Days with a logged dose** ("26 of 30") · **Amounts**
-    ("20 mg ×12, 10 mg ×2", or "—") · **Frequency (as entered)** (or "—").
-  - An active medication with no doses: Doses logged "0", Days "0 of N",
-    Amounts "No doses logged in this range".
-- **Journal:** medication events in range join each day's table, in time
-  order with the log entries: Time = `formatTime12h(takenAt)` or "time not
-  set" when `!timeKnown`; Name = "Medication"; Detail = the
-  `medicationEventsToJournalItems` summary ("Omeprazole 20 mg · Ibuprofen
-  200 mg"); Notes = the event's notes. Group by day with the same
-  `groupEntriesByDay` (it only needs `loggedAt`). The "No entries in this
-  range." empty state must account for medication rows too.
-- The summary line (`summaryLine`) stays as is; add
-  `· N medication doses` to it **only** when medication data was passed and
-  N > 0.
-- Keep the CSS; add nothing beyond what the table needs.
+- `installExpoSqliteFake()` is not needed if each DB test file simply starts
+  with `jest.mock('expo-sqlite', () => require('<rootDir-relative path to jest/expo-sqlite-node>'))`
+  — do that (Jest hoists `jest.mock`).
+- `migrateTestDb()` → `await migrate(db, migrations)`.
+- `resetTestDb()` → `DELETE FROM` every app table (list them from
+  `schema.ts`; keep `__drizzle_migrations`).
 
-## 3. Settings — `src/app/settings.tsx` `handleCreateReport`
+## 2. Repository fix — `src/db/repository.ts`
 
-Fetch `listAllMedications()`, `listAllMedicationEvents()`,
-`listAllMedicationDoses()` (they exist) alongside `listLogEntries()` and pass
-them. No UI change.
+Convert all 9 `db.transaction(async (tx) => { … await … })` sites to sync
+callbacks as described above. Keep each function's doc comment accurate
+(several say "one transaction" — now true). Where a transaction reads then
+writes (`updateMealComponentAndReaggregate`,
+`deleteMealComponentAndReaggregate`, `updateMedicationEvent`, …), the reads
+use `.all()`/`.get()` inside the callback. Return values that the callback
+used to `return` from an async function must still come out the same.
 
-## 4. Tests (same change, CLAUDE.md §4)
+## 3. Tests — `src/db/__tests__/repository.*.test.ts`
 
-- `src/lib/__tests__/medications.test.ts` — `summarizeMedicationUse`: counts
-  only in-range doses (half-open edges); distinct local days (two doses one
-  day = 1); inactive-with-doses included and flagged; inactive-without
-  excluded; active-without included with 0; `daysInRange` clipped by
-  start/end dates and clamped up to `daysWithDose`; a DST-crossing range
-  counts calendar days; amounts from snapshots (a later default change
-  doesn't alter them), most frequent first; ordering; frequency never
-  changes any count.
-- `src/lib/__tests__/report.test.ts` — no medications argument → no
-  "Medications" heading (existing tests untouched and green); with data →
-  section, table row values, "0 of N" + "No doses logged in this range";
-  "logged" wording present and no "missed"/"skipped"; escaping of a hostile
-  medication name, unit, frequency and event note; medication events
-  interleaved in the Journal day table by time, "time not set" for untimed;
-  empty state still correct with only medication rows; summary line gains
-  "· N medication doses" only when N > 0.
-- `settings.test.tsx` — the report handler passes the medication lists
-  (mock the three repository calls).
+Split by area (e.g. `repository.entries.test.ts`, `.meals.test.ts`,
+`.medications.test.ts`, `.restore.test.ts`, `.misc.test.ts`) so failures
+point somewhere. Cover at least:
 
-## 5. Definition of done
+- **Harness sanity:** all migrations apply to an empty DB; every table in
+  `schema.ts` exists.
+- **Log entries:** create (single + batch) → get/list ordering; update
+  (partial patch, `updatedAt` bumps); delete (also removes its meal
+  components); `listRecentFoodEntries` distinct-by-name; `hasAnyLogEntry`.
+- **Meals:** `createMealWithComponents` writes the entry + components with
+  sort order; `updateMealComponentAndReaggregate` updates totals/tags on the
+  parent; `deleteMealComponentAndReaggregate` re-aggregates and returns
+  `'last'` without deleting the final component.
+- **Atomicity (the fix):** for each transactional write, force a failure
+  after its first statement (e.g. a duplicate primary key in the second
+  insert, or a constraint violation) and assert **nothing** from that call
+  persisted. These tests must fail against the pre-fix code — run them once
+  before converting the transactions and note the failures in your summary.
+- **Medications:** create/update (rename, deactivate — never deleted);
+  events: create with doses, update **replaces** doses (the 2026-09-26
+  stale-doses class: old dose rows gone, new ones present, no duplicates),
+  delete removes event + doses, `getMedicationEvent`.
+- **Restore (2026-09-26 bound-variable class):**
+  `insertMedicationsPreservingIds`, `…EventsPreservingIds` (returns
+  `insertedIds`), `…DosesPreservingIds` keep ids, skip existing ids, and
+  succeed with **5,000 dose rows** in one call (above SQLite's 32,766
+  bound-variable cap at 7 columns if it weren't chunked);
+  `insertMealComponents`; `insertDayCheckInsPreservingIds` (device's date
+  wins, in-file duplicate dates, chunking).
+- **Other writes:** `upsertDayCheckIn` (one row per date; second call
+  updates), `getDayCheckIn`, `listAllDayCheckIns` order; watchlist
+  add/rename/remove + unique term; goals `upsertGoal` overwrite by nutrient,
+  `removeGoal`; `applyTagBackfill`.
 
-- `npm run typecheck` && `npm run lint` clean; `npm run bundle:check` clean.
-- **Targeted Jest only (owner instruction — never the full suite):** every
-  test file you created or touched + `report`, `medications`,
-  `medicationEntry`, `journal`, `settings`.
-- No `@ts-ignore`, no lint disables, no `any` without `// reason:`, no new
-  deps, no schema change.
-- Do NOT run Maestro, EAS, or `npx expo start` (Metro runs on 8081 — leave
-  it). Do NOT edit `flows/`, `CLAUDE.md` or `docs/`. Keep LF line endings.
+Don't test `useLiveQuery` hooks here.
+
+## 4. Definition of done
+
+- `npm run typecheck` && `npm run lint` clean; `npm run bundle:check` clean
+  (proves the harness isn't in the app bundle).
+- **Targeted Jest only (owner instruction — never the full suite):** all new
+  repository test files + `migrations`, plus every existing test file that
+  mocks `@/db/repository` is unaffected by definition — but run
+  `backup`, `settings` (`--runTestsByPath "src/app/__tests__/settings.test.tsx"`),
+  `backupService`, `dayCheckInService` and `tagBackfill` since they're
+  repository-adjacent.
+- Report the new tests' runtime (the 5,000-row case must stay fast; if a
+  file takes > 10 s, say so).
+- No `@ts-ignore`, no lint disables (a `// reason:` comment is fine where the
+  harness needs a loose type at the node:sqlite boundary), no new deps, no
+  schema change.
+- Do NOT run Maestro, EAS, or `npx expo start`. Do NOT edit `flows/`,
+  `CLAUDE.md` or `docs/`. Keep LF line endings.
 - Commits (stage by path), suggested split:
-  `feat(meds): summarize logged medication use over a date range` ·
-  `feat(report): medications section and doses in the report journal` —
-  each ending `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`.
+  `test(db): in-memory SQLite harness for repository tests (node:sqlite)` ·
+  `test(db): repository tests for entries, meals, medications, restore` ·
+  `fix(db): make repository transactions atomic (sync callbacks)` —
+  put the atomicity tests in the **fix** commit so history shows red→green.
+  Each ending `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`.
   Do NOT push.
 - Execute summary: files per commit, hashes, rung + bundle:check results,
-  targeted Jest counts, a pasted sample of the generated Medications table
-  HTML from a test fixture, deviations with reasons, review pointers.
+  test counts + runtimes, the atomicity tests' pre-fix failures (names +
+  one-line reason), any repository function whose behavior you had to
+  touch beyond the transaction conversion (should be none), deviations with
+  reasons.
 
-## 6. After this (review + test session)
+## 5. After this (review + test session)
 
-- Opus review: §0 wording ("logged", never "missed"), snapshot amounts,
-  escaping, day counting.
-- Device (manual — the share sheet isn't Maestro-drivable reliably): log two
-  medications, one with a custom unit, one inactive with an old dose; Create
-  PDF for 30 days; check the section, the "0 of N" row, and journal rows.
-  `n-doctor-report` flow regression.
+- Opus review: every transaction callback sync (grep `transaction(async` →
+  none), harness fidelity to expo-sqlite, no harness in the app bundle.
+- Update CLAUDE.md §0/§4 (the harness, Node ≥ 22.13 for tests, the
+  "no `await` inside a transaction" rule).
+- Device: a normal regression pass is enough (behavior only changes on
+  failure) — the save paths: meal with several items, edit/delete a meal
+  item, medication entry create/edit/delete, backup import.
