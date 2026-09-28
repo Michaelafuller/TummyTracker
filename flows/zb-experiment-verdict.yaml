@@ -1,0 +1,54 @@
+appId: com.tummytracker.app.dev
+# ZB — Experiment verdict, history and watchlist result (GitHub #19, 2026-09-28).
+# Needs the fixture imported first (za-experiment-fixture-import.yaml, or by
+# hand) — this flow does NOT clear app data.
+#   - Home row: "Verdict ready" → the experiment screen shows the live verdict
+#     "Likely a trigger" with its confidence and numbers
+#   - Finish → the verdict is frozen; the Home row is gone
+#   - Insights → the watchlist item shows "Last experiment: Likely a trigger…"
+#   - Past experiments lists it
+---
+- launchApp
+- runFlow: _helpers/reconnect-dev-client.yaml
+
+- assertVisible: "Open lactose experiment"
+- assertVisible: ".*Verdict ready.*"
+- tapOn: "Open lactose experiment"
+- waitForAnimationToEnd
+
+- assertVisible: "Likely a trigger"
+- assertVisible: ".*confidence.*"
+- assertVisible: "Rough days: .*"
+- assertVisible: "An observation from your own logs, not a diagnosis."
+- scrollUntilVisible:
+    element:
+      text: "Finish experiment"
+    direction: DOWN
+- tapOn: "Finish experiment"
+- waitForAnimationToEnd
+# Finished: the frozen verdict still shows, and nothing is running any more.
+- assertVisible: "Likely a trigger"
+- back
+- waitForAnimationToEnd
+- tapOn:
+    id: "tab-home"
+- waitForAnimationToEnd
+- assertNotVisible: "Open lactose experiment"
+
+# Insights: the watchlist item shows the last result, and history lists it.
+- tapOn:
+    id: "tab-insights"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "Last experiment: Likely a trigger.*"
+    direction: DOWN
+    centerElement: true
+- scrollUntilVisible:
+    element:
+      text: "See past experiments"
+    direction: DOWN
+- tapOn: "See past experiments"
+- waitForAnimationToEnd
+- assertVisible: "Experiments"
+- assertVisible: "Open lactose experiment, .*"

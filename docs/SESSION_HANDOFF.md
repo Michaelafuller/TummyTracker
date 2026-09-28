@@ -5,7 +5,7 @@
 > Written 2026-09-27 at the end of a long Opus session (2026-09-26 → 27) so the
 > next session can continue without the transcript. `docs/HANDOFF.md` is a
 > *different* file: the execute-session spec for Sonnet — it currently holds the
-> finished experiments Cycle A (GH #19) spec and gets overwritten by the next plan.
+> finished experiments Cycle B (GH #19) spec and gets overwritten by the next plan.
 > **Updated 2026-09-27 (later session):** GH #13–#18 shipped — see §1/§2.
 
 ## 1. Where things stand
@@ -38,7 +38,10 @@
 - **GH #19 Cycle A** — plan `39224e7`, Sonnet `46d101b..205a011` (built in
   worktree branch `worktree-agent-a93006f35a36fc943`), review fix `205db80`,
   docs + `flows/z-experiment-start.yaml`. 28 suites / 415 targeted tests,
-  rungs clean. **Merged to main only after the owner's device run.**
+  rungs clean. **Cycle B** on the same branch — plan `89ed25a`, Sonnet
+  `470315a..e6ca254`, review fix + flows `za-`/`zb-` + docs. 33 suites / 497
+  targeted tests, rungs clean. **Both cycles merge to main only after the
+  owner's #13–#18 device run.**
 - **Typed routes:** `.expo/types/router.d.ts` (gitignored) only regenerates
   under `npx expo start`; a new route won't typecheck on a machine that
   hasn't run Metro since. Sonnet hand-added `/outcome/[id]` locally; the next
@@ -59,11 +62,9 @@
 
 The ranked backlog is `docs/PROGRESS.md` → "📌 Pinned — next up" (#1–7) and
 "Ranked backlog — continued" (#8–19). Each item names its GitHub issue.
-**#1–#7 (GH #12–#18) are done** (#13–#18 still owe device checks), and
-**#8 (GH #19) Cycle A is done**. Next: **GH #19 Cycle B** — phase-change
-local notifications (own slot, like the day check-in), experiment history on
-the watchlist item/Insights, experiments in the PDF report, a backdated-seed
-Maestro path to "Verdict ready", polish. Plan session first.
+**#1–#8 (GH #12–#19) are done** in code (#13–#19 owe device checks; #19 is
+on the unmerged worktree branch until the owner's device run). Next: **#9 —
+Medications in the correlation engine (GH #20)**. Plan session first.
 - **Full Jest re-baselined 2026-09-27: 113 suites / 1,168 tests green**
   (`docs/RESULTS.md` addendum).
 

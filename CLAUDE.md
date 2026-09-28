@@ -146,6 +146,13 @@
   days, **the suspect never eaten in the baseline** (review 2026-09-28), or
   no baseline rough days; "likely not a trigger" is never high confidence.
   Finishing freezes the verdict in `verdictJson`. Copy never diagnoses.
+  Cycle B (2026-09-28): phase reminders at 09:00 local on each challenge day,
+  the first observation day and the ready day — own slot `experiment-phase`,
+  serialized refresh (same pattern as the day check-in), never a record; tap
+  opens the experiment. History, the watchlist's "Last experiment" line and
+  the PDF read only the frozen verdict. Device verdict path:
+  `node scripts/make-experiment-fixture.mjs` → `adb push` → import (flows
+  `za-…`, `zb-…`).
 - **Real-SQLite repository tests (2026-09-27, GitHub #18).** `jest/expo-sqlite-node.ts`
   is a Jest-only fake `expo-sqlite` backed by Node's built-in `node:sqlite`
   (**Node ≥ 22.13 to run the tests**; no dependency). A DB test file starts

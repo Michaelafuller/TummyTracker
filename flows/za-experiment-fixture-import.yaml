@@ -1,0 +1,42 @@
+appId: com.tummytracker.app.dev
+# ZA — Load the backdated experiment fixture (GitHub #19 Cycle B, 2026-09-28).
+# An experiment takes ~20 real days, so the verdict path is reached with a
+# generated backup: an active "lactose" experiment started 20 days ago plus
+# logs that evaluate to "Likely a trigger" today.
+#
+# BEFORE this flow (on the computer, the same day you run it):
+#   node scripts/make-experiment-fixture.mjs
+#   adb push ".qa-shots/experiment-ready-backup.json" /sdcard/Download/experiment-ready-backup.json
+#
+# The system file picker (DocumentsUI) isn't the app — these picker steps are
+# a best guess for Android 14 on the Pixel 5. If they don't match your phone,
+# do the import by hand (Settings → Import data → Downloads → the file → OK),
+# then run zb-experiment-verdict.yaml, which doesn't clear the app.
+# Import once: log entries are re-minted on import, so a second import
+# doubles them (the experiment row itself is skipped as a duplicate).
+---
+- launchApp:
+    clearState: true
+- runFlow: _helpers/reconnect-dev-client.yaml
+
+- tapOn:
+    id: "open-settings"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "Import data"
+    direction: DOWN
+- tapOn: "Import data"
+- waitForAnimationToEnd
+
+# DocumentsUI: open the roots drawer → Downloads → the pushed file.
+- tapOn: "Show roots"
+- tapOn: "Downloads"
+- waitForAnimationToEnd
+- tapOn: "experiment-ready-backup.json"
+- waitForAnimationToEnd
+
+- assertVisible: "Import complete"
+- assertVisible: ".*Imported 1 experiment \\(0 already existed\\).*"
+- tapOn: "OK"
+- waitForAnimationToEnd

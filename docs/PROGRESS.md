@@ -80,10 +80,15 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   behavior only changes on a mid-write failure, so a regression of the save
   paths is enough: `q-reuse-adjust`, `j-component-drilldown` (edit/delete a
   meal item), `s-medication-entry` (create/edit/delete), `i-backup`. JS-only.
-- **Owed device check — experiments Cycle A (GH #19, 2026-09-28):**
-  `flows/z-experiment-start.yaml` (watch → start → Home row → end early).
-  The verdict can't be reached in real time; Cycle B's test session seeds
-  backdated data for it. JS + migration 0011, no build.
+- **Owed device check — experiments (GH #19, 2026-09-28):**
+  `z-experiment-start` (watch → start → Home row → end early), then the
+  verdict path: `node scripts/make-experiment-fixture.mjs`, run the printed
+  `adb push`, then `za-experiment-fixture-import` (drives the system file
+  picker — best guess; import by hand if it doesn't match) and
+  `zb-experiment-verdict` (Verdict ready → Likely a trigger → Finish →
+  watchlist "Last experiment" → Past experiments). Manual: the 09:00 phase
+  reminders + tap-to-open; the PDF's Elimination experiments table.
+  JS + migration 0011, no build.
 - **Owed device checks:** iOS pass (the #2 keyboard items below + carried: iOS
   app icon, time-picker Done feel), light-mode walkthrough, camera scan loop,
   and the manual items in `docs/E2E.md`. **Owner sequencing from the
@@ -145,6 +150,13 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   Review fix: the suspect must have been eaten in the baseline, otherwise a
   "drop" while avoiding it proves nothing (new inconclusive rule + preview
   warning); the watchlist store now refreshes after a start.
+- **Elimination experiments, Cycle B (GitHub #19):** 09:00 phase reminders
+  (challenge days, first observation day, ready day) that open the
+  experiment; an Experiments history screen; "Last experiment" on each
+  watchlist item; an experiments table in the PDF; a backdated fixture
+  generator for device checks. Review fixes: a refused start (another
+  experiment already active) failed silently; the fixture's ready day was
+  off by one.
 - Earlier (2026-09-26): re-log + Add item (#1), medications epic (#4–#11),
   keyboard dismissal (#2), Settings gear, #12 re-baseline. Issues **#1, #2,
   #4–#11, #13–#18** are done but still open on GitHub — the owner closes them.
@@ -215,7 +227,7 @@ analysis.
 
 | # | Item | Why it matters | Effort | Notes |
 |:-:|------|----------------|:--:|------|
-| 8 | **Elimination experiment mode** (GH #19) — *Cycle A ✅ 2026-09-28; Cycle B next* | The north star's "act on it": pick a suspect → guided avoid-then-reintroduce period → before/during/after outcome comparison with a confidence verdict. Turns correlation into a near-controlled test. | L | Epic — plan first. Reuses watchlist (save-time warnings), outcome engine, reminders. Depends on #2 for a real baseline. |
+| 8 | ~~**Elimination experiment mode** (GH #19)~~ — *✅ Cycles A + B 2026-09-28 (device check owed)* | The north star's "act on it": pick a suspect → guided avoid-then-reintroduce period → before/during/after outcome comparison with a confidence verdict. Turns correlation into a near-controlled test. | L | Epic — plan first. Reuses watchlist (save-time warnings), outcome engine, reminders. Depends on #2 for a real baseline. |
 | 9 | **Medications in the correlation engine** (GH #20) | NSAIDs, antibiotics and PPIs strongly affect digestion; today a bad antibiotic week is blamed on food. Treat meds as confounders and candidate exposures. | M–L | Plan first. The #11 helpers already make the data analysis-ready; the engine deliberately doesn't read it yet. |
 | 10 | **Reaction latency + multiple windows** (GH #21) | Every outcome counts "within 24 h", but reactions range from hours (lactose) to 1–3 days (some FODMAP/gluten). Show when outcomes tend to follow each trigger; compare windows. | M | Also makes findings more explainable. |
 | 11 | **Dose-response** (GH #22) | Servings are stored, but the engine appears to treat an ingredient as present/absent — "a splash of milk is fine, a latte isn't" is exactly what the app should find. | S spike → M | First confirm in `temporal.ts` whether servings are ignored (not verified in review). |
