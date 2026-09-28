@@ -59,9 +59,8 @@ The ranked backlog is `docs/PROGRESS.md` → "📌 Pinned — next up" (#1–7) 
 Pixel session can cover all six), so the pinned list is finished. Next is
 the "Ranked backlog — continued" table in PROGRESS, starting at **#8
 (GH #19)**. Plan session first.
-- **Worth doing first:** a full `npm test` run. Seven cycles have run only
-  targeted Jest since the 95/887 baseline; a full run before starting #8 is
-  cheap insurance (the owner decides).
+- **Full Jest re-baselined 2026-09-27: 113 suites / 1,168 tests green**
+  (`docs/RESULTS.md` addendum).
 
 ## 3. How the owner likes to work (confirmed across the session)
 

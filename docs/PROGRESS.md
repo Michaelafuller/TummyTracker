@@ -40,8 +40,9 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   natives all present. Metro on 8081; the reconnect helper also switches off
   the dev-client tools bubble on fresh installs (it covers the Settings gear —
   `docs/E2E.md` finding).
-- **Test baseline: 34/34 full Maestro regression + full Jest (95 suites /
-  887 tests) on 2026-09-27** (GitHub #12, `docs/RESULTS.md`) — the new
+- **Test baseline: full Jest 113 suites / 1,168 tests (2026-09-27, after
+  GH #13–#18); device baseline 34/34 full Maestro regression + 95 / 887 Jest
+  on 2026-09-27** (GitHub #12, `docs/RESULTS.md`) — the new
   standing baseline, covering the whole 2026-09-26 session. The suite no
   longer uses `hideKeyboard` (86 calls → `_helpers/dismiss-keyboard.yaml`).
 - **Owed device check — day check-in (GH #13, 2026-09-27):** run the new

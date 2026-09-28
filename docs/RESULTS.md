@@ -1,5 +1,18 @@
 # RESULTS.md — Full regression 2026-09-27 (GitHub #12: re-baseline after the 2026-09-26 session + `hideKeyboard` audit)
 
+## Addendum — full Jest re-baseline 2026-09-27 (after GH #13–#18)
+
+- **Full `npm test` at `2f1915f`: 113 suites / 1,168 tests, all passed**
+  (20.6 s), up from 95 / 887 — covers the six cycles since (day check-in,
+  automatic backups, "what came before", polish bundle, meds in the PDF,
+  real-SQLite repository tests). Typecheck, lint (0 warnings) and
+  `bundle:check` were clean at each cycle's end.
+- Same single non-failing warning as before ("A worker process has failed to
+  exit gracefully" — a leaked timer; see Findings). Not new.
+- **Maestro not re-run** — the Pixel 5 is disconnected. Owed device checks
+  for #13–#18 are listed in `docs/PROGRESS.md` → Status; the 34/34 run below
+  remains the device baseline.
+
 ## Summary
 
 - **Baseline run (code as of `a3e1ebe`, flows unchanged): 34/34 passed** in
