@@ -17,6 +17,9 @@ import {
   insertMedicationDosesPreservingIds,
   insertMedicationEventsPreservingIds,
   insertMedicationsPreservingIds,
+  listAllMedicationDoses,
+  listAllMedicationEvents,
+  listAllMedications,
   listLogEntries,
 } from '@/db/repository';
 import {
@@ -248,8 +251,13 @@ export default function SettingsScreen() {
   async function handleCreateReport() {
     setReportWorking(true);
     try {
-      const entries = await listLogEntries();
-      const html = buildReportHtml(entries, Date.now(), reportRange);
+      const [entries, meds, events, doses] = await Promise.all([
+        listLogEntries(),
+        listAllMedications(),
+        listAllMedicationEvents(),
+        listAllMedicationDoses(),
+      ]);
+      const html = buildReportHtml(entries, Date.now(), reportRange, { meds, events, doses });
       // Dynamic import only — the installed dev client on the owner's Pixel
       // predates expo-print; a static import would crash Metro (CLAUDE.md §0
       // in docs/HANDOFF.md). Any failure here (module missing, print/share

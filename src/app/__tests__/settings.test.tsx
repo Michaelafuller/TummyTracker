@@ -3,7 +3,14 @@ import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { Alert, Platform } from 'react-native';
 import { SafeAreaProvider, type Metrics } from 'react-native-safe-area-context';
 
-import { insertDayCheckInsPreservingIds, listAllDayCheckIns, listLogEntries } from '@/db/repository';
+import {
+  insertDayCheckInsPreservingIds,
+  listAllDayCheckIns,
+  listAllMedicationDoses,
+  listAllMedicationEvents,
+  listAllMedications,
+  listLogEntries,
+} from '@/db/repository';
 import { disableDayCheckIn, refreshDayCheckIn } from '@/features/checkin/dayCheckInService';
 import { DEFAULT_REMINDERS } from '@/features/notifications/model';
 import { ensureNotificationPermission, getReminders } from '@/features/notifications/service';
@@ -112,6 +119,9 @@ beforeEach(() => {
   });
   (getReminders as jest.Mock).mockResolvedValue(DEFAULT_REMINDERS);
   (listLogEntries as jest.Mock).mockResolvedValue([]);
+  (listAllMedications as jest.Mock).mockResolvedValue([]);
+  (listAllMedicationEvents as jest.Mock).mockResolvedValue([]);
+  (listAllMedicationDoses as jest.Mock).mockResolvedValue([]);
   (listAllDayCheckIns as jest.Mock).mockResolvedValue([]);
   (insertDayCheckInsPreservingIds as jest.Mock).mockResolvedValue({ inserted: 0, skipped: 0 });
   (ensureNotificationPermission as jest.Mock).mockResolvedValue(true);
@@ -161,6 +171,43 @@ describe('SettingsScreen — Doctor report section', () => {
       mimeType: 'application/pdf',
       dialogTitle: 'Share report',
     });
+  });
+
+  it('fetches medications, events, and doses and includes them in the report HTML (#17)', async () => {
+    mockPrintToFileAsync.mockResolvedValue({ uri: 'file:///report.pdf' });
+    const now = Date.now();
+    (listAllMedications as jest.Mock).mockResolvedValue([
+      {
+        id: 'med1',
+        name: 'Omeprazole',
+        defaultDose: 20,
+        doseUnit: 'mg',
+        frequency: 'once daily',
+        startDate: null,
+        endDate: null,
+        isActive: true,
+        notes: null,
+        createdAt: 0,
+        updatedAt: 0,
+      },
+    ]);
+    (listAllMedicationEvents as jest.Mock).mockResolvedValue([
+      { id: 'evt1', takenAt: now, timeKnown: true, notes: null, createdAt: 0, updatedAt: 0 },
+    ]);
+    (listAllMedicationDoses as jest.Mock).mockResolvedValue([
+      { id: 'dose1', eventId: 'evt1', medicationId: 'med1', dose: 20, doseUnit: 'mg', createdAt: 0, updatedAt: 0 },
+    ]);
+
+    const { findByLabelText } = await renderScreen(<SettingsScreen />);
+    await fireEvent.press(await findByLabelText('Create PDF report'));
+
+    await waitFor(() => expect(mockShareAsync).toHaveBeenCalled());
+    expect(listAllMedications).toHaveBeenCalled();
+    expect(listAllMedicationEvents).toHaveBeenCalled();
+    expect(listAllMedicationDoses).toHaveBeenCalled();
+    expect(mockPrintToFileAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ html: expect.stringContaining('Medications') }),
+    );
   });
 
   it('shows the Update-required alert when printToFileAsync rejects (old dev client)', async () => {

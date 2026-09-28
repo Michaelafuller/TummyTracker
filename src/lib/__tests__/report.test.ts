@@ -1,4 +1,4 @@
-import type { LogEntry } from '@/db/schema';
+import type { LogEntry, Medication, MedicationDose, MedicationEvent } from '@/db/schema';
 import { buildReportHtml, escapeHtml, REPORT_RANGES } from '../report';
 
 let seq = 0;
@@ -165,5 +165,175 @@ describe('buildReportHtml — disclaimer', () => {
     expect(html).toContain(
       "These are observations from the user's own logs — patterns, not medical advice.",
     );
+  });
+});
+
+let medSeq = 0;
+function makeMedication(overrides: Partial<Medication> = {}): Medication {
+  return {
+    id: `med${medSeq++}`,
+    name: 'Omeprazole',
+    defaultDose: null,
+    doseUnit: null,
+    frequency: null,
+    startDate: null,
+    endDate: null,
+    isActive: true,
+    notes: null,
+    createdAt: 0,
+    updatedAt: 0,
+    ...overrides,
+  };
+}
+
+let eventSeq = 0;
+function makeMedicationEvent(overrides: Partial<MedicationEvent> = {}): MedicationEvent {
+  return {
+    id: `evt${eventSeq++}`,
+    takenAt: NOW,
+    timeKnown: true,
+    notes: null,
+    createdAt: 0,
+    updatedAt: 0,
+    ...overrides,
+  };
+}
+
+let doseSeq = 0;
+function makeMedicationDose(overrides: Partial<MedicationDose> = {}): MedicationDose {
+  return {
+    id: `dose${doseSeq++}`,
+    eventId: 'evt0',
+    medicationId: 'med0',
+    dose: 20,
+    doseUnit: 'mg',
+    createdAt: 0,
+    updatedAt: 0,
+    ...overrides,
+  };
+}
+
+describe('buildReportHtml — medications (GitHub #17)', () => {
+  it('omits the Medications section entirely when no medication data is passed', () => {
+    const html = buildReportHtml([makeEntry({ loggedAt: NOW })], NOW, 30);
+    expect(html).not.toContain('<h2>Medications</h2>');
+    expect(html).not.toContain('Medications');
+  });
+
+  it('adds a Medications section with a table row for a medication with doses in range', () => {
+    const med = makeMedication({ id: 'med1', name: 'Omeprazole', frequency: 'once daily', isActive: true });
+    const event = makeMedicationEvent({ id: 'evt1', takenAt: NOW });
+    const dose = makeMedicationDose({ id: 'd1', eventId: 'evt1', medicationId: 'med1', dose: 20, doseUnit: 'mg' });
+
+    const html = buildReportHtml([], NOW, 30, { meds: [med], events: [event], doses: [dose] });
+
+    expect(html).toContain('<h2>Medications</h2>');
+    expect(html).toContain('Omeprazole');
+    expect(html).toContain('20 mg ×1');
+    expect(html).toContain('once daily');
+    expect(html).toContain('1 of 30'); // 1 day with a logged dose, out of the 30-day window (no start/end dates set)
+  });
+
+  it('shows "0 of N" and "No doses logged in this range" for an active medication with none', () => {
+    const med = makeMedication({ id: 'med1', name: 'Ibuprofen', isActive: true });
+
+    const html = buildReportHtml([], NOW, 30, { meds: [med], events: [], doses: [] });
+
+    expect(html).toContain('Ibuprofen');
+    expect(html).toContain('0 of 30');
+    expect(html).toContain('No doses logged in this range');
+  });
+
+  it('marks an inactive medication with "(inactive)"', () => {
+    const med = makeMedication({ id: 'med1', name: 'Old Med', isActive: false });
+    const event = makeMedicationEvent({ id: 'evt1', takenAt: NOW });
+    const dose = makeMedicationDose({ id: 'd1', eventId: 'evt1', medicationId: 'med1' });
+
+    const html = buildReportHtml([], NOW, 30, { meds: [med], events: [event], doses: [dose] });
+
+    expect(html).toContain('Old Med (inactive)');
+  });
+
+  it('uses "logged" wording only — never "missed" or "skipped"', () => {
+    const med = makeMedication({ id: 'med1', name: 'Ibuprofen', isActive: true });
+
+    const html = buildReportHtml([], NOW, 30, { meds: [med], events: [], doses: [] });
+
+    expect(html).toContain('logged');
+    expect(html).not.toContain('missed');
+    expect(html).not.toContain('skipped');
+  });
+
+  it('escapes a hostile medication name, unit, frequency, and event note', () => {
+    const med = makeMedication({
+      id: 'med1',
+      name: '<script>alert(1)</script>',
+      frequency: '<b>daily</b>',
+      isActive: true,
+    });
+    const event = makeMedicationEvent({ id: 'evt1', takenAt: NOW, notes: '<img src=x onerror=alert(2)>' });
+    const dose = makeMedicationDose({
+      id: 'd1',
+      eventId: 'evt1',
+      medicationId: 'med1',
+      dose: 5,
+      doseUnit: '<i>units</i>',
+    });
+
+    const html = buildReportHtml([], NOW, 30, { meds: [med], events: [event], doses: [dose] });
+
+    expect(html).not.toContain('<script>');
+    expect(html).not.toContain('<b>daily</b>');
+    expect(html).not.toContain('<i>units</i>');
+    expect(html).not.toContain('<img src=x');
+    expect(html).toContain(escapeHtml('<script>alert(1)</script>'));
+    expect(html).toContain(escapeHtml('<b>daily</b>'));
+    expect(html).toContain(escapeHtml('<i>units</i>'));
+    expect(html).toContain(escapeHtml('<img src=x onerror=alert(2)>'));
+  });
+
+  it('interleaves medication events into the Journal day table by time, alongside log entries', () => {
+    const entry = makeEntry({ name: 'Toast', loggedAt: new Date(2026, 7, 24, 8, 0, 0).getTime() });
+    const med = makeMedication({ id: 'med1', name: 'Omeprazole', isActive: true });
+    const event = makeMedicationEvent({
+      id: 'evt1',
+      takenAt: new Date(2026, 7, 24, 9, 0, 0).getTime(),
+      timeKnown: true,
+    });
+    const dose = makeMedicationDose({ id: 'd1', eventId: 'evt1', medicationId: 'med1', dose: 20, doseUnit: 'mg' });
+
+    const html = buildReportHtml([entry], NOW, 30, { meds: [med], events: [event], doses: [dose] });
+
+    expect(html).toContain('Toast');
+    expect(html).toContain('Medication');
+    expect(html).toContain('Omeprazole 20 mg');
+  });
+
+  it('shows "time not set" for a medication event without a known time', () => {
+    const med = makeMedication({ id: 'med1', name: 'Omeprazole', isActive: true });
+    const event = makeMedicationEvent({ id: 'evt1', takenAt: NOW, timeKnown: false });
+    const dose = makeMedicationDose({ id: 'd1', eventId: 'evt1', medicationId: 'med1' });
+
+    const html = buildReportHtml([], NOW, 30, { meds: [med], events: [event], doses: [dose] });
+
+    expect(html).toContain('time not set');
+  });
+
+  it('still shows the empty Journal state when medication data is passed but nothing falls in range', () => {
+    const html = buildReportHtml([], NOW, 30, { meds: [], events: [], doses: [] });
+    expect(html).toContain('No entries in this range.');
+  });
+
+  it('adds "· N medication doses" to the summary line only when N > 0', () => {
+    const medWithDose = makeMedication({ id: 'med1', name: 'Omeprazole', isActive: true });
+    const event = makeMedicationEvent({ id: 'evt1', takenAt: NOW });
+    const dose = makeMedicationDose({ id: 'd1', eventId: 'evt1', medicationId: 'med1' });
+
+    const htmlWithDoses = buildReportHtml([], NOW, 30, { meds: [medWithDose], events: [event], doses: [dose] });
+    expect(htmlWithDoses).toContain('1 medication doses');
+
+    const medWithout = makeMedication({ id: 'med2', name: 'Ibuprofen', isActive: true });
+    const htmlWithout = buildReportHtml([], NOW, 30, { meds: [medWithout], events: [], doses: [] });
+    expect(htmlWithout).not.toContain('medication doses');
   });
 });

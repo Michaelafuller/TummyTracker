@@ -8,7 +8,7 @@
 // through escapeHtml before being embedded, so a hostile entry name can never
 // break out of its cell or inject markup into the generated PDF.
 
-import type { LogEntry } from '@/db/schema';
+import type { LogEntry, Medication, MedicationDose, MedicationEvent } from '@/db/schema';
 import { isBristolValue } from '@/features/bm/bristol';
 import { isSentimentValue, sentimentLabel } from '@/features/sentiment/scale';
 import { isSeverityValue } from '@/features/symptoms/severity';
@@ -18,7 +18,13 @@ import {
   type OutcomeFinding,
 } from '@/features/analysis/insights';
 import { formatLongDate, formatTime12h, MONTHS_LONG } from '@/lib/datetime';
-import { groupEntriesByDay } from '@/lib/journal';
+import {
+  groupEntriesByDay,
+  logEntriesToJournalItems,
+  medicationEventsToJournalItems,
+  type JournalItem,
+} from '@/lib/journal';
+import { summarizeMedicationUse, type MedicationUseSummary } from '@/lib/medications';
 import { NUTRITION_NOUNS } from '@/lib/nutrition';
 import type { ConfidenceTier } from '@/lib/stats';
 
@@ -92,15 +98,84 @@ function entryDetail(entry: LogEntry): string {
   return parts.join(' · ');
 }
 
+/** One row of the merged Journal table — a log entry or a medication event (#17). */
+function journalRowHtml(item: JournalItem): string {
+  if (item.kind === 'medication') {
+    const time = item.timeKnown ? formatTime12h(item.loggedAt) : 'time not set';
+    const notes = item.notes != null && item.notes !== '' ? escapeHtml(item.notes) : '';
+    // `item.summary` is built from user-authored medication names/units
+    // (lib/journal.ts) but never escaped there — escaping the whole joined
+    // string here is equivalent and keeps every user-authored piece covered
+    // (HANDOFF.md §0).
+    return `<tr><td>${time}</td><td>Medication</td><td>${escapeHtml(item.summary)}</td><td>${notes}</td></tr>`;
+  }
+
+  const entry = item.entry;
+  const notes = entry.notes != null && entry.notes !== '' ? escapeHtml(entry.notes) : '';
+  return (
+    `<tr><td>${formatTime12h(entry.loggedAt)}</td>` +
+    `<td>${escapeHtml(entry.name)}</td>` +
+    `<td>${entryDetail(entry)}</td>` +
+    `<td>${notes}</td></tr>`
+  );
+}
+
+/** One row of the Medications table (#17): name (+ " (inactive)"), doses logged,
+ *  days with a logged dose, snapshot amounts, and the frequency as entered. */
+function medicationRowHtml(row: MedicationUseSummary): string {
+  const name = escapeHtml(row.name) + (row.isActive ? '' : ' (inactive)');
+  const daysCell = `${row.daysWithDose} of ${row.daysInRange}`;
+  const amountsCell =
+    row.amounts.length === 0
+      ? row.dosesLogged === 0
+        ? 'No doses logged in this range'
+        : '—'
+      : row.amounts.map((a) => `${escapeHtml(a.label)} ×${a.count}`).join(', ');
+  const trimmedFrequency = row.frequency?.trim() ?? '';
+  const frequencyCell = trimmedFrequency.length > 0 ? escapeHtml(trimmedFrequency) : '—';
+
+  return (
+    `<tr><td>${name}</td><td>${row.dosesLogged}</td><td>${daysCell}</td>` +
+    `<td>${amountsCell}</td><td>${frequencyCell}</td></tr>`
+  );
+}
+
+/** The Medications section (#17) — omitted entirely when there's nothing to show
+ *  (no medication data passed, or summarizeMedicationUse returns nothing). */
+function medicationsSectionHtml(summaries: readonly MedicationUseSummary[]): string {
+  if (summaries.length === 0) return '';
+  const rows = summaries.map(medicationRowHtml).join('');
+  return (
+    '<h2>Medications</h2>' +
+    '<p class="summary">Doses the user logged in this range. Only logged doses are counted; ' +
+    'a day without a logged dose may simply not have been recorded.</p>' +
+    '<table><thead><tr><th>Medication</th><th>Doses logged</th><th>Days with a logged dose</th>' +
+    '<th>Amounts</th><th>Frequency (as entered)</th></tr></thead>' +
+    `<tbody>${rows}</tbody></table>`
+  );
+}
+
+/** Medication data for the report (#17) — optional; existing callers that omit
+ *  it get exactly today's report, with no Medications section at all. */
+export interface ReportMedicationData {
+  meds: readonly Medication[];
+  events: readonly MedicationEvent[];
+  doses: readonly MedicationDose[];
+}
+
 /**
  * Builds a complete printable HTML document summarizing `entries` over the
  * `rangeDays` calendar days ending today (inclusive) — same windowing as
  * bmRegularity: `[todayStart + DAY_MS - rangeDays * DAY_MS, todayStart + DAY_MS)`.
+ * `medications` is optional (#17) — when passed, a Medications section is
+ * added (only when it has something to show) and medication doses join the
+ * Journal; when omitted, output is unchanged from before #17.
  */
 export function buildReportHtml(
   entries: readonly LogEntry[],
   now: number,
   rangeDays: ReportRangeDays,
+  medications?: ReportMedicationData,
 ): string {
   const todayStart = startOfDay(now);
   const end = todayStart + DAY_MS;
@@ -109,9 +184,16 @@ export function buildReportHtml(
 
   const insights = computeInsights(ranged);
   const { summary } = insights;
+
+  const medicationSummaries = medications
+    ? summarizeMedicationUse(medications.meds, medications.events, medications.doses, { start, end })
+    : [];
+  const medicationDoseCount = medicationSummaries.reduce((sum, row) => sum + row.dosesLogged, 0);
+
   const summaryLine =
     `${summary.totalEntries} entries · ${summary.foodEntries} food · ${summary.bmEntries} BM · ` +
-    `${summary.symptomEntries} symptoms · ${summary.roughOutcomes} rough outcomes`;
+    `${summary.symptomEntries} symptoms · ${summary.roughOutcomes} rough outcomes` +
+    (medicationDoseCount > 0 ? ` · ${medicationDoseCount} medication doses` : '');
 
   const sections: { title: string; items: string[] }[] = [
     { title: 'Ingredients', items: insights.ingredientFindings.map(outcomeSentence) },
@@ -131,24 +213,26 @@ export function buildReportHtml(
           )
           .join('');
 
-  const dayGroups = groupEntriesByDay(ranged);
+  const medicationsHtml = medicationsSectionHtml(medicationSummaries);
+
+  const medicationEventsInRange = medications
+    ? medications.events.filter((event) => event.takenAt >= start && event.takenAt < end)
+    : [];
+  const journalItems: JournalItem[] = medications
+    ? [
+        ...logEntriesToJournalItems(ranged),
+        ...medicationEventsToJournalItems(medicationEventsInRange, medications.doses, medications.meds),
+      ]
+    : logEntriesToJournalItems(ranged);
+
+  const dayGroups = groupEntriesByDay(journalItems);
   const journalHtml =
     dayGroups.length === 0
       ? '<p class="empty">No entries in this range.</p>'
       : dayGroups
           .map((group) => {
             const dayLabel = formatLongDate(group.entries[0].loggedAt);
-            const rows = group.entries
-              .map((entry) => {
-                const notes = entry.notes != null && entry.notes !== '' ? escapeHtml(entry.notes) : '';
-                return (
-                  `<tr><td>${formatTime12h(entry.loggedAt)}</td>` +
-                  `<td>${escapeHtml(entry.name)}</td>` +
-                  `<td>${entryDetail(entry)}</td>` +
-                  `<td>${notes}</td></tr>`
-                );
-              })
-              .join('');
+            const rows = group.entries.map(journalRowHtml).join('');
             return (
               `<h3>${dayLabel}</h3>` +
               '<table><thead><tr><th>Time</th><th>Name</th><th>Detail</th><th>Notes</th></tr></thead>' +
@@ -184,6 +268,7 @@ export function buildReportHtml(
 <div class="meta">${rangeLabel} · Generated ${generatedLabel}</div>
 <p class="summary">${summaryLine}</p>
 ${findingsHtml}
+${medicationsHtml}
 <h2>Journal</h2>
 ${journalHtml}
 <p class="disclaimer">These are observations from the user's own logs — patterns, not medical advice.</p>
