@@ -508,3 +508,27 @@ describe('summarizeMedicationUse', () => {
     expect(result.every((r) => r.dosesLogged === 0 && r.daysWithDose === 0)).toBe(true);
   });
 });
+
+describe('summarizeMedicationUse — end date on a DST day', () => {
+  it('counts the end date once when it falls on the spring-forward day (23 h long)', () => {
+    // 2026-03-08 is US spring-forward: endDate + 24 h lands at 01:00 on Mar 9,
+    // which counted Mar 9 too. Over Mar 6 – Mar 12 the medication covers
+    // Mar 6, 7 and 8: 3 days, not 4.
+    const med: Medication = {
+      id: 'm1',
+      name: 'Course',
+      defaultDose: null,
+      doseUnit: null,
+      frequency: null,
+      startDate: null,
+      endDate: new Date(2026, 2, 8).getTime(),
+      isActive: true,
+      notes: null,
+      createdAt: 0,
+      updatedAt: 0,
+    };
+    const range = { start: new Date(2026, 2, 6).getTime(), end: new Date(2026, 2, 13).getTime() };
+    const [row] = summarizeMedicationUse([med], [], [], range);
+    expect(row.daysInRange).toBe(3);
+  });
+});

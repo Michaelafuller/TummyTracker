@@ -17,7 +17,7 @@ import {
   type NutrientOutcomeFinding,
   type OutcomeFinding,
 } from '@/features/analysis/insights';
-import { formatLongDate, formatTime12h, MONTHS_LONG } from '@/lib/datetime';
+import { dayBounds, formatLongDate, formatTime12h, MONTHS_LONG } from '@/lib/datetime';
 import {
   groupEntriesByDay,
   logEntriesToJournalItems,
@@ -27,8 +27,6 @@ import {
 import { summarizeMedicationUse, type MedicationUseSummary } from '@/lib/medications';
 import { NUTRITION_NOUNS } from '@/lib/nutrition';
 import type { ConfidenceTier } from '@/lib/stats';
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const REPORT_RANGES = [14, 30, 90] as const;
 export type ReportRangeDays = (typeof REPORT_RANGES)[number];
@@ -166,7 +164,11 @@ export interface ReportMedicationData {
 /**
  * Builds a complete printable HTML document summarizing `entries` over the
  * `rangeDays` calendar days ending today (inclusive) — same windowing as
- * bmRegularity: `[todayStart + DAY_MS - rangeDays * DAY_MS, todayStart + DAY_MS)`.
+ * bmRegularity, but stepped in LOCAL calendar days: `[local midnight
+ * (rangeDays - 1) days before today, next local midnight)`. Fixed-24h
+ * arithmetic drifted by an hour whenever the range crossed a DST change —
+ * pulling in the last hour of the day before, and making a 30-day report's
+ * medication denominators read "of 31" (#17 review).
  * `medications` is optional (#17) — when passed, a Medications section is
  * added (only when it has something to show) and medication doses join the
  * Journal; when omitted, output is unchanged from before #17.
@@ -177,9 +179,10 @@ export function buildReportHtml(
   rangeDays: ReportRangeDays,
   medications?: ReportMedicationData,
 ): string {
-  const todayStart = startOfDay(now);
-  const end = todayStart + DAY_MS;
-  const start = end - rangeDays * DAY_MS;
+  const { end } = dayBounds(now);
+  const startDate = new Date(startOfDay(now));
+  startDate.setDate(startDate.getDate() - (rangeDays - 1));
+  const start = startDate.getTime();
   const ranged = entries.filter((e) => e.loggedAt >= start && e.loggedAt < end);
 
   const insights = computeInsights(ranged);

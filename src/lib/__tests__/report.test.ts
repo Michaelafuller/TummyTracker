@@ -337,3 +337,25 @@ describe('buildReportHtml — medications (GitHub #17)', () => {
     expect(htmlWithout).not.toContain('medication doses');
   });
 });
+
+describe('buildReportHtml — window across a DST change', () => {
+  // 30 local days ending 2026-03-20 include the US spring-forward day
+  // (2026-03-08, 23 hours long). The window must still be exactly 30 local
+  // days: starting at local midnight on Feb 19, not at 23:00 on Feb 18.
+  const MARCH_NOW = new Date(2026, 2, 20, 12, 0, 0).getTime();
+
+  it('reports "of 30" for an active medication with no doses, not "of 31"', () => {
+    const med = makeMedication({ id: 'med1', name: 'Ibuprofen', isActive: true, startDate: null, endDate: null });
+    const html = buildReportHtml([], MARCH_NOW, 30, { meds: [med], events: [], doses: [] });
+    expect(html).toContain('0 of 30');
+    expect(html).not.toContain('0 of 31');
+  });
+
+  it('excludes an entry logged late on the day before the window', () => {
+    const lateBefore = makeEntry({ id: 'x', name: 'Late snack', loggedAt: new Date(2026, 1, 18, 23, 30).getTime() });
+    const firstDay = makeEntry({ id: 'y', name: 'First-day toast', loggedAt: new Date(2026, 1, 19, 8, 0).getTime() });
+    const html = buildReportHtml([lateBefore, firstDay], MARCH_NOW, 30);
+    expect(html).not.toContain('Late snack');
+    expect(html).toContain('First-day toast');
+  });
+});

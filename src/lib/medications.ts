@@ -5,10 +5,8 @@
 // has (Cycle B writes those rows; the UI and any future insights consume them).
 
 import { DOSE_UNITS, type Medication, type MedicationDose, type MedicationEvent } from '@/db/schema';
-import { formatDateInput } from '@/lib/datetime';
+import { dayBounds, formatDateInput } from '@/lib/datetime';
 import { validateNotes } from '@/lib/validation';
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const MAX_MEDICATION_NAME_LENGTH = 100;
 export const MAX_OTHER_UNIT_LENGTH = 20;
@@ -263,7 +261,9 @@ function computeDaysInRange(
   daysWithDose: number,
 ): number {
   const effectiveStart = med.startDate != null ? Math.max(range.start, med.startDate) : range.start;
-  const effectiveEnd = med.endDate != null ? Math.min(range.end, med.endDate + DAY_MS) : range.end;
+  // Next local midnight after endDate — not endDate + 24h, which lands an hour
+  // off on a DST day and could count an extra day.
+  const effectiveEnd = med.endDate != null ? Math.min(range.end, dayBounds(med.endDate).end) : range.end;
   return Math.max(countLocalDays(effectiveStart, effectiveEnd), daysWithDose);
 }
 
