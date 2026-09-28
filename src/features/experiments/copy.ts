@@ -40,15 +40,18 @@ export function experimentPlanLines(schedule: ExperimentSchedule): string[] {
   ];
 }
 
-/** "Your last 14 days: 9 logged, 4 rough." — the start screen's baseline preview. */
+/** "Your last 14 days: 9 logged, 4 rough, ate it on 5." — the start screen's baseline preview. */
 export function baselinePreviewSentence(stats: PhaseStats): string {
-  return `Your last ${stats.days} days: ${stats.covered} logged, ${stats.rough} rough.`;
+  return `Your last ${stats.days} days: ${stats.covered} logged, ${stats.rough} rough, ate it on ${stats.exposed}.`;
 }
 
 /** A warning when the baseline looks too thin to yield a real verdict later — null when it's fine. Starting is still allowed either way. */
 export function baselineWarning(stats: PhaseStats): string | null {
   if (stats.covered < MIN_BASELINE_COVERED) {
     return "Not many days logged recently — the verdict will likely be inconclusive unless you log more before starting.";
+  }
+  if (stats.exposed === 0) {
+    return "You haven't logged eating it in the last two weeks, so avoiding it may have nothing to change — the verdict will likely be inconclusive.";
   }
   if (stats.rough === 0) {
     return 'No rough days in the last two weeks, so there may be nothing to detect.';

@@ -9,6 +9,7 @@ import {
   MAX_SLIP_RATIO,
   NOT_TRIGGER_MIN_CHALLENGE_EXPOSURE,
   VERDICT_REASON_NOT_ENOUGH_DAYS,
+  VERDICT_REASON_NO_BASELINE_EXPOSURE,
   VERDICT_REASON_NO_BASELINE_ROUGH_DAYS,
   VERDICT_REASON_NO_CHALLENGE_EXPOSURE,
   VERDICT_REASON_NOT_TRIGGER,
@@ -98,6 +99,13 @@ function daysEntries(
     if (rough.has(day)) entries.push(bmEntry(day));
   }
   return entries;
+}
+
+/** Baseline days as a realistic "before" period: every day covered AND the
+ * suspect eaten (rule 3b — it has to be in the diet for avoiding it to mean
+ * anything). `rough` as in daysEntries. */
+function baselineEntries(days: readonly string[], opts: { rough?: Set<string> } = {}): LogEntry[] {
+  return daysEntries(days, { rough: opts.rough, exposed: new Set(days) });
 }
 
 function daysSet(days: readonly string[], count: number): Set<string> {
@@ -235,7 +243,7 @@ describe('evaluateExperiment — slip exclusion', () => {
   it('rate is null when a phase has no covered days at all', () => {
     const exp = baseExp({ startDate: '2026-04-01' });
     const evaluation = evaluateExperiment(exp, [], [], '2026-04-01');
-    expect(evaluation.baseline).toEqual({ days: 14, covered: 0, rough: 0, rate: null });
+    expect(evaluation.baseline).toEqual({ days: 14, covered: 0, rough: 0, rate: null, exposed: 0 });
     expect(evaluation.elimination.rate).toBeNull();
     expect(evaluation.verdict).toBeNull(); // phase isn't 'ready' yet
   });
@@ -277,7 +285,7 @@ describe('evaluateExperiment — verdict rules, evaluated in order', () => {
 
   it('rule 3 — not enough baseline days logged is inconclusive', () => {
     const entries = [
-      ...daysEntries(schedule.baseline.slice(0, 3)), // only 3 of 14 baseline days covered
+      ...baselineEntries(schedule.baseline.slice(0, 3)), // only 3 of 14 baseline days covered
       ...daysEntries(schedule.elimination),
       ...daysEntries(schedule.challenge, { exposed: new Set(schedule.challenge) }),
       ...daysEntries(schedule.observation),
@@ -289,9 +297,26 @@ describe('evaluateExperiment — verdict rules, evaluated in order', () => {
     );
   });
 
+  it('rule 3b — never eating it in the baseline is inconclusive (avoiding it had nothing to change)', () => {
+    const exp = baseExp();
+    const schedule = experimentSchedule(exp);
+    // A textbook "trigger" pattern in the numbers (rough before, fine while
+    // avoiding, rough again after reintroducing) — but the suspect was never
+    // eaten before the experiment, so the drop can't be credited to avoiding it.
+    const entries = [
+      ...daysEntries(schedule.baseline, { rough: daysSet(schedule.baseline, 10) }),
+      ...daysEntries(schedule.elimination),
+      ...daysEntries(schedule.challenge, { rough: new Set(schedule.challenge), exposed: new Set(schedule.challenge) }),
+      ...daysEntries(schedule.observation, { rough: new Set(schedule.observation) }),
+    ];
+    const evaluation = evaluateExperiment(exp, entries, [], readyToday);
+    expect(evaluation.baseline.exposed).toBe(0);
+    expect(evaluation.verdict).toMatchObject({ kind: 'inconclusive', confidence: null, reason: VERDICT_REASON_NO_BASELINE_EXPOSURE });
+  });
+
   it('rule 4 — no rough days in the baseline is inconclusive (nothing to improve)', () => {
     const entries = [
-      ...daysEntries(schedule.baseline), // covered, never rough
+      ...baselineEntries(schedule.baseline), // covered, never rough
       ...daysEntries(schedule.elimination),
       ...daysEntries(schedule.challenge, { exposed: new Set(schedule.challenge) }),
       ...daysEntries(schedule.observation),
@@ -307,7 +332,7 @@ describe('evaluateExperiment — verdict rules, evaluated in order', () => {
     // baseline 6/14 rough, elimination 2/14 rough (drop = 0.286 >= 0.2),
     // reintroduction 1/6 rough (rise = 0.024 < 0.1) — neither trigger nor not-trigger.
     const entries = [
-      ...daysEntries(schedule.baseline, { rough: daysSet(schedule.baseline, 6) }),
+      ...baselineEntries(schedule.baseline, { rough: daysSet(schedule.baseline, 6) }),
       ...daysEntries(schedule.elimination, { rough: daysSet(schedule.elimination, 2) }),
       ...daysEntries(schedule.challenge, { exposed: new Set(schedule.challenge) }),
       ...daysEntries(schedule.observation, { rough: daysSet(schedule.observation, 1) }),
@@ -323,7 +348,7 @@ describe('evaluateExperiment — verdict rules, evaluated in order', () => {
     // + all 3 observation days) for its Wilson lower bound to clear the
     // elimination phase's (0/14) Wilson upper bound, same as the baseline's.
     const entries = [
-      ...daysEntries(schedule.baseline, { rough: daysSet(schedule.baseline, 10) }), // 10/14
+      ...baselineEntries(schedule.baseline, { rough: daysSet(schedule.baseline, 10) }), // 10/14
       ...daysEntries(schedule.elimination), // 0/14 rough
       ...daysEntries(schedule.challenge, { exposed: new Set(schedule.challenge), rough: daysSet(schedule.challenge, 2) }),
       ...daysEntries(schedule.observation, { rough: new Set(schedule.observation) }),
@@ -340,7 +365,7 @@ describe('evaluateExperiment — verdict rules, evaluated in order', () => {
     // (3/14) whose own Wilson lower bound no longer clears the elimination
     // phase's upper bound — only the reintroduction side does.
     const entries = [
-      ...daysEntries(schedule.baseline, { rough: daysSet(schedule.baseline, 3) }), // 3/14
+      ...baselineEntries(schedule.baseline, { rough: daysSet(schedule.baseline, 3) }), // 3/14
       ...daysEntries(schedule.elimination), // 0/14
       ...daysEntries(schedule.challenge, { exposed: new Set(schedule.challenge), rough: daysSet(schedule.challenge, 2) }),
       ...daysEntries(schedule.observation, { rough: new Set(schedule.observation) }),
@@ -354,7 +379,7 @@ describe('evaluateExperiment — verdict rules, evaluated in order', () => {
 
   it('rule 5/6 — likely-trigger with LOW confidence when neither bound clears', () => {
     const entries = [
-      ...daysEntries(schedule.baseline, { rough: daysSet(schedule.baseline, 5) }), // 5/14
+      ...baselineEntries(schedule.baseline, { rough: daysSet(schedule.baseline, 5) }), // 5/14
       ...daysEntries(schedule.elimination, { rough: daysSet(schedule.elimination, 1) }), // 1/14
       ...daysEntries(schedule.challenge, { exposed: new Set(schedule.challenge), rough: daysSet(schedule.challenge, 1) }),
       ...daysEntries(schedule.observation, { rough: daysSet(schedule.observation, 1) }), // total reintroduction 2/6
@@ -368,7 +393,7 @@ describe('evaluateExperiment — verdict rules, evaluated in order', () => {
 
   it('rule 5/6 — likely-not-trigger with MEDIUM confidence', () => {
     const entries = [
-      ...daysEntries(schedule.baseline, { rough: daysSet(schedule.baseline, 2) }), // 2/14 = 0.143
+      ...baselineEntries(schedule.baseline, { rough: daysSet(schedule.baseline, 2) }), // 2/14 = 0.143
       ...daysEntries(schedule.elimination, { rough: daysSet(schedule.elimination, 2) }), // 2/14 = 0.143
       ...daysEntries(schedule.challenge, { exposed: new Set(schedule.challenge) }), // 3 exposed days >= NOT_TRIGGER_MIN_CHALLENGE_EXPOSURE
       ...daysEntries(schedule.observation, { rough: daysSet(schedule.observation, 1) }), // reintroduction 1/6 = 0.167
@@ -382,7 +407,7 @@ describe('evaluateExperiment — verdict rules, evaluated in order', () => {
 
   it('rule 5/6 — likely-not-trigger with LOW confidence when challenge exposure is too thin', () => {
     const entries = [
-      ...daysEntries(schedule.baseline, { rough: daysSet(schedule.baseline, 2) }),
+      ...baselineEntries(schedule.baseline, { rough: daysSet(schedule.baseline, 2) }),
       ...daysEntries(schedule.elimination, { rough: daysSet(schedule.elimination, 2) }),
       ...daysEntries(schedule.challenge, { exposed: daysSet(schedule.challenge, 1) }), // only 1 exposed challenge day
       ...daysEntries(schedule.observation, { rough: daysSet(schedule.observation, 1) }),
@@ -400,16 +425,19 @@ describe('baselinePreview', () => {
     const today = '2026-04-15';
     const exp = baseExp({ startDate: today });
     const schedule = experimentSchedule(exp);
-    const entries = daysEntries(schedule.baseline, { rough: daysSet(schedule.baseline, 4) });
+    const entries = daysEntries(schedule.baseline, {
+      rough: daysSet(schedule.baseline, 4),
+      exposed: daysSet(schedule.baseline, 5),
+    });
 
     const preview = baselinePreview(entries, [], TERM, today);
     const evaluation = evaluateExperiment(exp, entries, [], today);
 
     expect(preview).toEqual(evaluation.baseline);
-    expect(preview).toEqual({ days: 14, covered: 14, rough: 4, rate: 4 / 14 });
+    expect(preview).toEqual({ days: 14, covered: 14, rough: 4, rate: 4 / 14, exposed: 5 });
   });
 
   it('is all-null-ish when nothing was logged', () => {
-    expect(baselinePreview([], [], TERM, '2026-04-15')).toEqual({ days: 14, covered: 0, rough: 0, rate: null });
+    expect(baselinePreview([], [], TERM, '2026-04-15')).toEqual({ days: 14, covered: 0, rough: 0, rate: null, exposed: 0 });
   });
 });

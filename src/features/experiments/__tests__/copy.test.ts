@@ -47,22 +47,26 @@ describe('experimentPlanLines', () => {
 });
 
 describe('baselinePreviewSentence / baselineWarning', () => {
-  it('renders the days/logged/rough sentence', () => {
-    expect(baselinePreviewSentence({ days: 14, covered: 9, rough: 4, rate: 4 / 9 })).toBe(
-      'Your last 14 days: 9 logged, 4 rough.',
+  it('renders the days/logged/rough/eaten sentence', () => {
+    expect(baselinePreviewSentence({ days: 14, covered: 9, rough: 4, rate: 4 / 9, exposed: 3 })).toBe(
+      'Your last 14 days: 9 logged, 4 rough, ate it on 3.',
     );
   });
 
+  it('warns when the suspect was never eaten recently (avoiding it would change nothing)', () => {
+    expect(baselineWarning({ days: 14, covered: 10, rough: 3, rate: 0.3, exposed: 0 })).toMatch(/nothing to change/);
+  });
+
   it('warns when fewer than the minimum baseline days are covered', () => {
-    expect(baselineWarning({ days: 14, covered: 3, rough: 1, rate: 1 / 3 })).toMatch(/inconclusive/);
+    expect(baselineWarning({ days: 14, covered: 3, rough: 1, rate: 1 / 3, exposed: 3 })).toMatch(/inconclusive/);
   });
 
   it('warns when nothing rough happened recently', () => {
-    expect(baselineWarning({ days: 14, covered: 10, rough: 0, rate: 0 })).toMatch(/nothing to detect/);
+    expect(baselineWarning({ days: 14, covered: 10, rough: 0, rate: 0, exposed: 3 })).toMatch(/nothing to detect/);
   });
 
   it('is null when coverage and rough days both look fine', () => {
-    expect(baselineWarning({ days: 14, covered: 10, rough: 3, rate: 0.3 })).toBeNull();
+    expect(baselineWarning({ days: 14, covered: 10, rough: 3, rate: 0.3, exposed: 3 })).toBeNull();
   });
 });
 
@@ -113,9 +117,9 @@ describe('slipsSentence', () => {
 describe('daysLoggedSoFarSentence', () => {
   it('reports elimination and reintroduction coverage', () => {
     const evaluation: ExperimentEvaluation = {
-      baseline: { days: 14, covered: 14, rough: 4, rate: 4 / 14 },
-      elimination: { days: 14, covered: 9, rough: 1, rate: 1 / 9 },
-      reintroduction: { days: 6, covered: 3, rough: 2, rate: 2 / 3 },
+      baseline: { days: 14, covered: 14, rough: 4, rate: 4 / 14, exposed: 3 },
+      elimination: { days: 14, covered: 9, rough: 1, rate: 1 / 9, exposed: 3 },
+      reintroduction: { days: 6, covered: 3, rough: 2, rate: 2 / 3, exposed: 3 },
       slipDays: [],
       challengeExposureDays: 1,
       verdict: null,
@@ -150,9 +154,9 @@ describe('confidenceChipLabel', () => {
 describe('verdictNumbersSentence', () => {
   it('matches the verdict-card example verbatim', () => {
     const evaluation: ExperimentEvaluation = {
-      baseline: { days: 14, covered: 14, rough: 6, rate: 6 / 14 },
-      elimination: { days: 14, covered: 14, rough: 1, rate: 1 / 14 },
-      reintroduction: { days: 6, covered: 6, rough: 3, rate: 3 / 6 },
+      baseline: { days: 14, covered: 14, rough: 6, rate: 6 / 14, exposed: 3 },
+      elimination: { days: 14, covered: 14, rough: 1, rate: 1 / 14, exposed: 3 },
+      reintroduction: { days: 6, covered: 6, rough: 3, rate: 3 / 6, exposed: 3 },
       slipDays: [],
       challengeExposureDays: 3,
       verdict: null,
@@ -164,9 +168,9 @@ describe('verdictNumbersSentence', () => {
 
   it('shows a dash for a phase with no covered days', () => {
     const evaluation: ExperimentEvaluation = {
-      baseline: { days: 14, covered: 0, rough: 0, rate: null },
-      elimination: { days: 14, covered: 0, rough: 0, rate: null },
-      reintroduction: { days: 6, covered: 0, rough: 0, rate: null },
+      baseline: { days: 14, covered: 0, rough: 0, rate: null, exposed: 0 },
+      elimination: { days: 14, covered: 0, rough: 0, rate: null, exposed: 0 },
+      reintroduction: { days: 6, covered: 0, rough: 0, rate: null, exposed: 0 },
       slipDays: [],
       challengeExposureDays: 0,
       verdict: null,

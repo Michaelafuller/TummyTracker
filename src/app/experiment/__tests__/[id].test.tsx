@@ -206,7 +206,9 @@ describe('ExperimentScreen — ready phase and finish', () => {
     const readyToday = new Date(2026, 3, 21, 12, 0, 0).getTime();
 
     mockEntries = [
-      ...daysEntries(schedule.baseline, { rough: daysSet(schedule.baseline, 10) }), // 10/14 rough
+      // 10/14 rough, and lactose eaten throughout (it has to be in the diet
+      // before the experiment for avoiding it to mean anything — rule 3b).
+      ...daysEntries(schedule.baseline, { rough: daysSet(schedule.baseline, 10), exposed: new Set(schedule.baseline) }),
       ...daysEntries(schedule.elimination), // 0 rough
       ...daysEntries(schedule.challenge, { exposed: new Set(schedule.challenge), rough: daysSet(schedule.challenge, 2) }),
       ...daysEntries(schedule.observation, { rough: new Set(schedule.observation) }),

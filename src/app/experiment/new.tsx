@@ -15,6 +15,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { startExperiment } from '@/db/repository';
+import { useWatchlistStore } from '@/features/watchlist/watchlistStore';
 import { useDayCheckIns } from '@/features/checkin/useDayCheckIns';
 import {
   baselinePreviewSentence,
@@ -69,6 +70,9 @@ export default function NewExperimentScreen() {
         { term, eliminationDays: Number(eliminationDays) as EliminationChoice },
         Date.now(),
       );
+      // startExperiment may have added the term to the watchlist in the DB;
+      // save-time warnings read the in-memory store, so refresh it.
+      void useWatchlistStore.getState().load();
       router.replace(`/experiment/${created.id}`);
     } finally {
       setSubmitting(false);

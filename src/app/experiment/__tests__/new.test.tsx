@@ -1,6 +1,6 @@
 import { fireEvent, render } from '@testing-library/react-native';
 
-import { startExperiment } from '@/db/repository';
+import { listWatchlistItems, startExperiment } from '@/db/repository';
 import type { DayCheckIn, Experiment, LogEntry } from '@/db/schema';
 import { EXPERIMENT_ACTIVE_BLOCKED_MESSAGE, EXPERIMENT_SAFETY_NOTE } from '@/features/experiments/copy';
 import NewExperimentScreen from '../new';
@@ -14,6 +14,8 @@ jest.mock('expo-router', () => ({
 
 jest.mock('@/db/repository', () => ({
   startExperiment: jest.fn(),
+  // The watchlist store reloads after a start (the term may be newly watched).
+  listWatchlistItems: jest.fn().mockResolvedValue([]),
 }));
 
 let mockEntries: LogEntry[] = [];
@@ -112,7 +114,7 @@ describe('NewExperimentScreen', () => {
       foodEntry('bm1', new Date(2026, 8, 21, 9, 0, 0).getTime(), { type: 'bowel_movement', bristolScale: 1 }),
     ];
     const { getByText } = await render(<NewExperimentScreen />);
-    expect(getByText('Your last 14 days: 2 logged, 1 rough.')).toBeTruthy();
+    expect(getByText('Your last 14 days: 2 logged, 1 rough, ate it on 0.')).toBeTruthy();
   });
 
   it('warns when fewer than 7 baseline days are covered, but still allows starting', async () => {
@@ -152,5 +154,6 @@ describe('NewExperimentScreen', () => {
     await fireEvent.press(getByLabelText('Start experiment'));
     expect(startExperiment).toHaveBeenCalledWith({ term: 'lactose', eliminationDays: 14 }, Date.now());
     expect(mockReplace).toHaveBeenCalledWith('/experiment/exp1');
+    expect(listWatchlistItems).toHaveBeenCalled();
   });
 });

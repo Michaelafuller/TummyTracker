@@ -194,18 +194,22 @@ export interface PhaseStats {
   rough: number;
   /** rough / covered, or null when nothing was covered. */
   rate: number | null;
+  /** Covered days on which a matching food was logged (the suspect was eaten). */
+  exposed: number;
 }
 
 function phaseStats(dayKeys: readonly string[], facts: ReadonlyMap<string, DayFacts>): PhaseStats {
   let covered = 0;
   let rough = 0;
+  let exposed = 0;
   for (const key of dayKeys) {
     const day = facts.get(key);
     if (!day?.covered) continue; // uncovered days never count (invariant)
     covered++;
     if (day.rough) rough++;
+    if (day.exposed) exposed++;
   }
-  return { days: dayKeys.length, covered, rough, rate: covered > 0 ? rough / covered : null };
+  return { days: dayKeys.length, covered, rough, rate: covered > 0 ? rough / covered : null, exposed };
 }
 
 /** Elimination days excluded from stats: each slip day, and the day right after it (the reaction window spills over). */
@@ -272,6 +276,8 @@ export const NOT_TRIGGER_MIN_CHALLENGE_EXPOSURE = 2;
 export const VERDICT_REASON_TOO_MANY_SLIPS = 'Too many slips while avoiding it to draw a reliable conclusion.';
 export const VERDICT_REASON_NO_CHALLENGE_EXPOSURE = "You didn't log eating it on the challenge days.";
 export const VERDICT_REASON_NOT_ENOUGH_DAYS = 'Not enough days logged to draw a conclusion.';
+export const VERDICT_REASON_NO_BASELINE_EXPOSURE =
+  "You didn't log eating it in the days before the experiment, so avoiding it had nothing to change.";
 export const VERDICT_REASON_NO_BASELINE_ROUGH_DAYS =
   'No rough days before the experiment, so there was nothing to improve.';
 export const VERDICT_REASON_TRIGGER = 'Rough days dropped while avoiding it and came back after reintroducing it.';
@@ -323,6 +329,13 @@ function computeVerdict(args: {
     reintroduction.covered < MIN_REINTRODUCTION_COVERED
   ) {
     return { kind: 'inconclusive', confidence: null, reason: VERDICT_REASON_NOT_ENOUGH_DAYS, ...rates };
+  }
+
+  // Rule 3b (review, 2026-09-28): the suspect must have been in the diet
+  // before the experiment. If it was never eaten in the baseline, a drop in
+  // rough days while "avoiding" it can't be caused by avoiding it.
+  if (baseline.exposed === 0) {
+    return { kind: 'inconclusive', confidence: null, reason: VERDICT_REASON_NO_BASELINE_EXPOSURE, ...rates };
   }
 
   // Rule 4: nothing to improve on.
