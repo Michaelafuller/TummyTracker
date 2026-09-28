@@ -21,8 +21,9 @@ import { pathToFileURL } from 'node:url';
 const DEFAULT_OUT = '.qa-shots/experiment-ready-backup.json';
 const TERM = 'lactose';
 const PROTOCOL = { baselineDays: 14, eliminationDays: 14, challengeDays: 3, observationDays: 3 };
-/** The experiment started this many days before "today" — 14 + 3 + 3 = 20 schedule days, so it is ready today. */
-const STARTED_DAYS_AGO = 21;
+/** The experiment started this many days before "today" — 14 + 3 + 3 = 20
+ * schedule days (start … start+19), so today is the first "ready" day. */
+const STARTED_DAYS_AGO = 20;
 /** Baseline days (of 14) with a bad BM, and challenge days (of 3) with one. Observation days always have one. */
 const BASELINE_BAD_DAYS = 10;
 const CHALLENGE_BAD_DAYS = 2;

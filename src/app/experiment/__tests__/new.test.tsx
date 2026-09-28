@@ -1,4 +1,5 @@
 import { fireEvent, render } from '@testing-library/react-native';
+import { Alert } from 'react-native';
 
 import { listWatchlistItems, startExperiment } from '@/db/repository';
 import { requestExperimentNotificationRefresh } from '@/features/experiments/experimentNotifications';
@@ -173,6 +174,18 @@ describe('NewExperimentScreen', () => {
     await fireEvent.press(getByLabelText('Start experiment'));
     expect(ensureNotificationPermission).toHaveBeenCalledTimes(1);
     expect(requestExperimentNotificationRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('explains instead of failing silently when another experiment became active first', async () => {
+    const already = new Error('An experiment is already active — finish or abandon it first.');
+    already.name = 'ExperimentAlreadyActiveError';
+    (startExperiment as jest.Mock).mockRejectedValueOnce(already);
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    const { getByLabelText } = await render(<NewExperimentScreen />);
+    await fireEvent.press(getByLabelText('Start experiment'));
+    expect(alert).toHaveBeenCalledWith("Couldn't start", EXPERIMENT_ACTIVE_BLOCKED_MESSAGE);
+    expect(mockReplace).not.toHaveBeenCalled();
+    alert.mockRestore();
   });
 
   it('still starts the experiment when the notification permission is declined or fails', async () => {

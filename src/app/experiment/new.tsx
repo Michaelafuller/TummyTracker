@@ -6,7 +6,7 @@
 // reflection of it).
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Alert, StyleSheet, View } from 'react-native';
 
 import { FormScrollView } from '@/components/keyboard-aware-screen';
 import { PrimaryButton } from '@/components/primary-button';
@@ -85,6 +85,15 @@ export default function NewExperimentScreen() {
       }
       requestExperimentNotificationRefresh();
       router.replace(`/experiment/${created.id}`);
+    } catch (e) {
+      // The repository refuses a second active experiment (a double tap, or
+      // one started elsewhere since this screen rendered). Matched by name so
+      // this screen doesn't need the DB module's class at runtime.
+      if (e instanceof Error && e.name === 'ExperimentAlreadyActiveError') {
+        Alert.alert("Couldn't start", EXPERIMENT_ACTIVE_BLOCKED_MESSAGE);
+      } else {
+        Alert.alert("Couldn't start", 'Something went wrong starting the experiment — try again.');
+      }
     } finally {
       setSubmitting(false);
     }

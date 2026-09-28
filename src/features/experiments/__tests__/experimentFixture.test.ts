@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { parseBackupJson } from '@/lib/backup';
-import { currentPhase, evaluateExperiment } from '../engine';
+import { currentPhase, evaluateExperiment, experimentSchedule } from '../engine';
 
 // The fixture generator is a dependency-free Node ESM script (scripts/
 // make-experiment-fixture.mjs, like generate-icons.mjs). Jest here runs
@@ -62,10 +62,14 @@ describe('scripts/make-experiment-fixture.mjs', () => {
     },
   );
 
-  it('dates the experiment relative to the day it runs (started 21 days ago)', () => {
+  it('dates the experiment so that today is exactly its first ready day (started 20 days ago)', () => {
     const parsed = parseBackupJson(generate('2026-09-28').text);
     if (!parsed.ok) throw new Error(parsed.error);
-    expect(parsed.experiments[0].startDate).toBe('2026-09-07');
+    const exp = parsed.experiments[0];
+    expect(exp.startDate).toBe('2026-09-08');
+    expect(experimentSchedule(exp).lastDay).toBe('2026-09-27');
+    expect(currentPhase(exp, '2026-09-27').phase).toBe('observation');
+    expect(currentPhase(exp, '2026-09-28').phase).toBe('ready');
   });
 
   it('gives every entry and the experiment a stable, unique fixture- id', () => {
