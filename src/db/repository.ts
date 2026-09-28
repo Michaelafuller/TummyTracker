@@ -81,9 +81,16 @@ export async function createLogEntries(inputs: CreateLogEntryInput[]): Promise<L
     updatedAt: now,
   }));
 
-  await db.transaction(async (tx) => {
+  // Sync callback, no `await` on the call either — drizzle-orm/expo-sqlite's
+  // `db.transaction()` (session.js) is itself plain synchronous: it issues
+  // BEGIN, calls this callback, and issues COMMIT right after it *returns*,
+  // never awaiting anything. An `async` callback here would return a pending
+  // Promise at its first `await`, so COMMIT would fire before any of its
+  // queries actually ran — every query inside must use the sync API
+  // (`.run()`/`.all()`/`.get()`) and nothing may be awaited in here.
+  db.transaction((tx) => {
     if (rows.length > 0) {
-      await tx.insert(logEntry).values(rows);
+      tx.insert(logEntry).values(rows).run();
     }
   });
 
@@ -125,10 +132,11 @@ export async function createMealWithComponents(
     createdAt: now,
   }));
 
-  await db.transaction(async (tx) => {
-    await tx.insert(logEntry).values(row);
+  // Sync callback — see createLogEntries' comment above for why.
+  db.transaction((tx) => {
+    tx.insert(logEntry).values(row).run();
     if (componentRows.length > 0) {
-      await tx.insert(mealComponent).values(componentRows);
+      tx.insert(mealComponent).values(componentRows).run();
     }
   });
 
@@ -163,32 +171,33 @@ export async function updateMealComponentAndReaggregate(
   componentId: string,
   draft: MealComponentDraft,
 ): Promise<void> {
-  await db.transaction(async (tx) => {
-    const existingRows = await tx
+  // Sync callback — see createLogEntries' comment above for why.
+  db.transaction((tx) => {
+    const existing = tx
       .select()
       .from(mealComponent)
       .where(eq(mealComponent.id, componentId))
-      .limit(1);
-    const existing = existingRows[0];
+      .limit(1)
+      .get();
     if (!existing) return;
 
-    await tx.update(mealComponent).set(draft).where(eq(mealComponent.id, componentId));
+    tx.update(mealComponent).set(draft).where(eq(mealComponent.id, componentId)).run();
 
-    const siblings = await tx
+    const siblings = tx
       .select()
       .from(mealComponent)
       .where(eq(mealComponent.entryId, existing.entryId))
-      .orderBy(asc(mealComponent.sortOrder));
+      .orderBy(asc(mealComponent.sortOrder))
+      .all();
 
-    const entryRows = await tx.select().from(logEntry).where(eq(logEntry.id, existing.entryId)).limit(1);
-    const entry = entryRows[0];
+    const entry = tx.select().from(logEntry).where(eq(logEntry.id, existing.entryId)).limit(1).get();
     if (!entry) return;
 
     const patch = reaggregateEntryPatch(siblings, entry.tagsJson);
-    await tx
-      .update(logEntry)
+    tx.update(logEntry)
       .set({ ...patch.nutrition, tagsJson: patch.tagsJson, updatedAt: Date.now() })
-      .where(eq(logEntry.id, existing.entryId));
+      .where(eq(logEntry.id, existing.entryId))
+      .run();
   });
 }
 
@@ -216,47 +225,48 @@ export async function deleteMealComponentAndReaggregate(
 ): Promise<'deleted' | 'last' | 'missing'> {
   let result: 'deleted' | 'last' | 'missing' = 'missing';
 
-  await db.transaction(async (tx) => {
-    const existingRows = await tx
+  // Sync callback — see createLogEntries' comment above for why.
+  db.transaction((tx) => {
+    const existing = tx
       .select()
       .from(mealComponent)
       .where(eq(mealComponent.id, componentId))
-      .limit(1);
-    const existing = existingRows[0];
+      .limit(1)
+      .get();
     if (!existing) return;
 
-    const siblings = await tx
+    const siblings = tx
       .select()
       .from(mealComponent)
       .where(eq(mealComponent.entryId, existing.entryId))
-      .orderBy(asc(mealComponent.sortOrder));
+      .orderBy(asc(mealComponent.sortOrder))
+      .all();
 
     if (siblings.length <= 1) {
       result = 'last';
       return;
     }
 
-    await tx.delete(mealComponent).where(eq(mealComponent.id, componentId));
+    tx.delete(mealComponent).where(eq(mealComponent.id, componentId)).run();
 
     const remaining = siblings.filter((row) => row.id !== componentId);
 
-    const entryRows = await tx.select().from(logEntry).where(eq(logEntry.id, existing.entryId)).limit(1);
-    const entry = entryRows[0];
+    const entry = tx.select().from(logEntry).where(eq(logEntry.id, existing.entryId)).limit(1).get();
     if (!entry) {
       result = 'deleted';
       return;
     }
 
     const patch = reaggregateEntryPatch(remaining, entry.tagsJson);
-    await tx
-      .update(logEntry)
+    tx.update(logEntry)
       .set({
         ...patch.nutrition,
         tagsJson: patch.tagsJson,
         componentCount: remaining.length,
         updatedAt: Date.now(),
       })
-      .where(eq(logEntry.id, existing.entryId));
+      .where(eq(logEntry.id, existing.entryId))
+      .run();
 
     result = 'deleted';
   });
@@ -343,12 +353,13 @@ export async function applyTagBackfill(
 ): Promise<void> {
   if (entryUpdates.length === 0 && componentUpdates.length === 0) return;
 
-  await db.transaction(async (tx) => {
+  // Sync callback — see createLogEntries' comment above for why.
+  db.transaction((tx) => {
     for (const update of entryUpdates) {
-      await tx.update(logEntry).set({ tagsJson: update.tagsJson }).where(eq(logEntry.id, update.id));
+      tx.update(logEntry).set({ tagsJson: update.tagsJson }).where(eq(logEntry.id, update.id)).run();
     }
     for (const update of componentUpdates) {
-      await tx.update(mealComponent).set({ tagsJson: update.tagsJson }).where(eq(mealComponent.id, update.id));
+      tx.update(mealComponent).set({ tagsJson: update.tagsJson }).where(eq(mealComponent.id, update.id)).run();
     }
   });
 }
@@ -359,9 +370,10 @@ export async function applyTagBackfill(
  * cleanup is manual — kept in the same transaction as the entry delete.
  */
 export async function deleteLogEntry(id: string): Promise<void> {
-  await db.transaction(async (tx) => {
-    await tx.delete(mealComponent).where(eq(mealComponent.entryId, id));
-    await tx.delete(logEntry).where(eq(logEntry.id, id));
+  // Sync callback — see createLogEntries' comment above for why.
+  db.transaction((tx) => {
+    tx.delete(mealComponent).where(eq(mealComponent.entryId, id)).run();
+    tx.delete(logEntry).where(eq(logEntry.id, id)).run();
   });
 }
 
@@ -621,10 +633,11 @@ export async function createMedicationEvent(
     updatedAt: now,
   }));
 
-  await db.transaction(async (tx) => {
-    await tx.insert(medicationEvent).values(eventRow);
+  // Sync callback — see createLogEntries' comment above for why.
+  db.transaction((tx) => {
+    tx.insert(medicationEvent).values(eventRow).run();
     if (doseRows.length > 0) {
-      await tx.insert(medicationDose).values(doseRows);
+      tx.insert(medicationDose).values(doseRows).run();
     }
   });
 
@@ -651,14 +664,15 @@ export async function updateMedicationEvent(
     updatedAt: now,
   }));
 
-  await db.transaction(async (tx) => {
-    await tx
-      .update(medicationEvent)
+  // Sync callback — see createLogEntries' comment above for why.
+  db.transaction((tx) => {
+    tx.update(medicationEvent)
       .set({ ...event, updatedAt: now })
-      .where(eq(medicationEvent.id, id));
-    await tx.delete(medicationDose).where(eq(medicationDose.eventId, id));
+      .where(eq(medicationEvent.id, id))
+      .run();
+    tx.delete(medicationDose).where(eq(medicationDose.eventId, id)).run();
     if (doseRows.length > 0) {
-      await tx.insert(medicationDose).values(doseRows);
+      tx.insert(medicationDose).values(doseRows).run();
     }
   });
 }
@@ -669,9 +683,10 @@ export async function updateMedicationEvent(
  * dose rows.
  */
 export async function deleteMedicationEvent(id: string): Promise<void> {
-  await db.transaction(async (tx) => {
-    await tx.delete(medicationDose).where(eq(medicationDose.eventId, id));
-    await tx.delete(medicationEvent).where(eq(medicationEvent.id, id));
+  // Sync callback — see createLogEntries' comment above for why.
+  db.transaction((tx) => {
+    tx.delete(medicationDose).where(eq(medicationDose.eventId, id)).run();
+    tx.delete(medicationEvent).where(eq(medicationEvent.id, id)).run();
   });
 }
 
