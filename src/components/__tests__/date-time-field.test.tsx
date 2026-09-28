@@ -15,6 +15,14 @@ function nativeChangeEvent(date: Date) {
   return { nativeEvent: { timestamp: date.getTime(), utcOffset: 0 } };
 }
 
+// The installed picker (9.1.0) is a controlled wrapper: our component sets
+// `onValueChange`/`onDismiss` on <DateTimePicker>, and the wrapper itself
+// forwards a computed handler to the native host element as `onChange`
+// (commit) and `onPickerDismiss` (dismiss without a value) — see
+// node_modules/@react-native-community/datetimepicker/src/datetimepicker.ios.js.
+// Firing that native-level `onPickerDismiss` event (no args) is how a test
+// reaches our `onDismiss` prop through that wrapper.
+
 describe('DateTimeField picker dismissal', () => {
   const originalOS = Platform.OS;
 
@@ -41,6 +49,29 @@ describe('DateTimeField picker dismissal', () => {
     await fireEvent(getByTestId('date-time-picker'), 'onChange', nativeChangeEvent(new Date(2026, 5, 27, 9, 15)));
 
     expect(onTimeChange).toHaveBeenCalledWith('09:15');
+    expect(queryByTestId('date-time-picker')).toBeNull();
+  });
+
+  it('on Android, a dismiss closes the picker without committing a value', async () => {
+    Platform.OS = 'android';
+    const onDateChange = jest.fn();
+    const onTimeChange = jest.fn();
+    const { getByLabelText, getByTestId, queryByTestId } = await render(
+      <DateTimeField
+        dateInput="2026-06-27"
+        timeInput="08:30"
+        onDateChange={onDateChange}
+        onTimeChange={onTimeChange}
+      />,
+    );
+
+    await fireEvent.press(getByLabelText('Choose time'));
+    expect(getByTestId('date-time-picker')).toBeTruthy();
+
+    await fireEvent(getByTestId('date-time-picker'), 'onPickerDismiss');
+
+    expect(onTimeChange).not.toHaveBeenCalled();
+    expect(onDateChange).not.toHaveBeenCalled();
     expect(queryByTestId('date-time-picker')).toBeNull();
   });
 
@@ -83,6 +114,28 @@ describe('DateTimeField picker dismissal', () => {
 
     await fireEvent.press(getByLabelText('Done choosing time'));
     expect(queryByTestId('date-time-picker')).toBeNull();
+  });
+
+  it('on iOS, a native dismiss (no gesture triggers it on the inline spinner) is a no-op', async () => {
+    Platform.OS = 'ios';
+    const onDateChange = jest.fn();
+    const onTimeChange = jest.fn();
+    const { getByLabelText, getByTestId } = await render(
+      <DateTimeField
+        dateInput="2026-06-27"
+        timeInput="08:30"
+        onDateChange={onDateChange}
+        onTimeChange={onTimeChange}
+      />,
+    );
+
+    await fireEvent.press(getByLabelText('Choose time'));
+    await fireEvent(getByTestId('date-time-picker'), 'onPickerDismiss');
+
+    expect(onTimeChange).not.toHaveBeenCalled();
+    expect(onDateChange).not.toHaveBeenCalled();
+    // No onDismiss prop is wired on iOS (see DateTimeField) — the spinner stays open.
+    expect(getByTestId('date-time-picker')).toBeTruthy();
   });
 
   it('opening the other chip switches modes without losing state', async () => {

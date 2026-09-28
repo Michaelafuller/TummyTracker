@@ -1,4 +1,4 @@
-import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import DateTimePicker, { type DateTimePickerChangeEvent } from '@react-native-community/datetimepicker';
 import { useState } from 'react';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
@@ -44,11 +44,16 @@ function toDate(dateInput: string, timeInput: string): Date {
  *
  * Platform behavior differs because the native picker itself behaves differently
  * (confirmed root cause, owner-verified on iOS):
- * - Android's dialog fires `onChange` once (commit) — conditional render, closes on
- *   commit or on `event.type === 'dismissed'`.
- * - iOS's spinner fires `onChange` on every wheel pause. Committing on every change
- *   is fine, but closing on the first one isn't — it unmounts the picker mid-scroll.
- *   So on iOS the picker renders inline and only a "Done" chip closes it.
+ * - Android's dialog fires `onValueChange` once (commit) — conditional render, closes
+ *   on commit or on `onDismiss` (the picker was dismissed without a value).
+ * - iOS's spinner fires `onValueChange` on every wheel pause. Committing on every
+ *   change is fine, but closing on the first one isn't — it unmounts the picker
+ *   mid-scroll. So on iOS the picker renders inline and only a "Done" chip closes
+ *   it; `onDismiss` is omitted there since the inline spinner has no native dismiss
+ *   gesture of its own to react to.
+ *
+ * Uses `onValueChange`/`onDismiss` rather than the deprecated `onChange` (same
+ * installed picker version, 9.1.0 — these are JS-level prop names on it already).
  */
 export function DateTimeField({
   dateInput,
@@ -74,17 +79,17 @@ export function DateTimeField({
     }
   }
 
-  function handleAndroidChange(event: DateTimePickerEvent, date: Date | undefined) {
-    if (event.type === 'dismissed' || !date) {
-      setPickerMode(null);
-      return;
-    }
+  function handleAndroidValueChange(_event: DateTimePickerChangeEvent, date: Date) {
     if (pickerMode) commit(pickerMode, date);
     setPickerMode(null);
   }
 
-  function handleIosChange(_event: DateTimePickerEvent, date: Date | undefined) {
-    if (!date || !pickerMode) return;
+  function handleAndroidDismiss() {
+    setPickerMode(null);
+  }
+
+  function handleIosValueChange(_event: DateTimePickerChangeEvent, date: Date) {
+    if (!pickerMode) return;
     commit(pickerMode, date);
   }
 
@@ -150,7 +155,8 @@ export function DateTimeField({
           value={toDate(dateInput, timeInput)}
           mode={pickerMode}
           display="default"
-          onChange={handleAndroidChange}
+          onValueChange={handleAndroidValueChange}
+          onDismiss={handleAndroidDismiss}
         />
       )}
 
@@ -161,7 +167,7 @@ export function DateTimeField({
             value={toDate(dateInput, timeInput)}
             mode={pickerMode}
             display="spinner"
-            onChange={handleIosChange}
+            onValueChange={handleIosValueChange}
           />
           <Pressable
             accessibilityRole="button"

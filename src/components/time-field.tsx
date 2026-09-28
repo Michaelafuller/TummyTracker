@@ -1,4 +1,4 @@
-import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import DateTimePicker, { type DateTimePickerChangeEvent } from '@react-native-community/datetimepicker';
 import { useState } from 'react';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
@@ -18,9 +18,11 @@ export interface TimeFieldProps {
 /**
  * Single-chip native time picker, used for reminder times (hour/minute state,
  * no date component). Shares the iOS-vs-Android picker dismissal behavior with
- * DateTimeField (CLAUDE.md / HANDOFF 1.3): Android commits+closes on `onChange`;
- * iOS keeps the spinner mounted through every wheel-pause `onChange` and only
- * closes on the "Done" chip.
+ * DateTimeField (CLAUDE.md / HANDOFF 1.3, updated HANDOFF #16 §4): Android
+ * commits+closes on `onValueChange` and closes without committing on
+ * `onDismiss`; iOS keeps the spinner mounted through every wheel-pause
+ * `onValueChange` and only closes on the "Done" chip (no `onDismiss` there —
+ * see DateTimeField for why).
  */
 export function TimeField({ hour, minute, onChange, accessibilityLabel }: TimeFieldProps) {
   const theme = useTheme();
@@ -37,17 +39,16 @@ export function TimeField({ hour, minute, onChange, accessibilityLabel }: TimeFi
     onChange(date.getHours(), date.getMinutes());
   }
 
-  function handleAndroidChange(event: DateTimePickerEvent, date: Date | undefined) {
-    if (event.type === 'dismissed' || !date) {
-      setOpen(false);
-      return;
-    }
+  function handleAndroidValueChange(_event: DateTimePickerChangeEvent, date: Date) {
     commit(date);
     setOpen(false);
   }
 
-  function handleIosChange(_event: DateTimePickerEvent, date: Date | undefined) {
-    if (!date) return;
+  function handleAndroidDismiss() {
+    setOpen(false);
+  }
+
+  function handleIosValueChange(_event: DateTimePickerChangeEvent, date: Date) {
     commit(date);
   }
 
@@ -69,7 +70,8 @@ export function TimeField({ hour, minute, onChange, accessibilityLabel }: TimeFi
           value={toDate()}
           mode="time"
           display="default"
-          onChange={handleAndroidChange}
+          onValueChange={handleAndroidValueChange}
+          onDismiss={handleAndroidDismiss}
         />
       )}
 
@@ -80,7 +82,7 @@ export function TimeField({ hour, minute, onChange, accessibilityLabel }: TimeFi
             value={toDate()}
             mode="time"
             display="spinner"
-            onChange={handleIosChange}
+            onValueChange={handleIosValueChange}
           />
           <Pressable
             accessibilityRole="button"

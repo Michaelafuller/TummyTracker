@@ -5,7 +5,9 @@ import { TimeField } from '../time-field';
 
 // RNTL v14 renders asynchronously: `render` and `fireEvent.*` both return promises.
 // See date-time-field.test.tsx for why synthetic onChange events must be
-// shaped as native events (`{ nativeEvent: { timestamp } }`).
+// shaped as native events (`{ nativeEvent: { timestamp } }`), and why firing
+// the native-level `onPickerDismiss` event is how a test reaches our
+// `onDismiss` prop.
 function nativeChangeEvent(date: Date) {
   return { nativeEvent: { timestamp: date.getTime(), utcOffset: 0 } };
 }
@@ -43,6 +45,22 @@ describe('TimeField', () => {
     expect(queryByTestId('time-field-picker')).toBeNull();
   });
 
+  it('on Android, a dismiss closes the picker without committing a value', async () => {
+    Platform.OS = 'android';
+    const onChange = jest.fn();
+    const { getByLabelText, getByTestId, queryByTestId } = await render(
+      <TimeField hour={8} minute={0} onChange={onChange} accessibilityLabel="breakfast reminder time" />,
+    );
+
+    await fireEvent.press(getByLabelText('breakfast reminder time'));
+    expect(getByTestId('time-field-picker')).toBeTruthy();
+
+    await fireEvent(getByTestId('time-field-picker'), 'onPickerDismiss');
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(queryByTestId('time-field-picker')).toBeNull();
+  });
+
   it('on iOS, a change event commits the value but does NOT unmount the picker, and Done closes it', async () => {
     Platform.OS = 'ios';
     const onChange = jest.fn();
@@ -60,5 +78,20 @@ describe('TimeField', () => {
 
     await fireEvent.press(getByLabelText('Done choosing time'));
     expect(queryByTestId('time-field-picker')).toBeNull();
+  });
+
+  it('on iOS, a native dismiss (no gesture triggers it on the inline spinner) is a no-op', async () => {
+    Platform.OS = 'ios';
+    const onChange = jest.fn();
+    const { getByLabelText, getByTestId } = await render(
+      <TimeField hour={8} minute={0} onChange={onChange} accessibilityLabel="breakfast reminder time" />,
+    );
+
+    await fireEvent.press(getByLabelText('breakfast reminder time'));
+    await fireEvent(getByTestId('time-field-picker'), 'onPickerDismiss');
+
+    expect(onChange).not.toHaveBeenCalled();
+    // No onDismiss prop is wired on iOS (see TimeField) — the spinner stays open.
+    expect(getByTestId('time-field-picker')).toBeTruthy();
   });
 });
