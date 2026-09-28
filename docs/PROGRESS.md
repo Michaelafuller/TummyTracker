@@ -65,6 +65,11 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   pick, cancel, pick again (the picker API moved off the deprecated
   `onChange`). Regression: `g-datetime-picker`, `01e-reminders`,
   `checkin-persistence`, `r-medications`. JS-only.
+- **Owed device check — meds in the PDF (GH #17, 2026-09-27):** by hand
+  (share sheet): two medications (one custom unit, one inactive with an old
+  dose) + one active with no doses → Create PDF, 30 days → Medications table
+  ("N of 30", "No doses logged in this range", amounts), dose rows in the
+  Journal by time. Regression: `n-doctor-report`. JS-only.
 - **Owed device checks:** iOS pass (the #2 keyboard items below + carried: iOS
   app icon, time-picker Done feel), light-mode walkthrough, camera scan loop,
   and the manual items in `docs/E2E.md`. **Owner sequencing from the
@@ -103,9 +108,15 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   Collapsible test mock; `generate-icons.mjs` now owns tab icons only (the
   app icons are the owner's raster exports — owner). Review fix: meds with a
   custom default unit still showed every chip.
+- **Medications in the doctor PDF (GitHub #17):** a Medications section
+  (doses logged, days with a logged dose "N of M", snapshot amounts,
+  frequency as entered; active meds with none listed) and dose rows in the
+  report's Journal. Wording is "logged" only — never "missed". Review fix: the
+  report window used fixed 24 h steps, so across a spring-forward change it
+  pulled in the previous day's last hour and read "of 31" in a 30-day report.
 - Earlier (2026-09-26): re-log + Add item (#1), medications epic (#4–#11),
   keyboard dismissal (#2), Settings gear, #12 re-baseline. Issues **#1, #2,
-  #4–#11, #13–#16** are done but still open on GitHub — the owner closes them.
+  #4–#11, #13–#17** are done but still open on GitHub — the owner closes them.
 
 ---
 
@@ -159,7 +170,8 @@ analysis.
    - *Cleanups:* retire `entry/new` + `prefillStore` (owner decision) ·
      shared Jest mock for `Collapsible` · missing app / adaptive / splash icon
      SVG sources · `DateTimePicker onChange` deprecation.
-6. **Doctor PDF report: add medications** (GH #17) — S. The report covers food and
+6. ~~**Doctor PDF report: add medications** (GH #17)~~ — **✅ shipped
+   2026-09-27** (device check owed). Original rationale: S. The report covers food and
    outcomes; a clinician will want medication use and adherence alongside.
 7. **Database-level tests for `repository.ts`** (GH #18) — S–M. The repository is only
    exercised through mocks; both 2026-09-26 restore bugs (SQLite bound-

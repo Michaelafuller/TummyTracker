@@ -5,8 +5,8 @@
 > Written 2026-09-27 at the end of a long Opus session (2026-09-26 → 27) so the
 > next session can continue without the transcript. `docs/HANDOFF.md` is a
 > *different* file: the execute-session spec for Sonnet — it currently holds the
-> finished quick-win polish (GH #16) spec and gets overwritten by the next plan.
-> **Updated 2026-09-27 (later session):** GH #13–#16 shipped — see §1/§2.
+> finished doctor-report medications (GH #17) spec and gets overwritten by the next plan.
+> **Updated 2026-09-27 (later session):** GH #13–#17 shipped — see §1/§2.
 
 ## 1. Where things stand
 
@@ -28,6 +28,10 @@
   Sonnet `d52b784..a932e7f`, review fix `a6aabe0`, then docs + updated
   `q-reuse-adjust` / `s-medication-entry`. Rungs, `bundle:check`, targeted
   Jest (17 suites / 182 tests) green. Device check owed.
+- **Also committed, NOT pushed:** GH #17 meds in the PDF — plan `04d279a`,
+  Sonnet `e1dc153`, `dfda2f3`, review fix `262ef2c`, then docs. Rungs,
+  `bundle:check`, targeted Jest (5 suites / 148 tests) green. Device check
+  owed (manual — share sheet).
 - **Typed routes:** `.expo/types/router.d.ts` (gitignored) only regenerates
   under `npx expo start`; a new route won't typecheck on a machine that
   hasn't run Metro since. Sonnet hand-added `/outcome/[id]` locally; the next
@@ -48,11 +52,12 @@
 
 The ranked backlog is `docs/PROGRESS.md` → "📌 Pinned — next up" (#1–7) and
 "Ranked backlog — continued" (#8–19). Each item names its GitHub issue.
-**#1–#5 (GH #12–#16) are done** (#13–#16 still owe device checks — one
-Pixel session can cover all four), so the next item is:
+**#1–#6 (GH #12–#17) are done** (#13–#17 still owe device checks — one
+Pixel session can cover all five), so the next item is:
 
-- **#6 — Doctor PDF report: add medications (GH #17).** Plan session first.
-- Then #7 onward (see PROGRESS).
+- **#7 — Database-level tests for `repository.ts` (GH #18).** Plan session
+  first (likely needs a SQLite test harness — check for a dependency ask).
+- Then #8 onward (see PROGRESS).
 
 ## 3. How the owner likes to work (confirmed across the session)
 
