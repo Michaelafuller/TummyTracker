@@ -1,9 +1,4 @@
-import { useState as mockUseState, type ReactNode } from 'react';
 import { fireEvent, render } from '@testing-library/react-native';
-import {
-  Pressable as MockPressable,
-  Text as MockText,
-} from 'react-native';
 import { SafeAreaProvider, type Metrics } from 'react-native-safe-area-context';
 
 import type { Medication, MedicationDose, MedicationEvent } from '@/db/schema';
@@ -32,26 +27,9 @@ jest.mock('@/features/medications/useMedicationData', () => ({
   useMedicationDoses: () => mockDoses,
 }));
 
-// The real Collapsible (components/ui/collapsible.tsx) animates its expand
-// with react-native-reanimated's FadeIn, which needs the native Worklets
-// runtime — unavailable under Jest ("WorkletsError: Native part of Worklets
-// doesn't seem to be initialized"), and nothing else in this codebase
-// exercises that component under test yet. Stand in a plain toggle that
-// preserves the same collapsed-by-default / tap-to-expand contract this
-// screen relies on, without touching the reanimated runtime at all.
-jest.mock('@/components/ui/collapsible', () => ({
-  Collapsible: ({ title, children }: { title: string; children: ReactNode }) => {
-    const [isOpen, setIsOpen] = mockUseState(false);
-    return (
-      <>
-        <MockPressable accessibilityRole="button" onPress={() => setIsOpen((value: boolean) => !value)}>
-          <MockText>{title}</MockText>
-        </MockPressable>
-        {isOpen ? children : null}
-      </>
-    );
-  },
-}));
+// See src/components/ui/__mocks__/collapsible.tsx for why this needs a stand-in
+// under Jest at all — this bare call picks up that shared manual mock.
+jest.mock('@/components/ui/collapsible');
 
 function makeMedication(overrides: Partial<Medication> = {}): Medication {
   return {

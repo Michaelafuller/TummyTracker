@@ -59,7 +59,6 @@ export default function RootLayout() {
               />
               <Stack.Screen name="medication/entry/[id]" options={{ title: 'Edit entry' }} />
               <Stack.Screen name="medication/history" options={{ title: 'Medication history' }} />
-              <Stack.Screen name="entry/new" options={{ title: 'Add entry', presentation: 'modal' }} />
               <Stack.Screen name="bm/new" options={{ title: 'Log bowel movement', presentation: 'modal' }} />
               <Stack.Screen name="symptom/new" options={{ title: 'Log symptom', presentation: 'modal' }} />
               <Stack.Screen name="entry/[id]" options={{ title: 'Edit entry' }} />
