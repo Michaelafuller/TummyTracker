@@ -73,6 +73,10 @@ export function MedicationEntryForm({
           .map((line) => line.medicationId),
       ),
   );
+  // Lines the user tapped "Change unit" on — expands the chip row for them.
+  // A line with no unit at all, or one already in "Other" mode, is expanded
+  // regardless of whether it's in this set (HANDOFF.md #16 §1).
+  const [expandedUnitIds, setExpandedUnitIds] = useState<Set<string>>(new Set());
 
   const medsById = new Map(medications.map((med) => [med.id, med] as const));
 
@@ -96,6 +100,17 @@ export function MedicationEntryForm({
       return next;
     });
     setLine(medicationId, { doseUnit: value ?? '' });
+    // Picking a fixed-unit chip collapses the line again.
+    setExpandedUnitIds((prev) => {
+      if (!prev.has(medicationId)) return prev;
+      const next = new Set(prev);
+      next.delete(medicationId);
+      return next;
+    });
+  }
+
+  function handleChangeUnit(medicationId: string) {
+    setExpandedUnitIds((prev) => new Set(prev).add(medicationId));
   }
 
   async function handleSubmit() {
@@ -140,6 +155,9 @@ export function MedicationEntryForm({
             if (!med) return null;
             const inOtherMode = otherUnitIds.has(med.id);
             const chipValue: UnitChip | null = inOtherMode ? 'other' : line.doseUnit ? (line.doseUnit as UnitChip) : null;
+            // Collapsed by default once the line has a unit; expanded while empty
+            // (nothing to show as text yet), in "Other" mode, or after "Change unit".
+            const unitExpanded = inOtherMode || line.doseUnit.length === 0 || expandedUnitIds.has(med.id);
 
             return (
               <View
@@ -184,11 +202,24 @@ export function MedicationEntryForm({
                     </FormField>
 
                     <FormField label="Unit">
-                      <SegmentedControl
-                        options={UNIT_OPTIONS}
-                        value={chipValue}
-                        onChange={(value) => handleUnitChipChange(med.id, value)}
-                      />
+                      {unitExpanded ? (
+                        <SegmentedControl
+                          options={UNIT_OPTIONS}
+                          value={chipValue}
+                          onChange={(value) => handleUnitChipChange(med.id, value)}
+                        />
+                      ) : (
+                        <View style={styles.unitRow}>
+                          <ThemedText type="small">{line.doseUnit}</ThemedText>
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={`Change unit for ${med.name}`}
+                            testID={`change-unit-${med.id}`}
+                            onPress={() => handleChangeUnit(med.id)}>
+                            <ThemedText type="linkPrimary">Change unit</ThemedText>
+                          </Pressable>
+                        </View>
+                      )}
                     </FormField>
 
                     {inOtherMode ? (
@@ -272,6 +303,11 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
   },
   doseFields: {
+    gap: Spacing.three,
+  },
+  unitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: Spacing.three,
   },
 });

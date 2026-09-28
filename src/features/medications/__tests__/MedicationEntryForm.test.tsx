@@ -158,6 +158,61 @@ describe('MedicationEntryForm — new entry', () => {
     expect(payload.event.takenAt).toBe(new Date(2026, 8, 26, 12, 0).getTime());
   });
 
+  it('shows the default unit as text with a "Change unit" link, collapsing the chip row', async () => {
+    const meds = [makeMedication({ id: 'med1', name: 'Omeprazole', defaultDose: 20, doseUnit: 'mg' })];
+    const onSubmit = jest.fn();
+
+    const { findByTestId, findByLabelText, queryByLabelText, getByText } = await render(
+      <MedicationEntryForm medications={meds} initial={defaultEntryState(meds, NOW)} onSubmit={onSubmit} />,
+    );
+
+    await fireEvent.press(await findByTestId('dose-line-med1'));
+
+    expect(getByText('mg')).toBeTruthy();
+    expect(await findByLabelText('Change unit for Omeprazole')).toBeTruthy();
+    // The chip row itself isn't rendered while collapsed.
+    expect(queryByLabelText('mg')).toBeNull();
+    expect(queryByLabelText('Other')).toBeNull();
+  });
+
+  it('tapping "Change unit" reveals the chip row, and picking a chip collapses it again and saves that unit', async () => {
+    const meds = [makeMedication({ id: 'med1', name: 'Omeprazole', defaultDose: 20, doseUnit: 'mg' })];
+    const onSubmit = jest.fn();
+
+    const { findByTestId, findByLabelText, queryByTestId, getByText } = await render(
+      <MedicationEntryForm medications={meds} initial={defaultEntryState(meds, NOW)} onSubmit={onSubmit} />,
+    );
+
+    await fireEvent.press(await findByTestId('dose-line-med1'));
+    await fireEvent.press(await findByTestId('change-unit-med1'));
+
+    expect(await findByLabelText('mL')).toBeTruthy();
+
+    await fireEvent.press(await findByLabelText('mL'));
+
+    // Collapsed again, now showing the newly picked unit as text.
+    expect(queryByTestId('change-unit-med1')).toBeTruthy();
+    expect(getByText('mL')).toBeTruthy();
+
+    await fireEvent.press(await findByLabelText('Save'));
+    const payload = onSubmit.mock.calls[0][0] as MedicationEntrySavePayload;
+    expect(payload.doses).toEqual([{ medicationId: 'med1', dose: 20, doseUnit: 'mL' }]);
+  });
+
+  it('a medication with no default unit shows the chip row straight away, with no "Change unit" link', async () => {
+    const meds = [makeMedication({ id: 'med1', name: 'Fish oil', defaultDose: null, doseUnit: null })];
+    const onSubmit = jest.fn();
+
+    const { findByTestId, findByLabelText, queryByTestId } = await render(
+      <MedicationEntryForm medications={meds} initial={defaultEntryState(meds, NOW)} onSubmit={onSubmit} />,
+    );
+
+    await fireEvent.press(await findByTestId('dose-line-med1'));
+
+    expect(await findByLabelText('mg')).toBeTruthy();
+    expect(queryByTestId('change-unit-med1')).toBeNull();
+  });
+
   it('choosing "Other" reveals a unit-name field for that line only', async () => {
     const meds = [makeMedication({ id: 'med1', name: 'Fish oil', defaultDose: null, doseUnit: null })];
     const onSubmit = jest.fn();
