@@ -7,6 +7,7 @@ import { useDatabaseMigrations } from '@/db/migrate';
 import { runTagBackfillOnce } from '@/db/tagBackfillRunner';
 import { runAutoBackupIfDue } from '@/features/backup/backupService';
 import { refreshDayCheckInIfEnabled } from '@/features/checkin/dayCheckInService';
+import { requestExperimentNotificationRefresh } from '@/features/experiments/experimentNotifications';
 import { refreshCheckInIfEnabled } from '@/features/goals/checkInService';
 import { useGoalsStore } from '@/features/goals/goalsStore';
 import { configureNotificationHandler } from '@/features/notifications/service';
@@ -57,6 +58,8 @@ function MigrationGate({ children }: { children: ReactNode }) {
       void refreshCheckInIfEnabled();
       // Same re-arming for the day check-in (GitHub #13) — its own slot.
       void refreshDayCheckInIfEnabled();
+      // Active experiment's phase reminders (GitHub #19) — own slot, re-armed at open.
+      requestExperimentNotificationRefresh();
       // Automatic folder backup (GitHub #14, Android only) — once per local
       // day, at app open.
       void runAutoBackupIfDue();

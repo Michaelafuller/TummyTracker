@@ -1,6 +1,8 @@
 import { fireEvent, render } from '@testing-library/react-native';
 
 import { listWatchlistItems, startExperiment } from '@/db/repository';
+import { requestExperimentNotificationRefresh } from '@/features/experiments/experimentNotifications';
+import { ensureNotificationPermission } from '@/features/notifications/service';
 import type { DayCheckIn, Experiment, LogEntry } from '@/db/schema';
 import { EXPERIMENT_ACTIVE_BLOCKED_MESSAGE, EXPERIMENT_SAFETY_NOTE } from '@/features/experiments/copy';
 import NewExperimentScreen from '../new';
@@ -16,6 +18,14 @@ jest.mock('@/db/repository', () => ({
   startExperiment: jest.fn(),
   // The watchlist store reloads after a start (the term may be newly watched).
   listWatchlistItems: jest.fn().mockResolvedValue([]),
+}));
+
+jest.mock('@/features/experiments/experimentNotifications', () => ({
+  requestExperimentNotificationRefresh: jest.fn(),
+}));
+
+jest.mock('@/features/notifications/service', () => ({
+  ensureNotificationPermission: jest.fn().mockResolvedValue(true),
 }));
 
 let mockEntries: LogEntry[] = [];
@@ -155,5 +165,21 @@ describe('NewExperimentScreen', () => {
     expect(startExperiment).toHaveBeenCalledWith({ term: 'lactose', eliminationDays: 14 }, Date.now());
     expect(mockReplace).toHaveBeenCalledWith('/experiment/exp1');
     expect(listWatchlistItems).toHaveBeenCalled();
+  });
+
+  it('asks for notification permission once on start, then schedules the reminders', async () => {
+    (startExperiment as jest.Mock).mockResolvedValue({ id: 'exp1', term: 'lactose' });
+    const { getByLabelText } = await render(<NewExperimentScreen />);
+    await fireEvent.press(getByLabelText('Start experiment'));
+    expect(ensureNotificationPermission).toHaveBeenCalledTimes(1);
+    expect(requestExperimentNotificationRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('still starts the experiment when the notification permission is declined or fails', async () => {
+    (startExperiment as jest.Mock).mockResolvedValue({ id: 'exp1', term: 'lactose' });
+    (ensureNotificationPermission as jest.Mock).mockRejectedValueOnce(new Error('denied'));
+    const { getByLabelText } = await render(<NewExperimentScreen />);
+    await fireEvent.press(getByLabelText('Start experiment'));
+    expect(mockReplace).toHaveBeenCalledWith('/experiment/exp1');
   });
 });

@@ -14,6 +14,7 @@ import {
   listLogEntries,
 } from '@/db/repository';
 import { disableDayCheckIn, refreshDayCheckIn } from '@/features/checkin/dayCheckInService';
+import { requestExperimentNotificationRefresh } from '@/features/experiments/experimentNotifications';
 import { DEFAULT_REMINDERS } from '@/features/notifications/model';
 import { ensureNotificationPermission, getReminders } from '@/features/notifications/service';
 import { usePrefsStore } from '@/features/prefs/prefsStore';
@@ -88,6 +89,10 @@ jest.mock('@/features/notifications/service', () => ({
 jest.mock('@/features/checkin/dayCheckInService', () => ({
   disableDayCheckIn: jest.fn(),
   refreshDayCheckIn: jest.fn(),
+}));
+
+jest.mock('@/features/experiments/experimentNotifications', () => ({
+  requestExperimentNotificationRefresh: jest.fn(),
 }));
 
 const TEST_INSETS: Metrics = {
@@ -370,6 +375,8 @@ describe('SettingsScreen — Data section (elimination experiments, GitHub #19)'
       ),
     );
     expect(insertExperimentsPreservingIds).toHaveBeenCalledWith(backup.experiments);
+    // A restored active experiment needs its phase reminders armed.
+    expect(requestExperimentNotificationRefresh).toHaveBeenCalled();
     (Alert.alert as jest.Mock).mockRestore();
   });
 });

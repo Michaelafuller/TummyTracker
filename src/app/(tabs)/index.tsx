@@ -13,6 +13,7 @@ import { BackupNudge } from '@/features/backup/BackupNudge';
 import { DayCheckInCard } from '@/features/checkin/DayCheckInCard';
 import { useDayCheckInResponses } from '@/features/checkin/useDayCheckInResponses';
 import { ExperimentHomeCard } from '@/features/experiments/ExperimentHomeCard';
+import { useExperimentNotificationResponses } from '@/features/experiments/useExperimentNotificationResponses';
 import { useMealBuilderStore } from '@/features/logging/mealBuilderStore';
 import { RecentFoodPicker } from '@/features/logging/RecentFoodPicker';
 import { useTheme } from '@/hooks/use-theme';
@@ -34,6 +35,7 @@ export default function HomeScreen() {
   // whenever the app is, and only after the migration gate — the write
   // can't race the migrations (GitHub #13).
   useDayCheckInResponses();
+  useExperimentNotificationResponses();
 
   useFocusEffect(
     useCallback(() => {

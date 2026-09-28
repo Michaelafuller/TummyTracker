@@ -61,6 +61,11 @@ const mockUseDayCheckInResponses = jest.fn();
 jest.mock('@/features/checkin/useDayCheckInResponses', () => ({
   useDayCheckInResponses: () => mockUseDayCheckInResponses(),
 }));
+// Same for the experiment reminder-tap hook (GitHub #19, Cycle B).
+const mockUseExperimentNotificationResponses = jest.fn();
+jest.mock('@/features/experiments/useExperimentNotificationResponses', () => ({
+  useExperimentNotificationResponses: () => mockUseExperimentNotificationResponses(),
+}));
 jest.mock('@/features/checkin/DayCheckInCard', () => ({
   DayCheckInCard: ({ date }: { date: string }) => {
     const { Text } = jest.requireActual('react-native');
@@ -151,6 +156,7 @@ describe('HomeScreen', () => {
     (listRecentFoodEntries as jest.Mock).mockResolvedValue([]);
     const { getByTestId } = await render(<HomeScreen />);
     expect(mockUseDayCheckInResponses).toHaveBeenCalled();
+    expect(mockUseExperimentNotificationResponses).toHaveBeenCalled();
     expect(getByTestId('day-check-in-card').props.children).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 

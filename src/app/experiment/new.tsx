@@ -15,6 +15,8 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { startExperiment } from '@/db/repository';
+import { requestExperimentNotificationRefresh } from '@/features/experiments/experimentNotifications';
+import { ensureNotificationPermission } from '@/features/notifications/service';
 import { useWatchlistStore } from '@/features/watchlist/watchlistStore';
 import { useDayCheckIns } from '@/features/checkin/useDayCheckIns';
 import {
@@ -73,6 +75,15 @@ export default function NewExperimentScreen() {
       // startExperiment may have added the term to the watchlist in the DB;
       // save-time warnings read the in-memory store, so refresh it.
       void useWatchlistStore.getState().load();
+      // Starting is a direct user action, so it's the one place we ask for
+      // notification permission (once). The experiment starts either way;
+      // scheduling only happens when it was granted.
+      try {
+        await ensureNotificationPermission();
+      } catch {
+        // A permission failure must never block the experiment.
+      }
+      requestExperimentNotificationRefresh();
       router.replace(`/experiment/${created.id}`);
     } finally {
       setSubmitting(false);

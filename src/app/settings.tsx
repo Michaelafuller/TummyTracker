@@ -30,6 +30,7 @@ import {
   turnOffAutoBackup,
 } from '@/features/backup/backupService';
 import { disableDayCheckIn, refreshDayCheckIn } from '@/features/checkin/dayCheckInService';
+import { requestExperimentNotificationRefresh } from '@/features/experiments/experimentNotifications';
 import {
   DEFAULT_REMINDERS,
   REMINDER_SLOTS,
@@ -242,6 +243,9 @@ export default function SettingsScreen() {
       // 'active' row is demoted to 'abandoned' rather than dropped when the
       // device already has (or this file already restored) an active one.
       const experimentResult = await insertExperimentsPreservingIds(parsed.experiments);
+      // A restored active experiment needs its phase reminders armed (or a
+      // demoted one's cancelled) — fire-and-forget, own slot only.
+      requestExperimentNotificationRefresh();
       const experimentSummary =
         parsed.experiments.length > 0
           ? ` Imported ${experimentResult.inserted} ${experimentResult.inserted === 1 ? 'experiment' : 'experiments'} (${experimentResult.skipped} already existed).`

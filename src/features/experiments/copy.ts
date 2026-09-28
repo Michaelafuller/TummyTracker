@@ -167,5 +167,8 @@ export function verdictRatesSentence(verdict: ExperimentVerdict): string {
   );
 }
 
+/** Shown on an active experiment's screen while notification permission isn't granted. */
+export const NOTIFICATIONS_OFF_HINT = 'Turn on notifications to get a reminder when each phase starts.';
+
 /** Verbatim disclaimer shown under every verdict, whatever its kind (design contract). */
 export const VERDICT_DISCLAIMER = 'An observation from your own logs, not a diagnosis.';

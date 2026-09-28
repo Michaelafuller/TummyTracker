@@ -3,8 +3,9 @@ import { Alert } from 'react-native';
 
 import { abandonExperiment, finishExperiment } from '@/db/repository';
 import type { DayCheckIn, Experiment, LogEntry } from '@/db/schema';
-import { VERDICT_DISCLAIMER } from '@/features/experiments/copy';
+import { NOTIFICATIONS_OFF_HINT, VERDICT_DISCLAIMER } from '@/features/experiments/copy';
 import { experimentSchedule } from '@/features/experiments/engine';
+import { hasNotificationPermission, requestExperimentNotificationRefresh } from '@/features/experiments/experimentNotifications';
 import ExperimentScreen from '../[id]';
 
 const mockBack = jest.fn();
@@ -17,6 +18,11 @@ jest.mock('expo-router', () => ({
 jest.mock('@/db/repository', () => ({
   abandonExperiment: jest.fn().mockResolvedValue(undefined),
   finishExperiment: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('@/features/experiments/experimentNotifications', () => ({
+  hasNotificationPermission: jest.fn(),
+  requestExperimentNotificationRefresh: jest.fn(),
 }));
 
 let mockEntries: LogEntry[] = [];
@@ -117,6 +123,7 @@ beforeEach(() => {
   mockEntries = [];
   mockCheckIns = [];
   mockExperiment = undefined;
+  (hasNotificationPermission as jest.Mock).mockResolvedValue(true);
 });
 
 afterEach(() => {
@@ -194,6 +201,37 @@ describe('ExperimentScreen — End experiment', () => {
 
     expect(abandonExperiment).toHaveBeenCalledWith('exp1', Date.now());
     expect(mockBack).toHaveBeenCalled();
+    // Ending early cancels its pending phase reminders.
+    expect(requestExperimentNotificationRefresh).toHaveBeenCalled();
+  });
+});
+
+describe('ExperimentScreen — notification hint', () => {
+  it('shows the "turn on notifications" hint while active and permission is off', async () => {
+    mockExperiment = baseExperiment({ startDate: '2026-04-01' });
+    jest.spyOn(Date, 'now').mockReturnValue(new Date(2026, 3, 5, 12, 0, 0).getTime());
+    (hasNotificationPermission as jest.Mock).mockResolvedValue(false);
+
+    const { findByText } = await render(<ExperimentScreen />);
+    expect(await findByText(NOTIFICATIONS_OFF_HINT)).toBeTruthy();
+  });
+
+  it('hides the hint when permission is granted', async () => {
+    mockExperiment = baseExperiment({ startDate: '2026-04-01' });
+    jest.spyOn(Date, 'now').mockReturnValue(new Date(2026, 3, 5, 12, 0, 0).getTime());
+
+    const { queryByText } = await render(<ExperimentScreen />);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(queryByText(NOTIFICATIONS_OFF_HINT)).toBeNull();
+  });
+
+  it('never shows the hint for a finished experiment', async () => {
+    mockExperiment = baseExperiment({ status: 'abandoned', endedAt: new Date(2026, 3, 5).getTime() });
+    (hasNotificationPermission as jest.Mock).mockResolvedValue(false);
+
+    const { queryByText } = await render(<ExperimentScreen />);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(queryByText(NOTIFICATIONS_OFF_HINT)).toBeNull();
   });
 });
 
@@ -225,6 +263,8 @@ describe('ExperimentScreen — ready phase and finish', () => {
       expect.objectContaining({ kind: 'likely-trigger' }),
       Date.now(),
     );
+    // Finishing cancels the (now stale) phase reminders.
+    expect(requestExperimentNotificationRefresh).toHaveBeenCalled();
   });
 });
 

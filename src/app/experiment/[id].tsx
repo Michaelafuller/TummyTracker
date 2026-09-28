@@ -5,7 +5,7 @@
 // see verdictRatesSentence's doc comment for why. An abandoned one just shows
 // when it ended.
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/primary-button';
@@ -19,6 +19,7 @@ import {
   confidenceChipLabel,
   daysLoggedSoFarSentence,
   endedEarlySentence,
+  NOTIFICATIONS_OFF_HINT,
   phaseInstruction,
   phaseStatusLine,
   slipsSentence,
@@ -28,6 +29,10 @@ import {
   VERDICT_DISCLAIMER,
 } from '@/features/experiments/copy';
 import { currentPhase, dayFacts, evaluateExperiment, type ExperimentVerdict } from '@/features/experiments/engine';
+import {
+  hasNotificationPermission,
+  requestExperimentNotificationRefresh,
+} from '@/features/experiments/experimentNotifications';
 import { useExperiment } from '@/features/experiments/useExperiments';
 import { useAllEntries } from '@/features/logging/useEntries';
 import { useTheme } from '@/hooks/use-theme';
@@ -73,6 +78,18 @@ export default function ExperimentScreen() {
   // Lazy-init so today's key is read once per mount, not on every render.
   const [today] = useState(() => formatDateInput(Date.now()));
   const [working, setWorking] = useState(false);
+  // null until read; the hint below shows only when it's known to be off.
+  const [notificationsGranted, setNotificationsGranted] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void hasNotificationPermission().then((granted) => {
+      if (!cancelled) setNotificationsGranted(granted);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const evaluation = useMemo(() => {
     if (!exp || exp.status !== 'active') return null;
@@ -97,6 +114,7 @@ export default function ExperimentScreen() {
           setWorking(true);
           try {
             await abandonExperiment(exp.id, Date.now());
+            requestExperimentNotificationRefresh();
             router.back();
           } finally {
             setWorking(false);
@@ -111,6 +129,7 @@ export default function ExperimentScreen() {
     setWorking(true);
     try {
       await finishExperiment(exp.id, evaluation.verdict, Date.now());
+      requestExperimentNotificationRefresh();
     } finally {
       setWorking(false);
     }
@@ -137,6 +156,11 @@ export default function ExperimentScreen() {
               {phaseStatusLine(phase.phase, phase.dayOfPhase, phase.phaseLength)}
             </ThemedText>
             <ThemedText type="small">{phaseInstruction(phase.phase, exp.term)}</ThemedText>
+            {notificationsGranted === false ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                {NOTIFICATIONS_OFF_HINT}
+              </ThemedText>
+            ) : null}
             {phase.phase === 'challenge' ? (
               <ThemedText type="small" themeColor="textSecondary">
                 {challengeTodayLabel(exposedToday)}
