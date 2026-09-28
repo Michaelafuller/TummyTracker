@@ -1,0 +1,84 @@
+appId: com.tummytracker.app.dev
+# Z — Elimination experiment, Cycle A: start, follow, end early (GitHub #19,
+# 2026-09-28).
+#   - Watch "lactose" on Insights → "Start experiment on lactose"
+#   - Start screen: the plan with real dates, the baseline preview, the safety
+#     note; a fresh install has no baseline → the inconclusive warning shows
+#   - Start → the experiment screen: "Avoiding · day 1 of 14"
+#   - Home shows the experiment row; it opens the experiment
+#   - Only one at a time: the watchlist item now links to the running one
+#   - End early (confirm) → back on Home; the Home row is gone
+# The ~20-day loop and the verdict can't run in real time — the verdict paths
+# are Jest-covered (engine.test.ts, experiment/[id].test.tsx). A device check
+# of "Verdict ready" needs backdated seed data (Cycle B's test session).
+---
+- launchApp:
+    clearState: true
+- runFlow: _helpers/reconnect-dev-client.yaml
+
+# --- Watch lactose, then start an experiment on it ---
+- tapOn:
+    id: "tab-insights"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "New watchlist term"
+    direction: DOWN
+- tapOn: "New watchlist term"
+- inputText: "lactose"
+- runFlow: _helpers/dismiss-keyboard.yaml
+- tapOn: "Add to watchlist"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "Start experiment on lactose"
+    direction: DOWN
+    centerElement: true
+- tapOn: "Start experiment on lactose"
+- waitForAnimationToEnd
+
+# --- Start screen ---
+- assertVisible: "Test lactose"
+- assertVisible: "Avoid it: .*"
+- assertVisible: "Eat it once a day: .*"
+- assertVisible: "Keep logging: .*"
+- assertVisible: "Your last 14 days: 0 logged, 0 rough, ate it on 0\\."
+- assertVisible: ".*inconclusive.*"
+- scrollUntilVisible:
+    element:
+      text: ".*Talk to a clinician first\\."
+    direction: DOWN
+- tapOn: "Start experiment"
+- waitForAnimationToEnd
+
+# --- Follow ---
+- assertVisible: "Testing lactose"
+- assertVisible: "Avoiding · day 1 of 14"
+- back
+- waitForAnimationToEnd
+
+# Home row opens the running experiment.
+- tapOn:
+    id: "tab-home"
+- waitForAnimationToEnd
+- assertVisible: "Open lactose experiment"
+- tapOn: "Open lactose experiment"
+- waitForAnimationToEnd
+- assertVisible: "Avoiding · day 1 of 14"
+
+# --- End early ---
+- scrollUntilVisible:
+    element:
+      text: "End experiment"
+    direction: DOWN
+- tapOn: "End experiment"
+- waitForAnimationToEnd
+# Confirm in the Alert (its destructive button repeats the label; the dialog
+# window is on top, so this taps the dialog's button).
+- assertVisible: "End experiment\?"
+- tapOn: "End experiment"
+- waitForAnimationToEnd
+- tapOn:
+    id: "tab-home"
+- waitForAnimationToEnd
+- assertNotVisible: "Open lactose experiment"

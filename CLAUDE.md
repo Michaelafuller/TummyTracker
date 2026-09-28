@@ -135,6 +135,17 @@
   the sync builders (`.run()`, `.all()`, `.get()`), never `await`; compute ids
   and timestamps before the transaction. The repository tests
   (`src/db/__tests__/repository.atomicity.test.ts`) fail if this regresses.
+- **Elimination experiments (owner-decided 2026-09-27, GitHub #19).** One
+  active experiment at a time (enforced in the repository transaction) on an
+  ingredient **term** (watchlist matching). Protocol: 14-day baseline read
+  from past logs, 7/14/21/28-day avoidance, 3 challenge + 3 observation days.
+  All day math by local calendar day. Experiment **rough day** = an
+  `isOutcome` entry **or** a "rough" check-in (the correlation engine still
+  ignores check-ins). Verdict ladder in `src/features/experiments/engine.ts`
+  — inconclusive on too many slips, no challenge exposure, too few covered
+  days, **the suspect never eaten in the baseline** (review 2026-09-28), or
+  no baseline rough days; "likely not a trigger" is never high confidence.
+  Finishing freezes the verdict in `verdictJson`. Copy never diagnoses.
 - **Real-SQLite repository tests (2026-09-27, GitHub #18).** `jest/expo-sqlite-node.ts`
   is a Jest-only fake `expo-sqlite` backed by Node's built-in `node:sqlite`
   (**Node ≥ 22.13 to run the tests**; no dependency). A DB test file starts
@@ -270,6 +281,13 @@ MVP entities:
   - `createdAt`, `updatedAt` (timestamps)
   - Written only by an explicit tap (Home card / notification button) or a
     backup restore (device's own row for a day wins). Never an outcome (§0).
+
+- **experiment** (`experiment`, migration 0011 — GitHub #19)
+  - `id`, `term` (normalized watch term), `startDate` ('YYYY-MM-DD', first
+    avoidance day), `baselineDays`, `eliminationDays`, `challengeDays`,
+    `observationDays`, `status` — `'active' | 'completed' | 'abandoned'`
+    (≤ 1 active), `verdictJson` (frozen verdict at finish, else null),
+    `endedAt`, `createdAt`, `updatedAt`. Backups v5.
 
 Conventions:
 - Timestamps stored as Unix epoch (ms) integers.
