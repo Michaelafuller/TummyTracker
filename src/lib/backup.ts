@@ -3,10 +3,12 @@
 
 import {
   DAY_STATUSES,
+  EXPERIMENT_STATUSES,
   LOG_ENTRY_TYPES,
   FOOD_TYPES,
   MEAL_SLOTS,
   type DayCheckIn,
+  type Experiment,
   type LogEntry,
   type MealComponent,
   type Medication,
@@ -25,13 +27,16 @@ export interface BackupFile {
   medicationDoses?: MedicationDose[];
   /** Absent before v4 (pre day-check-in, GitHub #13) and treated as [] on import. */
   dayCheckIns?: DayCheckIn[];
+  /** Absent before v5 (pre elimination-experiments, GitHub #19) and treated as [] on import. */
+  experiments?: Experiment[];
 }
 
 /**
  * Serializes entries + their mealComponent rows, the medication inventory and
- * history, and the day check-in answers (GitHub #13 backup v4). Version
- * bumps to 4 but `parseBackupJson` still reads v1/v2/v3 files (missing keys)
- * by defaulting every new array to empty — old backups remain importable.
+ * history, the day check-in answers, and the elimination experiments (GitHub
+ * #19 backup v5). Version bumps to 5 but `parseBackupJson` still reads
+ * v1–v4 files (missing keys) by defaulting every new array to empty — old
+ * backups remain importable.
  */
 export function entriesToJson(
   entries: LogEntry[],
@@ -40,15 +45,17 @@ export function entriesToJson(
   medicationEvents: MedicationEvent[] = [],
   medicationDoses: MedicationDose[] = [],
   dayCheckIns: DayCheckIn[] = [],
+  experiments: Experiment[] = [],
 ): string {
   const payload: BackupFile = {
-    version: 4,
+    version: 5,
     entries,
     mealComponents,
     medications,
     medicationEvents,
     medicationDoses,
     dayCheckIns,
+    experiments,
   };
   return JSON.stringify(payload, null, 2);
 }
@@ -116,6 +123,7 @@ export type ParseResult =
       medicationEvents: MedicationEvent[];
       medicationDoses: MedicationDose[];
       dayCheckIns: DayCheckIn[];
+      experiments: Experiment[];
     }
   | { ok: false; error: string };
 
@@ -255,6 +263,43 @@ function normaliseDayCheckIn(v: Record<string, unknown>): DayCheckIn {
   };
 }
 
+function isValidExperiment(v: unknown): v is Experiment {
+  if (!v || typeof v !== 'object') return false;
+  const r = v as Record<string, unknown>;
+  if (!isString(r.id) || r.id.length === 0) return false;
+  if (!isString(r.term) || r.term.length === 0) return false;
+  if (!isString(r.startDate) || !DATE_KEY_RE.test(r.startDate)) return false;
+  if (!(EXPERIMENT_STATUSES as readonly string[]).includes(r.status as string)) return false;
+  if (typeof r.baselineDays !== 'number' || r.baselineDays <= 0) return false;
+  if (typeof r.eliminationDays !== 'number' || r.eliminationDays <= 0) return false;
+  if (typeof r.challengeDays !== 'number' || r.challengeDays <= 0) return false;
+  if (typeof r.observationDays !== 'number' || r.observationDays <= 0) return false;
+  if (r.verdictJson !== null && r.verdictJson !== undefined && !isString(r.verdictJson)) return false;
+  if (r.endedAt !== null && r.endedAt !== undefined && typeof r.endedAt !== 'number') return false;
+  if (typeof r.createdAt !== 'number') return false;
+  if (typeof r.updatedAt !== 'number') return false;
+  return true;
+}
+
+/** Normalises an experiment from the backup. Every field here is required except the two nullable columns. */
+function normaliseExperiment(v: Record<string, unknown>): Experiment {
+  const nullable = <T>(key: string): T | null => (v[key] !== undefined ? v[key] : null) as T | null;
+  return {
+    id: v.id as string,
+    term: v.term as string,
+    startDate: v.startDate as string,
+    baselineDays: v.baselineDays as number,
+    eliminationDays: v.eliminationDays as number,
+    challengeDays: v.challengeDays as number,
+    observationDays: v.observationDays as number,
+    status: v.status as Experiment['status'],
+    verdictJson: nullable<string>('verdictJson'),
+    endedAt: nullable<number>('endedAt'),
+    createdAt: v.createdAt as number,
+    updatedAt: v.updatedAt as number,
+  };
+}
+
 /**
  * Parses a backup file, accepting both the legacy v1 shape (no mealComponents
  * key — imports with an empty component list) and the v2/v3/v4 shapes
@@ -346,7 +391,17 @@ export function parseBackupJson(text: string): ParseResult {
     dayCheckIns.push(normaliseDayCheckIn(rawDayCheckIns[i] as Record<string, unknown>));
   }
 
-  return { ok: true, entries, mealComponents, medications, medicationEvents, medicationDoses, dayCheckIns };
+  // Absent before v5 — default to [] so v1/v2/v3/v4 backups remain importable.
+  const rawExperiments: unknown[] = Array.isArray(root.experiments) ? (root.experiments as unknown[]) : [];
+  const experiments: Experiment[] = [];
+  for (let i = 0; i < rawExperiments.length; i++) {
+    if (!isValidExperiment(rawExperiments[i])) {
+      return { ok: false, error: `Experiment at index ${i} has an invalid shape.` };
+    }
+    experiments.push(normaliseExperiment(rawExperiments[i] as Record<string, unknown>));
+  }
+
+  return { ok: true, entries, mealComponents, medications, medicationEvents, medicationDoses, dayCheckIns, experiments };
 }
 
 // Re-export so callers only need one import.

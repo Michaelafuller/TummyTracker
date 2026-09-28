@@ -13,6 +13,7 @@ import {
   createLogEntry,
   getLogEntry,
   insertDayCheckInsPreservingIds,
+  insertExperimentsPreservingIds,
   insertMealComponents,
   insertMedicationDosesPreservingIds,
   insertMedicationEventsPreservingIds,
@@ -237,9 +238,18 @@ export default function SettingsScreen() {
           ? ` Imported ${dayCheckInResult.inserted} ${dayCheckInResult.inserted === 1 ? 'day check-in' : 'day check-ins'} (${dayCheckInResult.skipped} already existed).`
           : '';
 
+      // Experiments (GitHub #19): ids preserved like medications; a restored
+      // 'active' row is demoted to 'abandoned' rather than dropped when the
+      // device already has (or this file already restored) an active one.
+      const experimentResult = await insertExperimentsPreservingIds(parsed.experiments);
+      const experimentSummary =
+        parsed.experiments.length > 0
+          ? ` Imported ${experimentResult.inserted} ${experimentResult.inserted === 1 ? 'experiment' : 'experiments'} (${experimentResult.skipped} already existed).`
+          : '';
+
       Alert.alert(
         'Import complete',
-        `Imported ${imported} ${imported === 1 ? 'entry' : 'entries'} (${skipped} already existed).${medSummary}${dayCheckInSummary}`,
+        `Imported ${imported} ${imported === 1 ? 'entry' : 'entries'} (${skipped} already existed).${medSummary}${dayCheckInSummary}${experimentSummary}`,
       );
     } catch (e) {
       Alert.alert('Import failed', e instanceof Error ? e.message : String(e));

@@ -1,8 +1,10 @@
 // Thin repository over Drizzle for log entries. Keeps DB access in one place so
 // screens/components stay free of query details. Pure validation/shaping lives in
 // lib/ and features/logging/formModel; this module just persists.
-import { asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 
+import { DEFAULT_PROTOCOL, type EliminationChoice, type ExperimentVerdict } from '@/features/experiments/engine';
+import { formatDateInput } from '@/lib/datetime';
 import { chunk } from '@/lib/array';
 import { createId } from '@/lib/id';
 import {
@@ -15,9 +17,11 @@ import {
 import { serializeTags } from '@/lib/ingredients';
 import type { TagBackfillRowUpdate } from '@/lib/tagBackfill';
 import type { NutritionField } from '@/lib/validation';
+import { normalizeWatchTerm } from '@/lib/watchlist';
 import { db } from './client';
 import {
   dayCheckIn,
+  experiment,
   FOOD_TYPES,
   goal,
   logEntry,
@@ -28,6 +32,7 @@ import {
   watchlistItem,
   type DayCheckIn,
   type DayStatus,
+  type Experiment,
   type Goal,
   type GoalDirection,
   type LogEntry,
@@ -769,6 +774,150 @@ export async function insertDayCheckInsPreservingIds(
   const toInsert = deduped.filter((row) => !existingIds.has(row.id) && !existingDates.has(row.date));
   for (const insertBatch of chunk(toInsert, RESTORE_CHUNK_SIZE)) {
     await db.insert(dayCheckIn).values(insertBatch);
+  }
+  return { inserted: toInsert.length, skipped: rows.length - toInsert.length };
+}
+
+/** Thrown by {@link startExperiment} when an experiment is already active (invariant, HANDOFF.md §0). */
+export class ExperimentAlreadyActiveError extends Error {
+  constructor() {
+    super('An experiment is already active — finish or abandon it first.');
+    this.name = 'ExperimentAlreadyActiveError';
+  }
+}
+
+export interface StartExperimentInput {
+  /** Raw user text — normalized here via `normalizeWatchTerm`. */
+  term: string;
+  eliminationDays: EliminationChoice;
+}
+
+/**
+ * Starts a new elimination experiment (GitHub #19). Normalizes the term the
+ * same way the watchlist does; an invalid (too-short) term throws before any
+ * write. One synchronous transaction: throws {@link ExperimentAlreadyActiveError}
+ * (rolling back, writing nothing) if an experiment is already `active`;
+ * otherwise inserts the new row (`startDate` = today, baseline/challenge/
+ * observation from `DEFAULT_PROTOCOL`) and adds the term to the watchlist if
+ * it isn't already watched — so save-time warnings work for free without a
+ * second write path.
+ */
+export async function startExperiment(input: StartExperimentInput, now: number): Promise<Experiment> {
+  const normalized = normalizeWatchTerm(input.term);
+  if (!normalized) {
+    throw new Error(`startExperiment: invalid term "${input.term}".`);
+  }
+
+  const row: Experiment = {
+    id: createId(),
+    term: normalized,
+    startDate: formatDateInput(now),
+    baselineDays: DEFAULT_PROTOCOL.baselineDays,
+    eliminationDays: input.eliminationDays,
+    challengeDays: DEFAULT_PROTOCOL.challengeDays,
+    observationDays: DEFAULT_PROTOCOL.observationDays,
+    status: 'active',
+    verdictJson: null,
+    endedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  // Sync callback — see createLogEntries' comment above for why.
+  db.transaction((tx) => {
+    const existingActive = tx.select().from(experiment).where(eq(experiment.status, 'active')).limit(1).get();
+    if (existingActive) {
+      throw new ExperimentAlreadyActiveError();
+    }
+
+    tx.insert(experiment).values(row).run();
+
+    const existingWatch = tx.select().from(watchlistItem).where(eq(watchlistItem.term, normalized)).limit(1).get();
+    if (!existingWatch) {
+      tx.insert(watchlistItem).values({ id: createId(), term: normalized, createdAt: now }).run();
+    }
+  });
+
+  return row;
+}
+
+/** The current `active` experiment, or undefined when none is running (at most one, invariant). */
+export async function getActiveExperiment(): Promise<Experiment | undefined> {
+  const rows = await db.select().from(experiment).where(eq(experiment.status, 'active')).limit(1);
+  return rows[0];
+}
+
+export async function getExperiment(id: string): Promise<Experiment | undefined> {
+  const rows = await db.select().from(experiment).where(eq(experiment.id, id)).limit(1);
+  return rows[0];
+}
+
+/** Every experiment, newest first. */
+export async function listExperiments(): Promise<Experiment[]> {
+  return db.select().from(experiment).orderBy(desc(experiment.createdAt));
+}
+
+/** All experiment rows — used by the backup export (src/lib/backup.ts, version 5). */
+export async function listAllExperiments(): Promise<Experiment[]> {
+  return db.select().from(experiment).orderBy(asc(experiment.createdAt));
+}
+
+/**
+ * Freezes the verdict and marks an experiment `completed` (GitHub #19
+ * invariant: a later edit to old log entries must never silently change a
+ * finished experiment's verdict). Only takes effect from `status: 'active'` —
+ * a no-op otherwise (already finished/abandoned, or a stale id).
+ */
+export async function finishExperiment(id: string, verdict: ExperimentVerdict, now: number): Promise<void> {
+  await db
+    .update(experiment)
+    .set({ status: 'completed', verdictJson: JSON.stringify(verdict), endedAt: now, updatedAt: now })
+    .where(and(eq(experiment.id, id), eq(experiment.status, 'active')));
+}
+
+/** Ends an experiment early with no verdict. Only takes effect from `status: 'active'`. */
+export async function abandonExperiment(id: string, now: number): Promise<void> {
+  await db
+    .update(experiment)
+    .set({ status: 'abandoned', endedAt: now, updatedAt: now })
+    .where(and(eq(experiment.id, id), eq(experiment.status, 'active')));
+}
+
+/**
+ * Inserts pre-built experiment rows PRESERVING their ids (restore, mirrors
+ * {@link insertMedicationsPreservingIds}) — skips rows whose id already
+ * exists. The "at most one active" invariant still has to hold after a
+ * restore: the FIRST `active` row this call would insert (in file order) is
+ * kept active only if the device doesn't already have one; every other
+ * `active` row in the same restore (and any after the device's own, if it
+ * has one) is imported as `abandoned` with `endedAt` backfilled from its own
+ * `updatedAt` rather than dropped, so the experiment's history isn't lost.
+ */
+export async function insertExperimentsPreservingIds(
+  rows: Experiment[],
+): Promise<{ inserted: number; skipped: number }> {
+  if (rows.length === 0) return { inserted: 0, skipped: 0 };
+
+  const existingIds = new Set<string>();
+  for (const idBatch of chunk(rows.map((row) => row.id), RESTORE_CHUNK_SIZE)) {
+    const existing = await db.select({ id: experiment.id }).from(experiment).where(inArray(experiment.id, idBatch));
+    for (const row of existing) existingIds.add(row.id);
+  }
+
+  const toInsert = rows.filter((row) => !existingIds.has(row.id));
+
+  let activeClaimed = (await getActiveExperiment()) != null;
+  const finalRows: Experiment[] = toInsert.map((row) => {
+    if (row.status !== 'active') return row;
+    if (activeClaimed) {
+      return { ...row, status: 'abandoned', endedAt: row.updatedAt };
+    }
+    activeClaimed = true;
+    return row;
+  });
+
+  for (const insertBatch of chunk(finalRows, RESTORE_CHUNK_SIZE)) {
+    await db.insert(experiment).values(insertBatch);
   }
   return { inserted: toInsert.length, skipped: rows.length - toInsert.length };
 }

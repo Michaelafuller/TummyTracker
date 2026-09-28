@@ -1,4 +1,12 @@
-import type { DayCheckIn, LogEntry, MealComponent, Medication, MedicationDose, MedicationEvent } from '@/db/schema';
+import type {
+  DayCheckIn,
+  Experiment,
+  LogEntry,
+  MealComponent,
+  Medication,
+  MedicationDose,
+  MedicationEvent,
+} from '@/db/schema';
 import { dosesForRestoredEvents, entriesToJson, parseBackupJson } from '../backup';
 
 const BASE_ENTRY: LogEntry = {
@@ -91,6 +99,21 @@ const BASE_DAY_CHECK_IN: DayCheckIn = {
   updatedAt: 8,
 };
 
+const BASE_EXPERIMENT: Experiment = {
+  id: 'exp1',
+  term: 'lactose',
+  startDate: '2026-04-01',
+  baselineDays: 14,
+  eliminationDays: 14,
+  challengeDays: 3,
+  observationDays: 3,
+  status: 'completed',
+  verdictJson: '{"kind":"likely-trigger","confidence":"high"}',
+  endedAt: 1700000200000,
+  createdAt: 9,
+  updatedAt: 10,
+};
+
 describe('entriesToJson / parseBackupJson roundtrip', () => {
   it('roundtrips a single entry intact', () => {
     const json = entriesToJson([BASE_ENTRY]);
@@ -142,9 +165,9 @@ describe('entriesToJson / parseBackupJson roundtrip', () => {
       [BASE_MEDICATION_EVENT],
       [BASE_MEDICATION_DOSE],
     );
-    // entriesToJson always writes the current version (4) — parseBackupJson
-    // separately still reads older v1/v2/v3 files (tested below).
-    expect(JSON.parse(json).version).toBe(4);
+    // entriesToJson always writes the current version (5) — parseBackupJson
+    // separately still reads older v1/v2/v3/v4 files (tested below).
+    expect(JSON.parse(json).version).toBe(5);
 
     const result = parseBackupJson(json);
     expect(result.ok).toBe(true);
@@ -155,7 +178,7 @@ describe('entriesToJson / parseBackupJson roundtrip', () => {
     expect(result.dayCheckIns).toEqual([]);
   });
 
-  it('roundtrips entries with day check-ins intact (v4)', () => {
+  it('roundtrips entries with day check-ins intact', () => {
     const json = entriesToJson(
       [BASE_ENTRY],
       [BASE_COMPONENT],
@@ -164,12 +187,108 @@ describe('entriesToJson / parseBackupJson roundtrip', () => {
       [BASE_MEDICATION_DOSE],
       [BASE_DAY_CHECK_IN],
     );
-    expect(JSON.parse(json).version).toBe(4);
 
     const result = parseBackupJson(json);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.dayCheckIns).toEqual([BASE_DAY_CHECK_IN]);
+    expect(result.experiments).toEqual([]);
+  });
+
+  it('roundtrips entries with elimination experiments intact (v5)', () => {
+    const json = entriesToJson(
+      [BASE_ENTRY],
+      [BASE_COMPONENT],
+      [BASE_MEDICATION],
+      [BASE_MEDICATION_EVENT],
+      [BASE_MEDICATION_DOSE],
+      [BASE_DAY_CHECK_IN],
+      [BASE_EXPERIMENT],
+    );
+    expect(JSON.parse(json).version).toBe(5);
+
+    const result = parseBackupJson(json);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.experiments).toEqual([BASE_EXPERIMENT]);
+  });
+
+  it('roundtrips an active experiment with a null verdictJson/endedAt', () => {
+    const active: Experiment = { ...BASE_EXPERIMENT, status: 'active', verdictJson: null, endedAt: null };
+    const json = entriesToJson([BASE_ENTRY], [], [], [], [], [], [active]);
+    const result = parseBackupJson(json);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.experiments).toEqual([active]);
+  });
+});
+
+describe('legacy v4 backup import (no experiments key)', () => {
+  it('imports a v4-shaped file with an empty experiments array', () => {
+    const legacy = {
+      version: 4,
+      entries: [BASE_ENTRY],
+      dayCheckIns: [BASE_DAY_CHECK_IN],
+    };
+    const result = parseBackupJson(JSON.stringify(legacy));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.dayCheckIns).toEqual([BASE_DAY_CHECK_IN]);
+    expect(result.experiments).toEqual([]);
+  });
+});
+
+describe('experiment validation', () => {
+  it('rejects an experiment missing an id', () => {
+    const bad = { ...BASE_EXPERIMENT, id: '' };
+    const result = parseBackupJson(JSON.stringify({ version: 5, entries: [BASE_ENTRY], experiments: [bad] }));
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBe('Experiment at index 0 has an invalid shape.');
+  });
+
+  it('rejects an experiment with a malformed startDate', () => {
+    const bad = { ...BASE_EXPERIMENT, startDate: '04/01/2026' };
+    const result = parseBackupJson(JSON.stringify({ version: 5, entries: [BASE_ENTRY], experiments: [bad] }));
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects an experiment with an invalid status', () => {
+    const bad = { ...BASE_EXPERIMENT, status: 'paused' };
+    const result = parseBackupJson(JSON.stringify({ version: 5, entries: [BASE_ENTRY], experiments: [bad] }));
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects an experiment with a non-positive day count', () => {
+    const bad = { ...BASE_EXPERIMENT, eliminationDays: 0 };
+    const result = parseBackupJson(JSON.stringify({ version: 5, entries: [BASE_ENTRY], experiments: [bad] }));
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects an experiment whose verdictJson is not a string or null', () => {
+    const bad = { ...BASE_EXPERIMENT, verdictJson: 42 };
+    const result = parseBackupJson(JSON.stringify({ version: 5, entries: [BASE_ENTRY], experiments: [bad] }));
+    expect(result.ok).toBe(false);
+  });
+
+  it('defaults verdictJson/endedAt to null when absent (an active experiment)', () => {
+    const minimal = {
+      id: 'e1',
+      term: 'gluten',
+      startDate: '2026-04-01',
+      baselineDays: 14,
+      eliminationDays: 14,
+      challengeDays: 3,
+      observationDays: 3,
+      status: 'active',
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const result = parseBackupJson(JSON.stringify({ version: 5, entries: [BASE_ENTRY], experiments: [minimal] }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.experiments[0].verdictJson).toBeNull();
+    expect(result.experiments[0].endedAt).toBeNull();
   });
 });
 

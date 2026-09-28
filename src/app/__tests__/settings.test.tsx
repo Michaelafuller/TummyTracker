@@ -5,7 +5,9 @@ import { SafeAreaProvider, type Metrics } from 'react-native-safe-area-context';
 
 import {
   insertDayCheckInsPreservingIds,
+  insertExperimentsPreservingIds,
   listAllDayCheckIns,
+  listAllExperiments,
   listAllMedicationDoses,
   listAllMedicationEvents,
   listAllMedications,
@@ -72,6 +74,8 @@ jest.mock('@/db/repository', () => ({
   insertMedicationDosesPreservingIds: jest.fn(),
   listAllDayCheckIns: jest.fn(),
   insertDayCheckInsPreservingIds: jest.fn(),
+  listAllExperiments: jest.fn(),
+  insertExperimentsPreservingIds: jest.fn(),
 }));
 
 jest.mock('@/features/notifications/service', () => ({
@@ -124,6 +128,8 @@ beforeEach(() => {
   (listAllMedicationDoses as jest.Mock).mockResolvedValue([]);
   (listAllDayCheckIns as jest.Mock).mockResolvedValue([]);
   (insertDayCheckInsPreservingIds as jest.Mock).mockResolvedValue({ inserted: 0, skipped: 0 });
+  (listAllExperiments as jest.Mock).mockResolvedValue([]);
+  (insertExperimentsPreservingIds as jest.Mock).mockResolvedValue({ inserted: 0, skipped: 0 });
   (ensureNotificationPermission as jest.Mock).mockResolvedValue(true);
 });
 
@@ -243,7 +249,7 @@ describe('SettingsScreen — Data section (day check-ins, GitHub #13)', () => {
     const [uri] = mockShareAsync.mock.calls[0];
     const { File } = jest.requireActual('expo-file-system');
     const written = JSON.parse(await new File(uri).text());
-    expect(written.version).toBe(4);
+    expect(written.version).toBe(5);
     expect(written.dayCheckIns).toEqual([
       { id: 'ci1', date: '2026-06-15', status: 'fine', createdAt: 1, updatedAt: 1 },
     ]);
@@ -289,6 +295,81 @@ describe('SettingsScreen — Data section (day check-ins, GitHub #13)', () => {
     await waitFor(() =>
       expect(Alert.alert).toHaveBeenCalledWith('Import complete', 'Imported 0 entries (0 already existed).'),
     );
+    (Alert.alert as jest.Mock).mockRestore();
+  });
+});
+
+describe('SettingsScreen — Data section (elimination experiments, GitHub #19)', () => {
+  it('export includes experiments in the shared backup JSON (v5)', async () => {
+    (listAllExperiments as jest.Mock).mockResolvedValue([
+      {
+        id: 'exp1',
+        term: 'lactose',
+        startDate: '2026-04-01',
+        baselineDays: 14,
+        eliminationDays: 14,
+        challengeDays: 3,
+        observationDays: 3,
+        status: 'active',
+        verdictJson: null,
+        endedAt: null,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ]);
+
+    const { findByLabelText } = await renderScreen(<SettingsScreen />);
+    await fireEvent.press(await findByLabelText('Export data'));
+
+    await waitFor(() => expect(mockShareAsync).toHaveBeenCalled());
+    expect(listAllExperiments).toHaveBeenCalled();
+
+    const [uri] = mockShareAsync.mock.calls[0];
+    const { File } = jest.requireActual('expo-file-system');
+    const written = JSON.parse(await new File(uri).text());
+    expect(written.experiments).toEqual([
+      expect.objectContaining({ id: 'exp1', term: 'lactose', status: 'active' }),
+    ]);
+  });
+
+  it('import summary reports the imported experiment count', async () => {
+    const backup = {
+      version: 5,
+      entries: [],
+      experiments: [
+        {
+          id: 'exp1',
+          term: 'lactose',
+          startDate: '2026-04-01',
+          baselineDays: 14,
+          eliminationDays: 14,
+          challengeDays: 3,
+          observationDays: 3,
+          status: 'completed',
+          verdictJson: '{"kind":"inconclusive"}',
+          endedAt: 5000,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+    };
+    mockPickFileAsync.mockResolvedValue({
+      canceled: false,
+      result: { text: async () => JSON.stringify(backup) },
+    });
+    (insertExperimentsPreservingIds as jest.Mock).mockResolvedValue({ inserted: 1, skipped: 0 });
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+
+    const { findByLabelText } = await renderScreen(<SettingsScreen />);
+    await fireEvent.press(await findByLabelText('Import data'));
+
+    await waitFor(() =>
+      expect(Alert.alert).toHaveBeenCalledWith(
+        'Import complete',
+        'Imported 0 entries (0 already existed). Imported 1 experiment (0 already existed).',
+      ),
+    );
+    expect(insertExperimentsPreservingIds).toHaveBeenCalledWith(backup.experiments);
     (Alert.alert as jest.Mock).mockRestore();
   });
 });
