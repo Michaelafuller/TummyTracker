@@ -9,7 +9,7 @@ import { closeTestDb, migrateTestDb } from '../testUtils/testDb';
 // Jest hoists jest.mock(...) above the imports above at transform time
 // (babel-plugin-jest-hoist), so '../client's `openDatabaseSync` call already
 // sees the fake.
-jest.mock('expo-sqlite', () => require('../../../jest/expo-sqlite-node'));
+jest.mock('expo-sqlite', () => jest.requireActual('../../../jest/expo-sqlite-node'));
 
 afterAll(closeTestDb);
 

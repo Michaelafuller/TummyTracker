@@ -8,7 +8,7 @@ import { closeTestDb, migrateTestDb, resetTestDb } from '../testUtils/testDb';
 // Jest hoists jest.mock(...) above the imports above at transform time
 // (babel-plugin-jest-hoist), so '../repository's `../client` import already
 // sees the fake.
-jest.mock('expo-sqlite', () => require('../../../jest/expo-sqlite-node'));
+jest.mock('expo-sqlite', () => jest.requireActual('../../../jest/expo-sqlite-node'));
 
 beforeAll(async () => {
   await migrateTestDb();
