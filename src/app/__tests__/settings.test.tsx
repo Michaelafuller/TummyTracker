@@ -221,6 +221,37 @@ describe('SettingsScreen — Doctor report section', () => {
     );
   });
 
+  it('fetches experiments and includes them in the report HTML (#19)', async () => {
+    mockPrintToFileAsync.mockResolvedValue({ uri: 'file:///report.pdf' });
+    const nowKey = new Date();
+    const startDate = `${nowKey.getFullYear()}-${String(nowKey.getMonth() + 1).padStart(2, '0')}-${String(nowKey.getDate()).padStart(2, '0')}`;
+    (listAllExperiments as jest.Mock).mockResolvedValue([
+      {
+        id: 'exp1',
+        term: 'lactose',
+        startDate,
+        baselineDays: 14,
+        eliminationDays: 14,
+        challengeDays: 3,
+        observationDays: 3,
+        status: 'active',
+        verdictJson: null,
+        endedAt: null,
+        createdAt: 0,
+        updatedAt: 0,
+      },
+    ]);
+
+    const { findByLabelText } = await renderScreen(<SettingsScreen />);
+    await fireEvent.press(await findByLabelText('Create PDF report'));
+
+    await waitFor(() => expect(mockShareAsync).toHaveBeenCalled());
+    expect(listAllExperiments).toHaveBeenCalled();
+    expect(mockPrintToFileAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ html: expect.stringContaining('Elimination experiments') }),
+    );
+  });
+
   it('shows the Update-required alert when printToFileAsync rejects (old dev client)', async () => {
     mockPrintToFileAsync.mockRejectedValue(new Error('printToFileAsync is not a function'));
     jest.spyOn(Alert, 'alert').mockImplementation(() => {});

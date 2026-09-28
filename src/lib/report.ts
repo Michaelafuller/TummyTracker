@@ -8,7 +8,7 @@
 // through escapeHtml before being embedded, so a hostile entry name can never
 // break out of its cell or inject markup into the generated PDF.
 
-import type { LogEntry, Medication, MedicationDose, MedicationEvent } from '@/db/schema';
+import type { Experiment, LogEntry, Medication, MedicationDose, MedicationEvent } from '@/db/schema';
 import { isBristolValue } from '@/features/bm/bristol';
 import { isSentimentValue, sentimentLabel } from '@/features/sentiment/scale';
 import { isSeverityValue } from '@/features/symptoms/severity';
@@ -17,7 +17,15 @@ import {
   type NutrientOutcomeFinding,
   type OutcomeFinding,
 } from '@/features/analysis/insights';
-import { dayBounds, formatLongDate, formatTime12h, MONTHS_LONG } from '@/lib/datetime';
+import {
+  formatDayRange,
+  phaseStatusLine,
+  verdictRatesSentence,
+  verdictSummaryLabel,
+} from '@/features/experiments/copy';
+import { currentPhase, experimentSchedule } from '@/features/experiments/engine';
+import { parseFrozenVerdict } from '@/features/experiments/frozenVerdict';
+import { dayBounds, formatDateInput, formatLongDate, formatTime12h, MONTHS_LONG } from '@/lib/datetime';
 import {
   groupEntriesByDay,
   logEntriesToJournalItems,
@@ -153,6 +161,61 @@ function medicationsSectionHtml(summaries: readonly MedicationUseSummary[]): str
   );
 }
 
+/** One row of the Experiments table (#19): term, dates, status, result. A
+ *  completed experiment's result is its FROZEN verdict only — never re-evaluated. */
+function experimentRowHtml(exp: Experiment, todayKey: string, lastDay: string): string {
+  const term = escapeHtml(exp.term);
+  const dates = escapeHtml(formatDayRange(exp.startDate, lastDay));
+
+  let status: string;
+  let result = '—';
+  if (exp.status === 'completed') {
+    status = 'Completed';
+    const verdict = parseFrozenVerdict(exp.verdictJson);
+    if (verdict) {
+      result = `${escapeHtml(verdictSummaryLabel(verdict))}<br>${escapeHtml(verdictRatesSentence(verdict))}`;
+    }
+  } else if (exp.status === 'abandoned') {
+    status = 'Ended early';
+  } else {
+    const phase = currentPhase(exp, todayKey);
+    status = `In progress — ${escapeHtml(phaseStatusLine(phase.phase, phase.dayOfPhase, phase.phaseLength))}`;
+  }
+
+  return `<tr><td>${term}</td><td>${dates}</td><td>${status}</td><td>${result}</td></tr>`;
+}
+
+/** The Experiments section (#19) — omitted when none was passed, or none is active or overlaps the range. */
+function experimentsSectionHtml(
+  experiments: readonly Experiment[] | undefined,
+  now: number,
+  start: number,
+  end: number,
+): string {
+  if (!experiments || experiments.length === 0) return '';
+  const todayKey = formatDateInput(now);
+  const windowStartKey = formatDateInput(start);
+  const windowEndKey = formatDateInput(end - 1);
+
+  const rows = experiments
+    .map((exp) => ({ exp, lastDay: experimentSchedule(exp).lastDay }))
+    .filter(
+      ({ exp, lastDay }) =>
+        exp.status === 'active' || (exp.startDate <= windowEndKey && lastDay >= windowStartKey),
+    )
+    .sort((a, b) => a.exp.startDate.localeCompare(b.exp.startDate))
+    .map(({ exp, lastDay }) => experimentRowHtml(exp, todayKey, lastDay));
+  if (rows.length === 0) return '';
+
+  return (
+    '<h2>Elimination experiments</h2>' +
+    '<p class="summary">Elimination experiments the user ran. Verdicts are observations from their own logs, ' +
+    'not diagnoses.</p>' +
+    '<table><thead><tr><th>Tested</th><th>Dates</th><th>Status</th><th>Result</th></tr></thead>' +
+    `<tbody>${rows.join('')}</tbody></table>`
+  );
+}
+
 /** Medication data for the report (#17) — optional; existing callers that omit
  *  it get exactly today's report, with no Medications section at all. */
 export interface ReportMedicationData {
@@ -172,12 +235,16 @@ export interface ReportMedicationData {
  * `medications` is optional (#17) — when passed, a Medications section is
  * added (only when it has something to show) and medication doses join the
  * Journal; when omitted, output is unchanged from before #17.
+ * `experiments` is optional (#19) — when passed, an Elimination experiments
+ * section (between Medications and the Journal) lists those that overlap the
+ * range or are still active; omitted, output is unchanged.
  */
 export function buildReportHtml(
   entries: readonly LogEntry[],
   now: number,
   rangeDays: ReportRangeDays,
   medications?: ReportMedicationData,
+  experiments?: readonly Experiment[],
 ): string {
   const { end } = dayBounds(now);
   const startDate = new Date(startOfDay(now));
@@ -217,6 +284,7 @@ export function buildReportHtml(
           .join('');
 
   const medicationsHtml = medicationsSectionHtml(medicationSummaries);
+  const experimentsHtml = experimentsSectionHtml(experiments, now, start, end);
 
   const medicationEventsInRange = medications
     ? medications.events.filter((event) => event.takenAt >= start && event.takenAt < end)
@@ -271,7 +339,7 @@ export function buildReportHtml(
 <div class="meta">${rangeLabel} · Generated ${generatedLabel}</div>
 <p class="summary">${summaryLine}</p>
 ${findingsHtml}
-${medicationsHtml}
+${medicationsHtml}${experimentsHtml}
 <h2>Journal</h2>
 ${journalHtml}
 <p class="disclaimer">These are observations from the user's own logs — patterns, not medical advice.</p>
