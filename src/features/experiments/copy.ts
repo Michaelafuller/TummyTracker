@@ -2,6 +2,7 @@
 // building, no React, so it's the easiest part of the UI layer to unit-test
 // (CLAUDE.md §5). Kept separate from engine.ts (the math) on purpose.
 import {
+  currentPhase,
   MIN_BASELINE_COVERED,
   type ExperimentEvaluation,
   type ExperimentSchedule,
@@ -10,6 +11,8 @@ import {
   type PhaseStats,
   type VerdictKind,
 } from './engine';
+import { parseFrozenVerdict } from './frozenVerdict';
+import type { Experiment } from '@/db/schema';
 import { formatLongDate } from '@/lib/datetime';
 import type { ConfidenceTier } from '@/lib/stats';
 
@@ -130,6 +133,23 @@ export function verdictHeadline(kind: VerdictKind): string {
     case 'inconclusive':
       return 'Inconclusive';
   }
+}
+
+/** A frozen verdict as one line for lists, e.g. "Likely a trigger · medium" (inconclusive has no confidence: "Inconclusive"). */
+export function verdictSummaryLabel(verdict: Pick<ExperimentVerdict, 'kind' | 'confidence'>): string {
+  const headline = verdictHeadline(verdict.kind);
+  return verdict.confidence != null ? `${headline} · ${verdict.confidence}` : headline;
+}
+
+/** A history row's status line: frozen verdict + confidence, "Ended early", or the live phase. */
+export function experimentStatusLine(exp: Experiment, todayKey: string): string {
+  if (exp.status === 'completed') {
+    const verdict = parseFrozenVerdict(exp.verdictJson);
+    return verdict ? verdictSummaryLabel(verdict) : 'Completed';
+  }
+  if (exp.status === 'abandoned') return 'Ended early';
+  const phase = currentPhase(exp, todayKey);
+  return phaseStatusLine(phase.phase, phase.dayOfPhase, phase.phaseLength);
 }
 
 /** The confidence chip's label — reuses Insights' tier names. */

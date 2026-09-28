@@ -5,9 +5,12 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { ThemedTextInput } from '@/components/form-fields';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
-import type { LogEntry, WatchlistItem } from '@/db/schema';
-import { useActiveExperiment } from '@/features/experiments/useExperiments';
+import type { Experiment, LogEntry, WatchlistItem } from '@/db/schema';
+import { formatDayRange, verdictSummaryLabel } from '@/features/experiments/copy';
+import { parseFrozenVerdict } from '@/features/experiments/frozenVerdict';
+import { useActiveExperiment, useExperiments } from '@/features/experiments/useExperiments';
 import { useTheme } from '@/hooks/use-theme';
+import { formatDateInput } from '@/lib/datetime';
 import { computeWatchStats, normalizeWatchTerm, type WatchStats } from '@/lib/watchlist';
 import { useWatchlistStore } from './watchlistStore';
 
@@ -24,6 +27,20 @@ export function watchStatsSentence(item: WatchlistItem, stats: WatchStats): stri
     stats.matchCount > 0 ? `${stats.outcomeFollowedCount} of ${stats.matchCount} followed by a rough outcome` : null;
 
   return [timesLabel, cleanLabel, outcomeLabel].filter((part): part is string => part != null).join(' · ');
+}
+
+/**
+ * "Last experiment: Likely a trigger · medium (Oct 17)" for the newest
+ * COMPLETED experiment on `term` — read from the frozen verdict, never
+ * re-evaluated. Null when there's none (abandoned/active ones have no result).
+ */
+export function lastExperimentSentence(term: string, experiments: readonly Experiment[]): string | null {
+  const last = experiments.find((exp) => exp.term === term && exp.status === 'completed');
+  if (!last) return null;
+  const verdict = parseFrozenVerdict(last.verdictJson);
+  if (!verdict) return null;
+  const dayKey = formatDateInput(last.endedAt ?? last.updatedAt);
+  return `Last experiment: ${verdictSummaryLabel(verdict)} (${formatDayRange(dayKey, dayKey)})`;
 }
 
 const INVALID_TERM_MESSAGE = 'Enter at least 2 letters or numbers.';
@@ -50,6 +67,8 @@ export function WatchlistSection({ entries, now }: { entries: readonly LogEntry[
   // every item offers "Start experiment" except the one already under test,
   // which links to its running experiment instead.
   const activeExperiment = useActiveExperiment();
+  // Newest first — the first completed one per term is its "last experiment".
+  const experiments = useExperiments();
 
   const [term, setTerm] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -123,6 +142,10 @@ export function WatchlistSection({ entries, now }: { entries: readonly LogEntry[
           {items.map((item) => {
             const stats = computeWatchStats(item, entries, now);
             const isEditing = editingId === item.id;
+            const lastExperiment = lastExperimentSentence(item.term, experiments);
+            const lastExperimentId = experiments.find(
+              (exp) => exp.term === item.term && exp.status === 'completed',
+            )?.id;
             return (
               <View
                 key={item.id}
@@ -150,6 +173,17 @@ export function WatchlistSection({ entries, now }: { entries: readonly LogEntry[
                 <ThemedText type="small" themeColor="textSecondary">
                   {watchStatsSentence(item, stats)}
                 </ThemedText>
+
+                {lastExperiment && lastExperimentId ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open last ${item.term} experiment`}
+                    onPress={() => router.push(`/experiment/${lastExperimentId}`)}>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      {lastExperiment}
+                    </ThemedText>
+                  </Pressable>
+                ) : null}
 
                 {activeExperiment?.term === item.term ? (
                   <Pressable
@@ -226,6 +260,15 @@ export function WatchlistSection({ entries, now }: { entries: readonly LogEntry[
         <ThemedText type="small" themeColor="danger">
           {error}
         </ThemedText>
+      ) : null}
+
+      {experiments.length > 0 ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="See past experiments"
+          onPress={() => router.push('/experiment/history')}>
+          <ThemedText type="link">Past experiments</ThemedText>
+        </Pressable>
       ) : null}
     </View>
   );

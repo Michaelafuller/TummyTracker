@@ -6,6 +6,7 @@ import {
   daysLoggedSoFarSentence,
   endedEarlySentence,
   experimentPlanLines,
+  experimentStatusLine,
   formatDayRange,
   phaseInstruction,
   phaseStatusLine,
@@ -13,7 +14,9 @@ import {
   verdictHeadline,
   verdictNumbersSentence,
   verdictRatesSentence,
+  verdictSummaryLabel,
 } from '../copy';
+import type { Experiment } from '@/db/schema';
 import { experimentSchedule, type ExperimentEvaluation, type ExperimentLike } from '../engine';
 
 describe('formatDayRange', () => {
@@ -204,5 +207,59 @@ describe('verdictRatesSentence', () => {
         reintroductionRate: null,
       }),
     ).toBe('Rough days: before — · while avoiding — · after reintroducing —');
+  });
+});
+
+describe('verdictSummaryLabel', () => {
+  it('joins the headline and the confidence tier', () => {
+    expect(verdictSummaryLabel({ kind: 'likely-trigger', confidence: 'medium' })).toBe('Likely a trigger · medium');
+    expect(verdictSummaryLabel({ kind: 'likely-not-trigger', confidence: 'low' })).toBe('Likely not a trigger · low');
+  });
+
+  it('is just the headline for an inconclusive verdict (no confidence)', () => {
+    expect(verdictSummaryLabel({ kind: 'inconclusive', confidence: null })).toBe('Inconclusive');
+  });
+});
+
+describe('experimentStatusLine', () => {
+  const row = (overrides: Partial<Experiment> = {}): Experiment => ({
+    id: 'e1',
+    term: 'lactose',
+    startDate: '2026-09-28',
+    baselineDays: 14,
+    eliminationDays: 14,
+    challengeDays: 3,
+    observationDays: 3,
+    status: 'active',
+    verdictJson: null,
+    endedAt: null,
+    createdAt: 0,
+    updatedAt: 0,
+    ...overrides,
+  });
+
+  it('shows the live phase for an active experiment', () => {
+    expect(experimentStatusLine(row(), '2026-10-02')).toBe('Avoiding · day 5 of 14');
+    expect(experimentStatusLine(row(), '2026-10-18')).toBe('Verdict ready');
+  });
+
+  it('shows the FROZEN verdict and confidence for a completed experiment', () => {
+    const verdictJson = JSON.stringify({
+      kind: 'likely-trigger',
+      confidence: 'medium',
+      reason: 'x',
+      baselineRate: 0.7,
+      eliminationRate: 0,
+      reintroductionRate: 0.8,
+    });
+    expect(experimentStatusLine(row({ status: 'completed', verdictJson }), '2027-01-01')).toBe('Likely a trigger · medium');
+  });
+
+  it('falls back to "Completed" when a completed row has no readable verdict', () => {
+    expect(experimentStatusLine(row({ status: 'completed', verdictJson: '{oops' }), '2027-01-01')).toBe('Completed');
+  });
+
+  it('says "Ended early" for an abandoned experiment', () => {
+    expect(experimentStatusLine(row({ status: 'abandoned', endedAt: 5 }), '2026-10-02')).toBe('Ended early');
   });
 });

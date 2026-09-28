@@ -33,19 +33,11 @@ import {
   hasNotificationPermission,
   requestExperimentNotificationRefresh,
 } from '@/features/experiments/experimentNotifications';
+import { parseFrozenVerdict } from '@/features/experiments/frozenVerdict';
 import { useExperiment } from '@/features/experiments/useExperiments';
 import { useAllEntries } from '@/features/logging/useEntries';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDateInput } from '@/lib/datetime';
-
-function parseFrozenVerdict(verdictJson: string | null): ExperimentVerdict | null {
-  if (!verdictJson) return null;
-  try {
-    return JSON.parse(verdictJson) as ExperimentVerdict;
-  } catch {
-    return null;
-  }
-}
 
 function VerdictCard({ verdict, numbersSentence }: { verdict: ExperimentVerdict; numbersSentence: string }) {
   const theme = useTheme();

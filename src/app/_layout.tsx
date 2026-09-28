@@ -70,6 +70,7 @@ export default function RootLayout() {
               <Stack.Screen name="outcome/[id]" options={{ title: 'What came before' }} />
               <Stack.Screen name="experiment/new" options={{ title: 'New experiment', presentation: 'modal' }} />
               <Stack.Screen name="experiment/[id]" options={{ title: 'Experiment' }} />
+              <Stack.Screen name="experiment/history" options={{ title: 'Experiments' }} />
               <Stack.Screen
                 name="meal/component"
                 options={{ title: 'Confirm item', presentation: 'modal' }}

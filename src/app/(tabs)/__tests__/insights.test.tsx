@@ -34,6 +34,7 @@ jest.mock('@/db/repository', () => ({
 // expo-sqlite client — mock it out the same way.
 jest.mock('@/features/experiments/useExperiments', () => ({
   useActiveExperiment: () => undefined,
+  useExperiments: () => [],
 }));
 
 const TEST_INSETS: Metrics = {
