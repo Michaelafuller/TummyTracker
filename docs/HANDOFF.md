@@ -1,193 +1,158 @@
-# HANDOFF.md — Execute session: Quick-win polish bundle, GitHub #16
+# HANDOFF.md — Execute session: Medications in the doctor PDF report, GitHub #17
 
 > **Read first:** this file only. `CLAUDE.md` is auto-loaded (§4 rungs, §8
-> conventions, §9 guardrails). Six small, independent items — one commit
-> each. Touches `src/features/medications/MedicationEntryForm.tsx`,
-> `src/app/meal/review.tsx` + `src/features/logging/mealReviewFormModel.ts`,
-> `src/app/scan.tsx`, `src/components/date-time-field.tsx` +
-> `src/components/time-field.tsx`, the Collapsible test mock, deletes
-> `src/app/entry/new.tsx` + `src/features/logging/prefillStore.ts`, and
-> `scripts/generate-icons.mjs`. Plus tests.
+> conventions, §9 guardrails). Touches `src/lib/report.ts` (+ a pure helper
+> in `src/lib/medications.ts`), `src/app/settings.tsx`'s report handler, and
+> tests.
 >
 > **Pure JS/TS** — no new dependency, no schema change, no new permission,
-> no native change, no EAS build. (`@react-native-community/datetimepicker`
-> 9.1.0 is already installed and its package hasn't changed since the current
-> dev client was built; `onValueChange`/`onDismiss` are JS-level props of it.)
+> no native change, no EAS build. `expo-print` stays a dynamic import.
 
 **Planned 2026-09-27 (Opus plan session) — GitHub
-Michaelafuller/TummyTracker#16.** Owner decisions (2026-09-27): **retire**
-`entry/new` + `prefillStore`; the "restore app-icon SVG sources" item is
-**re-scoped** — the current icons are the owner's own raster exports
-(`65e7014`, `4b14f21`, `c0b26b5`), there is no vector source to restore, so
-tidy the generator script instead (§6). The stale-meal-name rule was
-owner-approved in the 2026-09-26 review.
+Michaelafuller/TummyTracker#17.** Done-when (from the issue): "the PDF has a
+medications section (what was taken, doses, days taken) for the chosen
+range." Reuse Cycle A's analysis prep in `src/lib/medications.ts`
+(`flattenDoseRecords`, `filterDoseRecordsInRange`,
+`groupDoseRecordsByMedication`) — it was built for this.
 
 ---
 
 ## 0. Invariants — read twice
 
-- **Never overwrite a name the user typed.** The meal name only follows the
-  items while it still equals the auto-generated default.
-- **The medication dose/unit snapshot rules are unchanged** (Cycle B): the
-  form still pre-fills each line from the medication's default and never
-  writes back to the medication. Only the *presentation* of the unit changes.
-- **No behavior change from the date/time picker migration** — same values
-  emitted, same dismiss/cancel handling, on both platforms.
-- **Don't touch the app-icon PNGs** (`assets/images/icon.png`,
-  `android-icon-*.png`, `splash-icon.png`, `notification-icon.png`). Running
-  `generate-icons.mjs` must leave them byte-identical.
+- **Nothing is inferred as taken** (Cycle B invariant). Every count comes
+  from logged dose rows only — never from `frequency`, start/end dates or
+  "active". The report's wording says **"logged"**: "Days with a logged
+  dose", "No doses logged in this range" — never "missed", "skipped" or an
+  adherence percentage that implies the user didn't take it.
+- **Doses print their own snapshot** (`dose` + `doseUnit` on the dose row),
+  never the medication's current default.
+- **The findings are unchanged.** `computeInsights` still runs over food
+  entries only; medications are reported, not correlated.
+- **Every user-authored string goes through `escapeHtml`** — medication
+  names, units (free-text "Other" units), frequency, event notes.
+- **Existing callers keep working:** the new parameter is optional and
+  defaults to "no medication data", which renders exactly today's report
+  (no Medications section at all — not an empty one).
 - Stage files by path — never `git add -A` / `git add .`.
 
-## 1. Medication entry: unit as text + "Change unit"
+## 1. Pure summary — `src/lib/medications.ts`
 
-`src/features/medications/MedicationEntryForm.tsx`, per selected line:
+```ts
+export interface MedicationUseSummary {
+  medicationId: string;
+  name: string;
+  isActive: boolean;
+  frequency: string | null;       // as the user typed it, for context only
+  dosesLogged: number;            // dose rows in range
+  daysWithDose: number;           // distinct LOCAL days (formatDateInput) in range with ≥ 1 dose
+  daysInRange: number;            // see below
+  /** Distinct snapshot amounts, most frequent first: [{ label: '20 mg', count: 12 }, { label: '10 mg', count: 2 }] */
+  amounts: { label: string; count: number }[];
+}
 
-- **Collapsed (default when the line has a unit):** next to/under the Dose
-  field, the unit as plain text (e.g. "mg"), plus a link-styled
-  `Pressable` **"Change unit"** (`accessibilityRole="button"`,
-  `accessibilityLabel="Change unit for <name>"`,
-  `testID="change-unit-<medicationId>"`).
-- **Expanded:** today's `SegmentedControl` of unit chips (+ "Other" and its
-  free-text field, unchanged). Expanded when the user tapped "Change unit",
-  **or** when the line's unit is empty (a medication with no default unit
-  must still be completable), **or** while the line is in "Other" mode.
-- Picking a fixed-unit chip collapses the line again (showing the new unit
-  as text). Track expanded lines in a `Set<string>` of medication ids, like
-  the existing `otherUnitIds`.
-- Validation is unchanged (a selected line still needs a unit).
+export function summarizeMedicationUse(
+  meds: readonly Medication[],
+  events: readonly MedicationEvent[],
+  doses: readonly MedicationDose[],
+  range: { start: number; end: number },   // half-open, epoch ms — the report's own window
+): MedicationUseSummary[]
+```
 
-## 2. Meal review: keep the auto-generated name in sync
+- Include every medication with **≥ 1 dose in range** (active or not), plus
+  every **active** medication with none (so a clinician sees "Omeprazole —
+  no doses logged"). Inactive medications with no doses in range are left
+  out.
+- `daysInRange`: the number of local days in `[start, end)`, clipped to the
+  medication's own `startDate`/`endDate` when set (both are local-midnight
+  epoch ms; `endDate` is inclusive of that day). Never less than
+  `daysWithDose` (a dose logged outside the stated dates still counts —
+  clamp the denominator up rather than hide it). Count days by stepping a
+  `Date` (DST-safe), not by dividing ms.
+- `amounts` label = `${formatDoseNumber(dose)} ${doseUnit}`; ties keep first-
+  seen order.
+- Order: medications with doses first (most `dosesLogged` first), then the
+  active ones with none (A–Z).
 
-- Pure helper in `src/features/logging/mealReviewFormModel.ts`:
-  ```ts
-  /** The next name after the items change: follows the items only while the
-   *  current name still equals the auto-default for the PREVIOUS items
-   *  (trimmed comparison); anything the user typed is kept as-is. */
-  export function syncAutoMealName(
-    currentName: string,
-    previous: readonly Pick<MealComponentDraft, 'name'>[],
-    next: readonly Pick<MealComponentDraft, 'name'>[],
-  ): string
-  ```
-  Empty current name counts as "auto" only when the previous default was
-  also empty (a fresh builder); a user who cleared the field on purpose with
-  items present keeps it empty.
-- `src/app/meal/review.tsx`: the screen stays mounted across "Add item"
-  (`meal/component.tsx` returns with `router.dismissTo('/meal/review')`), so
-  keep the previous components in a `useRef` and, in an effect on
-  `components`, `setState(prev => ({ ...prev, name: syncAutoMealName(prev.name,
-  prevRef.current, components) }))`, then update the ref. Servings changes
-  don't alter names, so the helper is naturally a no-op for them.
-- Applies to re-logged meals too: a re-log whose saved name equals the
-  default for its loaded items ("Rice + 1 more") follows edits ("Rice" after
-  removing Beans); a re-log of a custom-named meal ("Sunday breakfast")
-  never changes.
+## 2. Report — `src/lib/report.ts`
 
-## 3. "Add item" without the camera
+- Signature becomes
+  `buildReportHtml(entries, now, rangeDays, medications?: { meds; events; doses })`.
+  Same window as today (`start`/`end` already computed there) — pass that
+  range to `summarizeMedicationUse`.
+- **Medications section** (`<h2>Medications</h2>`), placed after the findings
+  and before the Journal, only when `medications` was passed **and** the
+  summary is non-empty:
+  - One sentence first: "Doses the user logged in this range. Only logged
+    doses are counted; a day without a logged dose may simply not have been
+    recorded."
+  - A table: **Medication** (name, + " (inactive)" when inactive) ·
+    **Doses logged** · **Days with a logged dose** ("26 of 30") · **Amounts**
+    ("20 mg ×12, 10 mg ×2", or "—") · **Frequency (as entered)** (or "—").
+  - An active medication with no doses: Doses logged "0", Days "0 of N",
+    Amounts "No doses logged in this range".
+- **Journal:** medication events in range join each day's table, in time
+  order with the log entries: Time = `formatTime12h(takenAt)` or "time not
+  set" when `!timeKnown`; Name = "Medication"; Detail = the
+  `medicationEventsToJournalItems` summary ("Omeprazole 20 mg · Ibuprofen
+  200 mg"); Notes = the event's notes. Group by day with the same
+  `groupEntriesByDay` (it only needs `loggedAt`). The "No entries in this
+  range." empty state must account for medication rows too.
+- The summary line (`summaryLine`) stays as is; add
+  `· N medication doses` to it **only** when medication data was passed and
+  N > 0.
+- Keep the CSS; add nothing beyond what the table needs.
 
-`src/app/scan.tsx`: the permission-not-granted state (`!permission.granted`)
-gains a secondary button **"Enter manually"** under "Grant access" — same
-`accessibilityLabel="Enter product manually"` and the same
-`router.replace('/meal/component')` as the camera screen's escape hatch, so
-both Home's scan path and meal review's "Add item" have a manual route
-without granting the camera. Style it like a secondary button (border,
-`backgroundElement`), not the primary fill.
+## 3. Settings — `src/app/settings.tsx` `handleCreateReport`
 
-## 4. Date/time picker: replace the deprecated `onChange`
+Fetch `listAllMedications()`, `listAllMedicationEvents()`,
+`listAllMedicationDoses()` (they exist) alongside `listLogEntries()` and pass
+them. No UI change.
 
-`src/components/date-time-field.tsx` and `src/components/time-field.tsx` use
-`DateTimePicker`'s deprecated `onChange(event, date)`. Read the installed
-types (`node_modules/@react-native-community/datetimepicker/src/index.d.ts`)
-and the Android/iOS picker sources, then move to `onValueChange(event, date)`
-for a chosen value and `onDismiss()` for cancel/dismiss, preserving today's
-behavior exactly (Android dialog closes after a pick or a cancel; iOS inline
-behavior unchanged; whatever the current code does with `event.type ===
-'dismissed'` / `'set'` maps 1:1). If `onValueChange`/`onDismiss` don't cover
-a path the current code relies on, **stop and report** rather than keeping
-`onChange` alongside.
+## 4. Tests (same change, CLAUDE.md §4)
 
-## 5. Retire `entry/new` + `prefillStore`; shared Collapsible mock
+- `src/lib/__tests__/medications.test.ts` — `summarizeMedicationUse`: counts
+  only in-range doses (half-open edges); distinct local days (two doses one
+  day = 1); inactive-with-doses included and flagged; inactive-without
+  excluded; active-without included with 0; `daysInRange` clipped by
+  start/end dates and clamped up to `daysWithDose`; a DST-crossing range
+  counts calendar days; amounts from snapshots (a later default change
+  doesn't alter them), most frequent first; ordering; frequency never
+  changes any count.
+- `src/lib/__tests__/report.test.ts` — no medications argument → no
+  "Medications" heading (existing tests untouched and green); with data →
+  section, table row values, "0 of N" + "No doses logged in this range";
+  "logged" wording present and no "missed"/"skipped"; escaping of a hostile
+  medication name, unit, frequency and event note; medication events
+  interleaved in the Journal day table by time, "time not set" for untimed;
+  empty state still correct with only medication rows; summary line gains
+  "· N medication doses" only when N > 0.
+- `settings.test.tsx` — the report handler passes the medication lists
+  (mock the three repository calls).
 
-- Delete `src/app/entry/new.tsx`, `src/features/logging/prefillStore.ts`,
-  their tests if any, and the `entry/new` `Stack.Screen` in
-  `src/app/_layout.tsx`. Grep first — **nothing else may reference them**
-  (`componentPrefillStore` is a different, live module — keep it). Don't go
-  hunting for further dead code.
-- Move the `Collapsible` stand-in from `src/app/(tabs)/__tests__/meds.test.tsx`
-  into a shared manual mock `src/components/ui/__mocks__/collapsible.tsx`
-  (same behavior and explanatory comment), and have `meds.test.tsx` use it via
-  a bare `jest.mock('@/components/ui/collapsible')`. Check that Jest resolves
-  the manual mock through the `@/` alias; if it doesn't, put the stand-in in a
-  shared test helper module and import it from the factory instead.
+## 5. Definition of done
 
-## 6. Icon generator: stop pretending to own the app icons
-
-`scripts/generate-icons.mjs`: delete the `rasterize` calls whose sources were
-removed (`icon.svg`, `icon-monochrome.svg` → `icon.png`,
-`android-icon-foreground/monochrome.png`, `splash-icon.png`,
-`notification-icon.png`) **and** the `_bg.svg` → `android-icon-background.png`
-step (it would overwrite the owner's exported background). Replace them with
-a short header comment: app/adaptive/splash/notification PNGs are hand-exported
-by the owner (commits above) and are not generated here; this script only
-produces tab icons. Delete `assets/icons/_bg.svg` only if nothing else uses
-it. Then run `node scripts/generate-icons.mjs` and confirm `git status` shows
-**no** changed PNGs (tab icons regenerate identically; if any tab PNG changes
-anyway, `git checkout` it and mention it).
-
-## 7. Tests (same change, CLAUDE.md §4)
-
-- `mealReviewFormModel` tests for `syncAutoMealName`: auto name follows add /
-  remove; typed name kept; whitespace-only difference still "auto"; cleared
-  field with items stays empty; fresh builder (empty → first item) fills in.
-- `review.test.tsx`: removing an item updates an auto name; a typed name
-  survives removing an item; re-log prefill with a custom name never changes.
-- `MedicationEntryForm` / medication entry screen tests: unit shown as text
-  with "Change unit"; tapping it shows chips; picking a chip collapses and
-  saves that unit; a medication with no default unit shows chips straight
-  away; "Other" still works; saved payload unchanged otherwise.
-- `scan` test: permission denied shows "Enter manually" → `router.replace('/meal/component')`.
-- Date/time field tests: value change and dismiss paths via the new props
-  (update the existing tests' event simulation accordingly).
-- `meds.test.tsx` green with the shared mock.
-
-## 8. Definition of done
-
-- `npm run typecheck` && `npm run lint` clean; `npm run bundle:check` clean
-  (route removed).
+- `npm run typecheck` && `npm run lint` clean; `npm run bundle:check` clean.
 - **Targeted Jest only (owner instruction — never the full suite):** every
-  test file you created, touched or whose subject you changed — including
-  `review`, `component`, `scan`, the medication entry screens,
-  `MedicationEntryForm`, `date-time-field`, `time-field` and every screen test
-  that renders `DateTimeField`/`TimeField` (grep), `meds`, `settings`,
-  `goals`, `_layout`. Paths under `(tabs)` or with `[id]` via
-  `npx jest --runTestsByPath "<path>"`.
-- Typed routes: `.expo/types/router.d.ts` (gitignored) only regenerates under
-  `npx expo start`, which you may not run. If removing `entry/new` leaves it
-  stale in a way that breaks `tsc`, edit that local file by hand to match and
-  say so; never commit it.
+  test file you created or touched + `report`, `medications`,
+  `medicationEntry`, `journal`, `settings`.
 - No `@ts-ignore`, no lint disables, no `any` without `// reason:`, no new
   deps, no schema change.
 - Do NOT run Maestro, EAS, or `npx expo start` (Metro runs on 8081 — leave
   it). Do NOT edit `flows/`, `CLAUDE.md` or `docs/`. Keep LF line endings.
-- Commits (stage by path), one per item:
-  `feat(meds): show the dose unit as text with a Change unit option` ·
-  `feat(meal): keep an auto-generated meal name in sync with its items` ·
-  `feat(scan): offer manual entry without camera permission` ·
-  `refactor(pickers): move off the deprecated DateTimePicker onChange` ·
-  `chore: retire entry/new + prefillStore; share the Collapsible test mock` ·
-  `chore(icons): generator only owns tab icons` —
+- Commits (stage by path), suggested split:
+  `feat(meds): summarize logged medication use over a date range` ·
+  `feat(report): medications section and doses in the report journal` —
   each ending `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`.
   Do NOT push.
 - Execute summary: files per commit, hashes, rung + bundle:check results,
-  targeted Jest counts, how the picker events mapped (old → new, per
-  platform), deviations with reasons, review/device-test pointers.
+  targeted Jest counts, a pasted sample of the generated Medications table
+  HTML from a test fixture, deviations with reasons, review pointers.
 
-## 9. After this (review + test session)
+## 6. After this (review + test session)
 
-- Opus review; update `flows/q-reuse-adjust.yaml` (name now follows the
-  items after Remove) and `flows/s-medication-entry.yaml` (unit chips now
-  behind "Change unit"); grep `flows/` for other unit-chip or "Add entry"
-  dependencies.
-- Device: date/time pickers on every screen that has them (entry edit, meal
-  review, BM, symptom, medication entry, Settings/Goals time chips) —
-  pick, cancel, pick again; the camera-denied manual path.
+- Opus review: §0 wording ("logged", never "missed"), snapshot amounts,
+  escaping, day counting.
+- Device (manual — the share sheet isn't Maestro-drivable reliably): log two
+  medications, one with a custom unit, one inactive with an old dose; Create
+  PDF for 30 days; check the section, the "0 of N" row, and journal rows.
+  `n-doctor-report` flow regression.
