@@ -73,9 +73,10 @@ export function MedicationEntryForm({
           .map((line) => line.medicationId),
       ),
   );
-  // Lines the user tapped "Change unit" on — expands the chip row for them.
-  // A line with no unit at all, or one already in "Other" mode, is expanded
-  // regardless of whether it's in this set (HANDOFF.md #16 §1).
+  // Lines whose chip row the user opened ("Change unit", or picking "Other" so
+  // the unit-name field stays open while they type). A line with no unit at
+  // all is expanded regardless. A medication whose DEFAULT is a custom unit
+  // ("sachet") starts collapsed like any other (HANDOFF.md #16 §1).
   const [expandedUnitIds, setExpandedUnitIds] = useState<Set<string>>(new Set());
 
   const medsById = new Map(medications.map((med) => [med.id, med] as const));
@@ -90,6 +91,9 @@ export function MedicationEntryForm({
   function handleUnitChipChange(medicationId: string, value: UnitChip | null) {
     if (value === 'other') {
       setOtherUnitIds((prev) => new Set(prev).add(medicationId));
+      // Keep the row open while the unit name is typed — otherwise the first
+      // keystroke (unit no longer empty) would collapse it mid-word.
+      setExpandedUnitIds((prev) => new Set(prev).add(medicationId));
       setLine(medicationId, { doseUnit: '' });
       return;
     }
@@ -155,9 +159,9 @@ export function MedicationEntryForm({
             if (!med) return null;
             const inOtherMode = otherUnitIds.has(med.id);
             const chipValue: UnitChip | null = inOtherMode ? 'other' : line.doseUnit ? (line.doseUnit as UnitChip) : null;
-            // Collapsed by default once the line has a unit; expanded while empty
-            // (nothing to show as text yet), in "Other" mode, or after "Change unit".
-            const unitExpanded = inOtherMode || line.doseUnit.length === 0 || expandedUnitIds.has(med.id);
+            // Collapsed by default once the line has a unit (fixed or custom);
+            // expanded while empty (nothing to show as text yet) or once opened.
+            const unitExpanded = line.doseUnit.length === 0 || expandedUnitIds.has(med.id);
 
             return (
               <View
@@ -222,7 +226,7 @@ export function MedicationEntryForm({
                       )}
                     </FormField>
 
-                    {inOtherMode ? (
+                    {unitExpanded && inOtherMode ? (
                       <FormField label="Unit name">
                         <ThemedTextInput
                           value={line.doseUnit}

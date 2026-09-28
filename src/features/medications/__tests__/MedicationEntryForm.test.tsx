@@ -232,6 +232,40 @@ describe('MedicationEntryForm — new entry', () => {
     const payload = onSubmit.mock.calls[0][0] as MedicationEntrySavePayload;
     expect(payload.doses).toEqual([{ medicationId: 'med1', dose: 2, doseUnit: 'softgel' }]);
   });
+  it('a medication whose default is a custom unit starts collapsed too, and "Change unit" opens Other', async () => {
+    const meds = [makeMedication({ id: 'med1', name: 'Electrolytes', defaultDose: 1, doseUnit: 'sachet' })];
+    const onSubmit = jest.fn();
+
+    const { findByTestId, findByText, findByLabelText, queryByLabelText } = await render(
+      <MedicationEntryForm medications={meds} initial={defaultEntryState(meds, NOW)} onSubmit={onSubmit} />,
+    );
+
+    await fireEvent.press(await findByTestId('dose-line-med1'));
+    expect(await findByText('sachet')).toBeTruthy();
+    expect(queryByLabelText('Other')).toBeNull();
+    expect(queryByLabelText('Unit for Electrolytes')).toBeNull();
+
+    await fireEvent.press(await findByTestId('change-unit-med1'));
+    expect(await findByLabelText('Unit for Electrolytes')).toBeTruthy();
+
+    await fireEvent.press(await findByLabelText('Save'));
+    const payload = onSubmit.mock.calls[0][0] as MedicationEntrySavePayload;
+    expect(payload.doses).toEqual([{ medicationId: 'med1', dose: 1, doseUnit: 'sachet' }]);
+  });
+
+  it('typing an Other unit keeps the field open after the first keystroke', async () => {
+    const meds = [makeMedication({ id: 'med1', name: 'Omeprazole' })];
+    const { findByTestId, findByLabelText } = await render(
+      <MedicationEntryForm medications={meds} initial={defaultEntryState(meds, NOW)} onSubmit={jest.fn()} />,
+    );
+
+    await fireEvent.press(await findByTestId('dose-line-med1'));
+    await fireEvent.press(await findByTestId('change-unit-med1'));
+    await fireEvent.press(await findByLabelText('Other'));
+    await fireEvent.changeText(await findByLabelText('Unit for Omeprazole'), 's');
+
+    expect(await findByLabelText('Unit for Omeprazole')).toBeTruthy();
+  });
 });
 
 describe('MedicationEntryForm — edit entry', () => {
