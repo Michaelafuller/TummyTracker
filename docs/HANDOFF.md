@@ -1,279 +1,187 @@
-# HANDOFF.md — Execute session: Elimination experiment, Cycle A (the whole loop), GitHub #19
+# HANDOFF.md — Execute session: Elimination experiment, Cycle B, GitHub #19
 
-> **Read first:** this file only. `CLAUDE.md` is auto-loaded — note §0's
-> **"repository transactions must be synchronous"** rule and the real-SQLite
-> repository test harness (use it for the new repository functions). Adds an
-> `experiment` table (**owner-approved 2026-09-27**, additive), a pure
-> experiment engine, repository + backup v5, and three screens.
+> **Read first:** this file only. `CLAUDE.md` is auto-loaded (§0: synchronous
+> repository transactions; the day check-in notification pattern; the
+> experiment rules; the real-SQLite test harness). **You are on the Cycle A
+> branch (`worktree-agent-a93006f35a36fc943`) in its worktree** — Cycle A is
+> reviewed but not merged to `main` yet (the owner's device run uses `main`).
+> Commit here; never touch the main checkout.
 >
-> **Pure JS/TS + one additive migration** — no new dependency, no new
-> permission, no native change, no EAS build. Notifications are **Cycle B**
-> (not this cycle).
+> **Pure JS/TS** — no new dependency, **no schema change**, no new permission
+> (notifications are pre-approved), no native change, no EAS build.
 
-**Planned 2026-09-27 (Opus plan session) — GitHub
-Michaelafuller/TummyTracker#19.** Done-when (issue): "I can start, follow and
-finish an experiment and get a verdict with a confidence level." Owner
-decisions (2026-09-27):
-
-1. **Standard protocol:** baseline = the **14 days before start**, read from
-   existing logs (no waiting); **avoid for 14 days** (user picks 7/14/21/28);
-   then **3 challenge days** (eat it once a day) + **3 observation days**.
-2. **Suspect = an ingredient term** matched against tags with the watchlist's
-   word-boundary rule (`matchesWatchTerm`). Starting an experiment adds the
-   term to the watchlist if absent, so save-time warnings work for free.
-3. **New `experiment` table** approved; backups → **v5**.
-4. **Loop first:** Cycle A = start, follow, reintroduce, verdict, abandon.
-   Cycle B (later) = phase notifications, past-experiment history on the
-   watchlist/Insights, experiments in the PDF, polish.
-
-Plan-session judgment (flag in the summary; owner may override): an
-experiment **rough day** = a day with ≥ 1 `isOutcome` entry **or** a "rough"
-day check-in. The correlation engine is untouched (#13 rule stands there).
+**Planned 2026-09-28 (Opus plan session) — GitHub
+Michaelafuller/TummyTracker#19, Cycle B.** Owner: "proceed with Cycle B" on
+the split agreed 2026-09-27: phase-change notifications, past-experiment
+history, experiments in the PDF, polish. Plan-session defaults (flag in the
+summary; owner may override): reminders fire at **09:00 local**; starting an
+experiment **requests notification permission** (it's a direct user action)
+but the experiment starts either way.
 
 ---
 
 ## 0. Invariants — read twice
 
-- **The correlation engine does not change** (`src/features/analysis/*`,
-  `isOutcome`). The experiment engine *reads* `isOutcome`.
-- **Everything is by local calendar day** (`'YYYY-MM-DD'` via
-  `formatDateInput`, days stepped with `Date#setDate` — never ms/86 400 000).
-- **Nothing is inferred.** Exposure = a logged food entry whose tags match
-  the term. A day with no log and no check-in is **uncovered** — never
-  counted as fine or as avoided.
-- **At most one active experiment.** Enforced in the repository (inside one
-  synchronous transaction), not just the UI.
-- **A verdict is an observation, not a diagnosis.** Copy never says
-  "you are intolerant/allergic". Always shown with its confidence and the
-  numbers behind it.
-- **Safety copy on the start screen** (verbatim, §4). The app must not
-  encourage reintroducing a food that caused a severe reaction.
-- **Finishing freezes the verdict** (`verdictJson` snapshot) so later edits
-  to old logs don't silently rewrite a finished experiment.
-- Stage files by path — never `git add -A` / `git add .`. No `await` inside a
-  `db.transaction` callback.
+- **A notification is never a record.** Tapping one opens the app; it never
+  logs a dose/food, never marks a challenge day eaten, never finishes an
+  experiment.
+- **Own slot, own cancel.** Experiment notifications use
+  `data.slot = 'experiment-phase'`; cancel/refresh filter on that slot only
+  (reminders, Goals check-in and day check-in are untouched — same test as
+  #13's `dayCheckInService`).
+- **Refreshes are serialized** (the #13 review bug: overlapping
+  cancel-then-schedule doubled the horizon). Reuse the same queue pattern as
+  `refreshDayCheckIn`.
+- **Scheduling never requests permission** — only `startExperiment`'s screen
+  does, once, at the moment the user starts.
+- **Frozen verdicts stay frozen** — history and the PDF read `verdictJson`
+  for completed experiments; they never re-evaluate a finished one.
+- **The engine does not change** (`src/features/experiments/engine.ts`
+  verdict rules, `src/features/analysis/*`).
+- Every user-authored string in the PDF goes through `escapeHtml`.
+- Stage files by path; no `await` inside a `db.transaction` callback.
 
-## 1. Schema + migration
+## 1. Phase notifications — `src/features/experiments/experimentNotifications.ts`
 
-`src/db/schema.ts`:
-
-```ts
-export const EXPERIMENT_STATUSES = ['active', 'completed', 'abandoned'] as const;
-export type ExperimentStatus = (typeof EXPERIMENT_STATUSES)[number];
-
-export const experiment = sqliteTable('experiment', {
-  id: text('id').primaryKey(),
-  term: text('term').notNull(),                       // normalized (normalizeWatchTerm)
-  startDate: text('start_date').notNull(),            // 'YYYY-MM-DD', first elimination day
-  baselineDays: integer('baseline_days').notNull(),   // 14
-  eliminationDays: integer('elimination_days').notNull(), // 7 | 14 | 21 | 28
-  challengeDays: integer('challenge_days').notNull(), // 3
-  observationDays: integer('observation_days').notNull(), // 3
-  status: text('status', { enum: EXPERIMENT_STATUSES }).notNull(),
-  verdictJson: text('verdict_json'),                  // frozen ExperimentVerdict at finish; null otherwise
-  endedAt: integer('ended_at'),                       // finish or abandon time, epoch ms
-  createdAt: integer('created_at').notNull(),
-  updatedAt: integer('updated_at').notNull(),
-});
-```
-
-Doc-comment the invariants. `npm run db:generate` → commit
-`0011_*.sql` + snapshot + journal + `migrations.js`. The SQL must be only the
-new `CREATE TABLE` (stop and report otherwise). Add a harness test that the
-table exists after migrations.
-
-## 2. Pure engine — `src/features/experiments/engine.ts` (main test target)
-
-Also: add `wilsonUpperBound(successes, n, z = 1.96)` to `src/lib/stats.ts`
-(mirror of the lower bound; 1 when n = 0), and export a small
-`entryMatchesTerm(entry, term)` from `src/lib/watchlist.ts` (food entries
-only, `matchesWatchTerm` over parsed tags — the private helper already
-there).
+Pure model (`experimentNotificationsModel.ts`, no expo import):
 
 ```ts
-export const DEFAULT_PROTOCOL = { baselineDays: 14, eliminationDays: 14, challengeDays: 3, observationDays: 3 };
-export const ELIMINATION_CHOICES = [7, 14, 21, 28] as const;
-
-export type Phase = 'elimination' | 'challenge' | 'observation' | 'ready';   // ready = observation over, verdict available
-export interface ExperimentSchedule {
-  baseline: string[]; elimination: string[]; challenge: string[]; observation: string[];
-  lastDay: string;    // last observation day
-}
-export function experimentSchedule(exp: ExperimentLike): ExperimentSchedule
-export function currentPhase(exp: ExperimentLike, todayKey: string):
-  { phase: Phase; dayOfPhase: number /* 1-based */; phaseLength: number }
-// Before startDate can't happen (start = today); treat as elimination day 1.
-
-export interface DayFacts { covered: boolean; rough: boolean; exposed: boolean }
-export function dayFacts(entries, checkIns, term): Map<string, DayFacts>
-// covered = any log entry (any type) or a check-in that day
-// rough   = any isOutcome entry that day, or a 'rough' check-in
-// exposed = any food entry that day matching the term (entryMatchesTerm)
-
-export interface PhaseStats { days: number; covered: number; rough: number; rate: number | null /* rough/covered */ }
-export interface ExperimentEvaluation {
-  baseline: PhaseStats; elimination: PhaseStats; reintroduction: PhaseStats; // reintroduction = challenge + observation days
-  slipDays: string[];            // elimination days with exposure
-  challengeExposureDays: number; // challenge days with exposure
-  verdict: ExperimentVerdict | null; // null until phase === 'ready'
-}
-export type VerdictKind = 'likely-trigger' | 'likely-not-trigger' | 'inconclusive';
-export interface ExperimentVerdict {
-  kind: VerdictKind;
-  confidence: ConfidenceTier | null;   // null for inconclusive
-  reason: string;                      // one plain sentence, e.g. "Too few days logged while avoiding it."
-  baselineRate: number | null; eliminationRate: number | null; reintroductionRate: number | null;
-}
-export function evaluateExperiment(exp, entries, checkIns, todayKey): ExperimentEvaluation
+export const EXPERIMENT_SLOT = 'experiment-phase';
+export const REMINDER_HOUR = 9;
+export interface PlannedNotification { fireAt: Date; title: string; body: string; kind: 'challenge' | 'observation' | 'ready'; dayKey: string }
+/** Every reminder for this experiment's schedule, at 09:00 local on:
+ *  each challenge day ("Challenge day 2 of 3: eat <term> once today and log it"),
+ *  the first observation day ("Back to avoiding <term> — keep logging for 3 more days"),
+ *  and the day after the last observation day ("Your <term> experiment is ready — see the verdict").
+ *  Only fire times strictly after `now` are returned. */
+export function plannedExperimentNotifications(exp: ExperimentLike, now: number): PlannedNotification[]
 ```
 
-**Elimination stats exclude contaminated days:** each slip day **and the day
-after it** are dropped from the elimination phase's `days/covered/rough`
-(the reaction window spills over). Uncovered days never count.
+Service (mirrors `src/features/checkin/dayCheckInService.ts`):
 
-**Verdict rules** (named, exported constants; evaluate in this order):
+- `refreshExperimentNotifications()` — serialized; cancel every scheduled
+  notification with our slot; if there's an active experiment, schedule each
+  planned one (`SchedulableTriggerInputTypes.DATE`, `CHANNEL_ID`),
+  `data: { slot, experimentId, kind, dayKey }`. No active experiment → just
+  the cancel. Never requests permission; if permission isn't granted,
+  scheduling simply no-ops (check `getPermissionsAsync().granted` first).
+- Call it: in `MigrationGate`'s success effect (next to the other refreshes);
+  after `startExperiment`, `abandonExperiment`, `finishExperiment` (from the
+  screens — fire-and-forget); after a backup import (Settings).
+- Start screen: after a successful start, call
+  `ensureNotificationPermission()`; if declined, the experiment screen shows
+  a `textSecondary` hint "Turn on notifications to get a reminder when each
+  phase starts." (only while active and permission isn't granted).
+- **Tap handling:** extend the Home-mounted response handling (see
+  `useDayCheckInResponses`) with a sibling hook `useExperimentNotificationResponses()`:
+  a default-action tap on one of ours → `router.push('/experiment/<id>')`
+  once per notification id, then `clearLastNotificationResponse()`. A tap
+  for an experiment that no longer exists or isn't active → do nothing.
+  Must not interfere with the day check-in hook (both read the same "last
+  response"; each ignores the other's slot).
 
-1. `inconclusive` — "Too many slips": slip days > `max(1, floor(eliminationDays × 0.15))`.
-2. `inconclusive` — "You didn't log eating it on the challenge days":
-   `challengeExposureDays === 0`.
-3. `inconclusive` — "Not enough days logged": baseline covered < 7, **or**
-   elimination covered < `max(5, ceil(0.6 × elimination days counted))`,
-   **or** reintroduction covered < 4.
-4. `inconclusive` — "No rough days before the experiment, so there was
-   nothing to improve": baseline rough = 0.
-5. With `b`, `e`, `r` the three rates: `drop = b − e`, `rise = r − e`.
-   - `likely-trigger` when `drop ≥ 0.2` **and** `rise ≥ 0.2`.
-   - `likely-not-trigger` when `drop < 0.1` **and** `rise < 0.1`.
-   - otherwise `inconclusive` — "Mixed results: …" (say which half moved).
-6. **Confidence:**
-   - trigger: `high` when `wilsonUpperBound(e)` < `wilsonLowerBound(b)`
-     **and** < `wilsonLowerBound(r)`; `medium` when exactly one of those
-     holds; else `low`.
-   - not-trigger: `medium` when elimination covered ≥ 10 and
-     reintroduction covered ≥ 5 and `challengeExposureDays ≥ 2`; else `low`
-     (absence of an effect is never `high` from one experiment).
+## 2. History
 
-## 3. Repository + backup v5
+- `src/app/experiment/history.tsx` (title "Experiments"): every experiment,
+  newest first — term, date range (`formatDayRange(startDate, lastDay)`),
+  status line: completed → frozen verdict headline + confidence
+  ("Likely a trigger · medium"); abandoned → "Ended early"; active →
+  `phaseStatusLine`. Tap → `/experiment/<id>`. Empty state "No experiments yet."
+- Insights → Watchlist item: under the stats line, the **latest finished**
+  experiment for that term, if any: "Last experiment: Likely a trigger ·
+  medium (Oct 17)" → opens it. Keep the Cycle A "Start experiment" /
+  "Experiment running" links as they are.
+- Insights → a "Past experiments" link (`accessibilityLabel="See past
+  experiments"`) under the Watchlist section, shown when ≥ 1 experiment exists.
+- Hook: `useExperiments()` (all, newest first) in `useExperiments.ts`.
 
-`src/db/repository.ts` (sync transactions — CLAUDE.md §0):
+## 3. PDF report — `src/lib/report.ts`
 
-- `startExperiment({ term, eliminationDays }, now)` → normalizes the term
-  (`normalizeWatchTerm`; invalid → throw), in **one transaction**: throw
-  `ExperimentAlreadyActiveError` if an active one exists; insert the
-  experiment (`startDate = formatDateInput(now)`, protocol defaults); insert
-  the watchlist item if the term isn't watched yet. Returns the experiment.
-- `getActiveExperiment()`, `getExperiment(id)`, `listExperiments()` (newest first).
-- `finishExperiment(id, verdict, now)` → `status: 'completed'`,
-  `verdictJson`, `endedAt`. Only from `active`.
-- `abandonExperiment(id, now)` → `status: 'abandoned'`, `endedAt`. Only from `active`.
-- `insertExperimentsPreservingIds(rows)` for restore: skip existing ids; if a
-  restored row is `active` while the device already has an active one (or an
-  earlier row in the same file is active), import it as `abandoned` with
-  `endedAt = updatedAt`. Chunked like the others.
-- Live hooks `useActiveExperiment()` / `useExperiment(id)` via `useLiveQuery`
-  in `src/features/experiments/useExperiments.ts`.
-- Backup: `entriesToJson(..., experiments = [])` → **version 5**;
-  `parseBackupJson` validates `experiments` (ids, statuses, date keys,
-  positive day counts, `verdictJson` string-or-null); v1–v4 still import;
-  Settings export/import wire it in with a summary clause like the others.
-- Real-SQLite tests (`src/db/__tests__/repository.experiments.test.ts`):
-  start adds the watchlist term once; second start throws and writes
-  nothing; finish/abandon only from active; restore precedence.
+- `buildReportHtml(entries, now, rangeDays, medications?, experiments?)` —
+  optional 5th param, same pattern as #17 (omitted → output unchanged).
+- **Experiments section** (after Medications, before Journal), only when
+  experiments were passed and at least one **overlaps the report range**
+  (its schedule from `startDate` to `lastDay` intersects the window) or is
+  active:
+  - One sentence first: "Elimination experiments the user ran. Verdicts are
+    observations from their own logs, not diagnoses."
+  - Table: **Tested** (term) · **Dates** ("Sep 28 – Oct 17") · **Status**
+    (Completed / Ended early / In progress — <phase>) · **Result**
+    (completed: headline + confidence + `verdictRatesSentence`; otherwise "—").
+  - Completed rows read the frozen `verdictJson` only.
+- `settings.tsx` report handler passes `listAllExperiments()`.
 
-## 4. Screens
+## 4. Device-test fixture — `scripts/make-experiment-fixture.mjs`
 
-- **Start — `src/app/experiment/new.tsx`** (modal, title "New experiment"),
-  opened with `?term=<term>`:
-  - "Test **lactose**" + a three-line plan built from the schedule with real
-    dates: "Avoid it: Sep 28 – Oct 11 · Eat it once a day: Oct 12 – 14 ·
-    Keep logging: Oct 15 – 17".
-  - Elimination length chips 7/14/21/28 (`SegmentedControl`, default 14).
-  - Baseline preview from `evaluateExperiment`-style facts over the 14 days
-    before today: "Your last 14 days: 9 logged, 4 rough." If covered < 7 or
-    rough = 0, a `textSecondary` warning that the verdict will likely be
-    inconclusive, and why — starting is still allowed.
-  - **Safety note (verbatim):** "Don't use this to test a food that has
-    caused a severe reaction — swelling, hives, trouble breathing or
-    vomiting. Talk to a clinician first."
-  - `PrimaryButton` "Start experiment" → `startExperiment` → replace to the
-    experiment screen. If one is already active: disabled + "Finish or end
-    your current experiment first."
-- **Follow — `src/app/experiment/[id].tsx`** (title "Experiment"):
-  - Header: "Testing **lactose**" + phase line: "Avoiding · day 5 of 14",
-    "Eat it once today · challenge day 2 of 3", "Keep logging · day 1 of 3".
-  - Today's instruction (one sentence per phase); on challenge days show
-    whether today's exposure is logged ("Logged today ✓" / "Not logged yet").
-  - Progress: slips so far ("1 slip — the day after is left out too"),
-    days logged per phase so far.
-  - "End experiment" (secondary, confirm Alert) → abandon → back.
-  - Phase `ready`: the verdict card (below) + "Finish experiment" →
-    `finishExperiment` with the evaluation's verdict.
-  - `completed`: the **frozen** verdict from `verdictJson`; `abandoned`:
-    "Ended early on <date>."
-  - **Verdict card:** headline per kind — "Likely a trigger" /
-    "Likely not a trigger" / "Inconclusive"; the confidence chip (reuse the
-    Insights colours); the reason sentence; the numbers: "Rough days: before
-    43% (6 of 14 logged) · while avoiding 7% (1 of 14) · after reintroducing
-    50% (3 of 6)"; and the disclaimer "An observation from your own logs, not
-    a diagnosis."
-- **Entry points:**
-  - Insights → Watchlist section: each item gets **"Start experiment"**
-    (`accessibilityLabel="Start experiment on <term>"`) when no experiment is
-    active; the item under test shows "Experiment running" linking to it.
-  - Home: when an experiment is active, a compact row above the backup nudge
-    — "Lactose experiment · Avoiding · day 5 of 14" (or "Verdict ready") —
-    `accessibilityLabel="Open lactose experiment"` → experiment screen. Don't
-    reuse existing Home labels.
-- Register both routes in `_layout.tsx`. Typed routes: `.expo/types/router.d.ts`
-  regenerates only under `expo start`; hand-patch locally if `tsc` needs it,
-  never commit it.
+A dependency-free Node script (ESM, like `generate-icons.mjs`) that writes a
+**backup v5 JSON** to a path given as its first argument (default
+`.qa-shots/experiment-ready-backup.json`, gitignored). Dates are computed
+**relative to the day it runs**, so the owner can generate it just before a
+device run:
 
-## 5. Tests (same change)
+- A **completed-able** experiment on `lactose`, `status: 'active'`,
+  `startDate` = 21 days ago, 14/3/3 protocol → phase `ready` today.
+- Log entries producing a clear **likely-trigger** verdict: baseline days each
+  with a lactose-tagged meal (`tagsJson: ["lactose"]`) and a bad-Bristol BM on
+  10 of 14; elimination days each with a non-lactose meal, no outcomes;
+  challenge days with a lactose meal + a bad BM on 2 of 3; observation days
+  with a meal + a bad BM on each.
+- Stable ids prefixed `fixture-` so a re-import skips duplicates.
+- A Jest test imports the script's pure builder (export it as a function the
+  script's CLI wrapper calls) and asserts: the JSON parses with
+  `parseBackupJson`, and `evaluateExperiment` on the parsed data with today's
+  key returns `kind: 'likely-trigger'`.
+- The script prints the exact `adb push` command for the owner to run (it
+  does not run adb itself).
 
-- `engine.test.ts`: schedule dates (incl. a DST-crossing start and a month
-  boundary); `currentPhase` at every boundary; `dayFacts` (covered by check-in
-  only, rough by check-in only, outcome beats a "fine" check-in, exposure only
-  from food entries); slip exclusion incl. the day after; every verdict rule
-  in order with a fixture that isolates it; confidence tiers for both
-  verdicts; `rate: null` when a phase has no covered days.
-- `stats` test for `wilsonUpperBound`; `watchlist` test for `entryMatchesTerm`.
-- Repository real-SQLite tests (§3); `backup` v5 round-trip + v4 file imports.
-- Screen tests: start (plan dates, chips, warnings, safety copy, disabled when
-  active); follow (each phase's copy, challenge-day logged indicator, end
-  confirm, ready → finish writes the verdict, completed shows the frozen
-  verdict even after entries change); Insights watchlist entry point; Home row.
+## 5. Polish
 
-## 6. Definition of done
+- Home row when the experiment is `ready`: "Lactose experiment · Verdict
+  ready" (if Cycle A doesn't already) — check and leave it if it does.
+- Anything else you notice: list it in the summary, don't do it.
 
-- `npm run typecheck`, `npm run lint` (0 warnings), `npm run bundle:check` clean.
-- **Targeted Jest only (owner instruction — never the full suite):** every
-  test file you created or touched + `backup`, `stats`, `watchlist`,
-  `dayCoverage`, `settings`, `index`, `insights`, `_layout`, all
-  `src/db/__tests__/*`. `(tabs)`/`[id]` paths via
-  `npx jest --runTestsByPath "<path>"`.
+## 6. Tests (same change)
+
+- Model: fire times for every phase boundary (incl. DST-crossing), none in
+  the past, copy strings, empty for a finished schedule.
+- Service (mock expo-notifications like `dayCheckInService.test.ts`): cancels
+  only its slot; schedules the planned set with `data`; overlapping refreshes
+  schedule once (stateful fake — copy #13's serialization test); no active
+  experiment → cancel only; permission not granted → no schedule calls.
+- Response hook: tap on ours pushes the route once and clears; other slots
+  ignored; inactive/missing experiment ignored.
+- History screen, watchlist "Last experiment" line, "Past experiments" link.
+- Report: section present/absent rules, overlap rule, frozen verdict used
+  even when entries would now evaluate differently, escaping of the term.
+- Fixture builder test (§4).
+- Settings: report passes experiments; import triggers a notification refresh.
+
+## 7. Definition of done
+
+- `npm run typecheck`, `npm run lint` (0 warnings), `npm run bundle:check`.
+- **Targeted Jest only (never the full suite):** every test file you created
+  or touched + `report`, `backup`, `settings`, `index`, `insights`,
+  `dayCheckInService`, `useDayCheckInResponses`, all
+  `src/features/experiments/__tests__/*`, `src/app/experiment/__tests__/*`.
+  `(tabs)`/`[id]`/settings paths via `npx jest --runTestsByPath "<path>"`.
 - No `@ts-ignore`, no lint disables, no `any` without `// reason:`, no new
-  deps, no schema change beyond §1.
-- Do NOT run Maestro, EAS, or `npx expo start`. Do NOT edit `flows/`,
-  `CLAUDE.md` or `docs/`. Keep LF line endings.
+  deps, no schema change, no new permission.
+- Do NOT run Maestro, EAS, `npx expo start` or `adb`. Do NOT edit `flows/`,
+  `CLAUDE.md` or `docs/`. Keep LF line endings. Don't push, don't merge.
 - Commits (stage by path), suggested split:
-  `feat(db): experiment table + additive migration 0011` ·
-  `feat(experiments): pure schedule, day facts and verdict engine` ·
-  `feat(experiments): repository, live hooks and backup v5` ·
-  `feat(experiments): start, follow and verdict screens + entry points` —
+  `feat(experiments): phase reminder notifications + tap-to-open` ·
+  `feat(experiments): experiment history and last result on the watchlist` ·
+  `feat(report): experiments section in the doctor PDF` ·
+  `test(e2e): backdated experiment fixture generator for device checks` —
   each ending `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`.
-  Do NOT push.
-- Execute summary: files per commit, hashes, the generated SQL verbatim, rung
-  results, targeted Jest counts, a worked example (fixture → evaluation →
-  verdict) pasted from a test, deviations with reasons, review pointers.
+- Execute summary: files per commit, hashes, rung results, targeted Jest
+  counts, the planned-notification list for a sample experiment (pasted from
+  a test), deviations with reasons, polish items noticed, review pointers.
 
-## 7. After this
+## 8. After this (review + test session)
 
-- Opus review: invariants, verdict rules vs §2, day math, the one-active
-  rule, frozen verdicts, safety copy; CLAUDE.md §0/§6; PROGRESS.
-- Maestro (Opus): start from the watchlist → Home row → experiment screen;
-  end early. The full ~20-day loop can't run in real time on a device — the
-  verdict paths are Jest-covered; a device check of "ready"/verdict needs
-  backdated seed data (plan it in Cycle B's test session).
-- Cycle B plan: phase-change local notifications (own slot, like the day
-  check-in), experiment history on the watchlist item and Insights,
-  experiments in the PDF report, polish.
+- Opus review; CLAUDE.md §0 note (experiment notifications), PROGRESS.
+- Flow (Opus): generate the fixture → `adb push` → Settings → Import →
+  pick the file → Home row "Verdict ready" → experiment screen verdict
+  "Likely a trigger" → Finish → history shows it → watchlist "Last experiment".
+- Merge Cycle A + B to `main` after the owner's #13–#18 device run.
