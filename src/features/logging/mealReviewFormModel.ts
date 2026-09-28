@@ -38,6 +38,24 @@ export interface MealReviewBuildResult {
   errors: MealReviewErrors;
 }
 
+/**
+ * The next name after the items change: follows the items only while the
+ * current name still equals the auto-default for the PREVIOUS items (trimmed
+ * comparison); anything the user typed is kept as-is (HANDOFF.md #16 §2).
+ *
+ * Empty current name counts as "auto" only when the previous default was
+ * also empty (a fresh builder); a user who cleared the field on purpose with
+ * items present keeps it empty.
+ */
+export function syncAutoMealName(
+  currentName: string,
+  previous: readonly Pick<MealComponentDraft, 'name'>[],
+  next: readonly Pick<MealComponentDraft, 'name'>[],
+): string {
+  const wasAuto = currentName.trim() === defaultMealName(previous).trim();
+  return wasAuto ? defaultMealName(next) : currentName;
+}
+
 /** Default meal-level state — name prefilled from the components, "now" for date/time. */
 export function defaultMealReviewState(components: readonly MealComponentDraft[]): MealReviewFormState {
   const now = Date.now();

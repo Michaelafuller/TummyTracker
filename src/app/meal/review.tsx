@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { DateTimeField } from '@/components/date-time-field';
@@ -18,6 +18,7 @@ import { useMealBuilderStore } from '@/features/logging/mealBuilderStore';
 import {
   buildMealEntry,
   defaultMealReviewState,
+  syncAutoMealName,
   type MealReviewErrors,
   type MealReviewFormState,
 } from '@/features/logging/mealReviewFormModel';
@@ -70,6 +71,21 @@ export default function MealReviewScreen() {
   }));
   const [errors, setErrors] = useState<MealReviewErrors>({});
   const [submitting, setSubmitting] = useState(false);
+
+  // This screen stays mounted across "Add item" (meal/component.tsx returns via
+  // router.dismissTo('/meal/review')), so keep the auto-generated name in sync
+  // with the items as they change (HANDOFF.md #16 §2) — never overwriting a
+  // name the user typed themselves.
+  const previousComponentsRef = useRef(components);
+  useEffect(() => {
+    // Capture the previous value before the ref is overwritten below — the
+    // setState updater runs later (React defers it), so mutating the ref
+    // first would make `previous` and `next` the same array by the time the
+    // updater actually reads it.
+    const previousComponents = previousComponentsRef.current;
+    setState((prev) => ({ ...prev, name: syncAutoMealName(prev.name, previousComponents, components) }));
+    previousComponentsRef.current = components;
+  }, [components]);
 
   const aggregate = useMemo(() => aggregateComponents(components), [components]);
   const noteCount = state.notes.length;

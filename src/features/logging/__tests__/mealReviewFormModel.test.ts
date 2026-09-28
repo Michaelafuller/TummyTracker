@@ -1,5 +1,5 @@
 import type { MealComponentDraft } from '@/lib/mealAggregate';
-import { buildMealEntry, defaultMealReviewState, type MealReviewFormState } from '../mealReviewFormModel';
+import { buildMealEntry, defaultMealReviewState, syncAutoMealName, type MealReviewFormState } from '../mealReviewFormModel';
 
 function draft(name: string, overrides: Partial<MealComponentDraft> = {}): MealComponentDraft {
   return {
@@ -40,6 +40,44 @@ describe('defaultMealReviewState', () => {
     expect(state.name).toBe('Peas + 1 more');
     expect(state.type).toBe('meal');
     expect(state.mealSlot).toBeNull();
+  });
+});
+
+describe('syncAutoMealName', () => {
+  it('follows the auto name when an item is removed', () => {
+    const previous = [draft('Rice'), draft('Beans')];
+    const next = [draft('Rice')];
+    expect(syncAutoMealName('Rice + 1 more', previous, next)).toBe('Rice');
+  });
+
+  it('follows the auto name when an item is added', () => {
+    const previous = [draft('Rice')];
+    const next = [draft('Rice'), draft('Beans')];
+    expect(syncAutoMealName('Rice', previous, next)).toBe('Rice + 1 more');
+  });
+
+  it('keeps a name the user typed, even if the items change', () => {
+    const previous = [draft('Rice'), draft('Beans')];
+    const next = [draft('Rice')];
+    expect(syncAutoMealName('Sunday breakfast', previous, next)).toBe('Sunday breakfast');
+  });
+
+  it('still counts as "auto" when the difference from the default is only whitespace', () => {
+    const previous = [draft('Rice'), draft('Beans')];
+    const next = [draft('Rice')];
+    expect(syncAutoMealName(' Rice + 1 more ', previous, next)).toBe('Rice');
+  });
+
+  it('keeps a name the user cleared on purpose empty, rather than re-filling it', () => {
+    const previous = [draft('Rice'), draft('Beans')];
+    const next = [draft('Rice')];
+    expect(syncAutoMealName('', previous, next)).toBe('');
+  });
+
+  it('fills in the auto name for a fresh builder going from no items to the first item', () => {
+    const previous: MealComponentDraft[] = [];
+    const next = [draft('Rice')];
+    expect(syncAutoMealName('', previous, next)).toBe('Rice');
   });
 });
 

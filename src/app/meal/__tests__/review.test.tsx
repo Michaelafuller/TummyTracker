@@ -137,6 +137,39 @@ describe('MealReviewScreen', () => {
   });
 });
 
+describe('MealReviewScreen auto name sync (HANDOFF.md #16 §2)', () => {
+  it('removing an item updates an auto-generated name to match', async () => {
+    const { getByLabelText, getByDisplayValue } = await render(<MealReviewScreen />);
+    expect(getByDisplayValue('Peas + 1 more')).toBeTruthy();
+
+    await fireEvent.press(getByLabelText('Remove Rice from meal'));
+
+    expect(getByDisplayValue('Peas')).toBeTruthy();
+  });
+
+  it('a name the user typed survives removing an item', async () => {
+    const { getByLabelText, getByDisplayValue } = await render(<MealReviewScreen />);
+    await fireEvent.changeText(getByLabelText('Meal name'), 'My salad');
+
+    await fireEvent.press(getByLabelText('Remove Rice from meal'));
+
+    expect(getByDisplayValue('My salad')).toBeTruthy();
+  });
+
+  it('a re-logged meal with a custom name never changes when an item is removed', async () => {
+    useMealBuilderStore.setState({
+      components: [draft('Oatmeal', { calories: 150 }), draft('Banana', { calories: 90 })],
+      reviewPrefill: { name: 'Sunday breakfast', type: 'meal', mealSlot: 'breakfast' },
+    });
+    const { getByLabelText, getByDisplayValue } = await render(<MealReviewScreen />);
+    expect(getByDisplayValue('Sunday breakfast')).toBeTruthy();
+
+    await fireEvent.press(getByLabelText('Remove Banana from meal'));
+
+    expect(getByDisplayValue('Sunday breakfast')).toBeTruthy();
+  });
+});
+
 describe('MealReviewScreen reviewPrefill (re-log from history)', () => {
   it('populates the name field and meal slot from reviewPrefill', async () => {
     useMealBuilderStore.setState({
