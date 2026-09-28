@@ -1,0 +1,176 @@
+appId: com.tummytracker.app.dev
+# X — The multi-step save paths after the transaction fix (GitHub #18,
+# 2026-09-27). Every repository write that spans several rows now runs as a
+# real transaction (synchronous callbacks). Behavior only differs on a
+# mid-write failure, which Jest covers (repository.atomicity.test.ts); this
+# flow proves the happy paths still write everything on the device's real
+# SQLite and survive a relaunch:
+#   - Meal with two items (createMealWithComponents) → both items saved
+#   - Delete one item (deleteMealComponentAndReaggregate) → totals re-aggregate
+#   - Medication entry (createMedicationEvent) → edit its dose
+#     (updateMedicationEvent replaces the dose rows) → exactly the new dose,
+#     no leftover old one
+#   - Relaunch → all of it persisted
+---
+- launchApp:
+    clearState: true
+    permissions:
+      camera: allow
+- runFlow: _helpers/reconnect-dev-client.yaml
+
+# --- Meal: Rice 200 + Beans 100 ---
+- tapOn: "Add an entry manually"
+- tapOn: "Component name"
+- inputText: "Rice"
+- runFlow: _helpers/dismiss-keyboard.yaml
+- scrollUntilVisible:
+    element:
+      text: "Calories"
+    direction: DOWN
+    centerElement: true
+- tapOn: "Calories"
+- inputText: "200"
+- runFlow: _helpers/dismiss-keyboard.yaml
+- scrollUntilVisible:
+    element:
+      text: "Add & scan next"
+    direction: DOWN
+- tapOn: "Add & scan next"
+- waitForAnimationToEnd
+- tapOn: "Enter product manually"
+- waitForAnimationToEnd
+- tapOn: "Component name"
+- inputText: "Beans"
+- runFlow: _helpers/dismiss-keyboard.yaml
+- scrollUntilVisible:
+    element:
+      text: "Calories"
+    direction: DOWN
+    centerElement: true
+- tapOn: "Calories"
+- inputText: "100"
+- runFlow: _helpers/dismiss-keyboard.yaml
+- scrollUntilVisible:
+    element:
+      text: "Finish meal"
+    direction: DOWN
+- tapOn: "Finish meal"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "Save meal"
+    direction: DOWN
+- tapOn: "Save meal"
+- waitForAnimationToEnd
+
+# Both items were written with the meal.
+- tapOn:
+    id: "tab-journal"
+- waitForAnimationToEnd
+- tapOn:
+    id: "entry-row-rice-1-more"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "Rice · 1× serving · 200 kcal"
+    direction: DOWN
+- assertVisible: "Beans · 1× serving · 100 kcal"
+
+# --- Delete Beans via its editor → the meal re-aggregates to 200 ---
+- tapOn: "Edit Beans"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "Save changes"
+    direction: DOWN
+- tapOn: "Delete"
+- assertVisible: "Remove from this meal?"
+- tapOn: "Remove"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "Delete entry"
+    direction: DOWN
+- assertNotVisible: "In this meal"
+- scrollUntilVisible:
+    element:
+      text: "200"
+    direction: UP
+
+# --- Medication entry: log Omeprazole 20 mg, then edit it to 40 mg ---
+- tapOn:
+    id: "tab-meds"
+- waitForAnimationToEnd
+- tapOn: "Add medication"
+- tapOn: "Medication name"
+- inputText: "Omeprazole"
+- runFlow: _helpers/dismiss-keyboard.yaml
+- tapOn: "Default dose"
+- inputText: "20"
+- runFlow: _helpers/dismiss-keyboard.yaml
+- tapOn: "mg"
+- scrollUntilVisible:
+    element:
+      text: "Save"
+    direction: DOWN
+- tapOn: "Save"
+- waitForAnimationToEnd
+- tapOn: "Create entry"
+- waitForAnimationToEnd
+- tapOn: "Took Omeprazole"
+- scrollUntilVisible:
+    element:
+      text: "Save"
+    direction: DOWN
+- tapOn: "Save"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: ".*Omeprazole 20 mg.*"
+    direction: DOWN
+- tapOn: ".*Omeprazole 20 mg.*"
+- waitForAnimationToEnd
+- tapOn: "Dose of Omeprazole"
+- repeat:
+    times: 2
+    commands:
+      - pressKey: Backspace
+- inputText: "40"
+- runFlow: _helpers/dismiss-keyboard.yaml
+- scrollUntilVisible:
+    element:
+      text: "Save changes"
+    direction: DOWN
+- tapOn: "Save changes"
+- waitForAnimationToEnd
+
+# Exactly the new dose — the old dose row was replaced, not left behind.
+- scrollUntilVisible:
+    element:
+      text: ".*Omeprazole 40 mg.*"
+    direction: DOWN
+- assertNotVisible: ".*Omeprazole 20 mg.*"
+
+# --- Relaunch: everything persisted ---
+- stopApp
+- launchApp
+- runFlow: _helpers/reconnect-dev-client.yaml
+- tapOn:
+    id: "tab-meds"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: ".*Omeprazole 40 mg.*"
+    direction: DOWN
+- assertNotVisible: ".*Omeprazole 20 mg.*"
+- tapOn:
+    id: "tab-journal"
+- waitForAnimationToEnd
+- tapOn:
+    id: "entry-row-rice-1-more"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "Delete entry"
+    direction: DOWN
+- assertNotVisible: "In this meal"

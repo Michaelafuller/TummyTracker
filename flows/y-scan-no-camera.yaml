@@ -1,0 +1,53 @@
+appId: com.tummytracker.app.dev
+# Y — Manual entry without camera permission (GitHub #16, 2026-09-27).
+# Every other flow launches with the camera allowed; this one denies it.
+#   - Home "Scan a barcode" → "Camera access needed" now offers
+#     "Enter manually" → the component form opens
+#   - Meal review "Add item" → same screen → manual path again, so a second
+#     item can be added without granting the camera
+---
+- launchApp:
+    clearState: true
+    permissions:
+      camera: deny
+- runFlow: _helpers/reconnect-dev-client.yaml
+
+- tapOn: "Scan a barcode"
+- waitForAnimationToEnd
+- assertVisible: "Camera access needed"
+- assertVisible: "Grant camera permission"
+- tapOn: "Enter product manually"
+- waitForAnimationToEnd
+- assertVisible: "Component name"
+
+# First item, then on to review.
+- tapOn: "Component name"
+- inputText: "Toast"
+- runFlow: _helpers/dismiss-keyboard.yaml
+- scrollUntilVisible:
+    element:
+      text: "Finish meal"
+    direction: DOWN
+- tapOn: "Finish meal"
+- waitForAnimationToEnd
+- assertVisible:
+    id: "component-0"
+
+# Review's "Add item" also reaches a manual path without the camera.
+- tapOn:
+    id: "review-add-item"
+- waitForAnimationToEnd
+- assertVisible: "Camera access needed"
+- tapOn: "Enter product manually"
+- waitForAnimationToEnd
+- tapOn: "Component name"
+- inputText: "Jam"
+- runFlow: _helpers/dismiss-keyboard.yaml
+- scrollUntilVisible:
+    element:
+      text: "Finish meal"
+    direction: DOWN
+- tapOn: "Finish meal"
+- waitForAnimationToEnd
+- assertVisible:
+    id: "component-1"

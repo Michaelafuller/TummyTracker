@@ -71,6 +71,11 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   dose) + one active with no doses → Create PDF, 30 days → Medications table
   ("N of 30", "No doses logged in this range", amounts), dose rows in the
   Journal by time. Regression: `n-doctor-report`. JS-only.
+- **New-feature Maestro set (owner run, 2026-09-27):** `t-day-check-in` (#13),
+  `u-backup-nudge` (#14), `v-what-came-before` (#15), `q-reuse-adjust` +
+  `s-medication-entry` + `y-scan-no-camera` (#16), `w-report-medications`
+  (#17), `x-atomic-saves` (#18) — all written while the device was
+  disconnected, so expect small flow-side fixes on the first run.
 - **Owed device check — atomic repository writes (GH #18, 2026-09-27):**
   behavior only changes on a mid-write failure, so a regression of the save
   paths is enough: `q-reuse-adjust`, `j-component-drilldown` (edit/delete a

@@ -1,0 +1,87 @@
+appId: com.tummytracker.app.dev
+# W — Medications in the doctor PDF (GitHub #17, 2026-09-27).
+#   - Seed a meal, two active medications, one logged dose (Omeprazole)
+#   - Settings → Create PDF report (30 days) → the report builds with the
+#     medication data and the OS share sheet opens (no Update-required fallback)
+# MANUAL — PDF content (Maestro can't read the PDF): share it to Drive/Files
+# and check the Medications table: "Omeprazole · 1 · 1 of 30 · 20 mg ×1 ·
+# once daily" and "Ibuprofen · 0 · 0 of 30 · No doses logged in this range";
+# the Journal day shows a "Medication" row with "Omeprazole 20 mg" in time
+# order; nowhere says "missed" or "skipped".
+---
+- launchApp:
+    clearState: true
+- runFlow: _helpers/reconnect-dev-client.yaml
+- runFlow: _helpers/seed-two-meals.yaml
+
+# --- Two medications: Omeprazole 20 mg once daily, Ibuprofen 400 mg ---
+- tapOn:
+    id: "tab-meds"
+- waitForAnimationToEnd
+- tapOn: "Add medication"
+- tapOn: "Medication name"
+- inputText: "Omeprazole"
+- runFlow: _helpers/dismiss-keyboard.yaml
+- tapOn: "Default dose"
+- inputText: "20"
+- runFlow: _helpers/dismiss-keyboard.yaml
+- tapOn: "mg"
+- tapOn: "Frequency"
+- inputText: "once daily"
+- runFlow: _helpers/dismiss-keyboard.yaml
+- scrollUntilVisible:
+    element:
+      text: "Save"
+    direction: DOWN
+- tapOn: "Save"
+- waitForAnimationToEnd
+
+- tapOn: "Add medication"
+- tapOn: "Medication name"
+- inputText: "Ibuprofen"
+- runFlow: _helpers/dismiss-keyboard.yaml
+- tapOn: "Default dose"
+- inputText: "400"
+- runFlow: _helpers/dismiss-keyboard.yaml
+- tapOn: "mg"
+- scrollUntilVisible:
+    element:
+      text: "Save"
+    direction: DOWN
+- tapOn: "Save"
+- waitForAnimationToEnd
+
+# --- Log one Omeprazole dose (Ibuprofen stays at zero) ---
+- tapOn: "Create entry"
+- waitForAnimationToEnd
+- tapOn: "Took Omeprazole"
+- scrollUntilVisible:
+    element:
+      text: "Save"
+    direction: DOWN
+- tapOn: "Save"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: ".*Omeprazole 20 mg.*"
+    direction: DOWN
+
+# --- Build the PDF with medication data ---
+- tapOn:
+    id: "open-settings"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "Create PDF report"
+    direction: DOWN
+    centerElement: true
+- tapOn: "Create PDF report"
+- waitForAnimationToEnd:
+    timeout: 5000
+
+- assertVisible: "Sharing 1 file"
+- assertNotVisible: "Update required"
+
+- back
+- waitForAnimationToEnd
+- assertVisible: "Doctor report"
