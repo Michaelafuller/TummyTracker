@@ -2,10 +2,8 @@ import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { Resvg } from '@resvg/resvg-js';
 
 function rasterize(svgPath, outputPath, width, height, options = {}) {
-  // Some sources (the old icon.svg / icon-monochrome.svg) were deleted once the
-  // real app icon PNGs were committed directly (65e7014) — skip them instead of
-  // throwing, so this script still runs end-to-end for the assets that remain
-  // (tab icons in particular). Don't recreate or change the app icons here.
+  // Defensive: skip rather than throw if a tab-icon source ever goes missing,
+  // so one bad path doesn't stop the rest of this script from running.
   if (!existsSync(svgPath)) {
     console.warn(`  – skipped (missing source): ${svgPath}`);
     return;
@@ -20,31 +18,12 @@ function rasterize(svgPath, outputPath, width, height, options = {}) {
   console.log(`  ✓ ${outputPath} (${width}×${height ?? width})`);
 }
 
-console.log('Generating app icons…');
-
-// Main app icon. icon.svg's background is a rounded rect (rx=200) that doesn't
-// cover the square canvas's corners, so those render transparent — fine for
-// Android (its own adaptive-icon mask clips it) but iOS requires a fully
-// opaque icon (HANDOFF 1.5). Composite over the brand background color (same
-// as the Android adaptive background) so the corners are opaque.
-rasterize('assets/icons/icon.svg', 'assets/images/icon.png', 1024, undefined, {
-  background: '#0D1C20',
-});
-
-// Android adaptive icon layers
-rasterize('assets/icons/icon.svg', 'assets/images/android-icon-foreground.png', 1024);
-rasterize('assets/icons/icon-monochrome.svg', 'assets/images/android-icon-monochrome.png', 1024);
-
-// Background is a solid colour — write a minimal SVG inline
-const bgSvg = '<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><rect width="1024" height="1024" fill="#0D1C20"/></svg>';
-writeFileSync('assets/icons/_bg.svg', bgSvg);
-rasterize('assets/icons/_bg.svg', 'assets/images/android-icon-background.png', 1024);
-
-// Splash icon (centred on transparent — use the monochrome style at 200px)
-rasterize('assets/icons/icon-monochrome.svg', 'assets/images/splash-icon.png', 200);
-
-// Notification icon: white silhouette, 96×96 (Android requirement)
-rasterize('assets/icons/icon-monochrome.svg', 'assets/images/notification-icon.png', 96);
+// The app icon, Android adaptive-icon layers, splash icon, and notification
+// icon are hand-exported raster PNGs the owner committed directly (65e7014,
+// 4b14f21, c0b26b5) — there's no vector source for them anymore, and this
+// script must never overwrite them (HANDOFF.md #16 §6). It only generates the
+// tab icons below.
+console.log('Generating tab icons…');
 
 // Tab icons — white silhouettes, template-rendered by NativeTabs
 const tabIconSizes = [
