@@ -63,4 +63,11 @@ describe('migrations', () => {
     expect(sql).not.toMatch(/drop table/i);
     expect(sql).not.toMatch(/alter table `log_entry`/i);
   });
+
+  it('0011 creates the experiment table additively, touching no existing table (GitHub #19)', () => {
+    const sql = readMigration('0011');
+    expect(sql).toMatch(/create table `experiment`/i);
+    expect(sql).not.toMatch(/drop table/i);
+    expect(sql).not.toMatch(/alter table/i);
+  });
 });

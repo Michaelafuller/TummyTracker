@@ -241,3 +241,49 @@ export const dayCheckIn = sqliteTable('day_check_in', {
 });
 export type DayCheckIn = typeof dayCheckIn.$inferSelect;
 export type NewDayCheckIn = typeof dayCheckIn.$inferInsert;
+
+/**
+ * An elimination experiment (GitHub #19, Cycle A). Invariants (see
+ * `src/features/experiments/engine.ts` for the schedule/verdict math this
+ * table drives):
+ * - `term` is a normalized watch term (`normalizeWatchTerm`) — starting an
+ *   experiment adds it to the watchlist if it isn't already watched.
+ * - `startDate` ('YYYY-MM-DD') is the first elimination day; the 14-day
+ *   baseline is read from existing logs BEFORE it, never a waiting period.
+ * - At most one `active` row at a time — enforced in the repository
+ *   (`startExperiment`), not just here.
+ * - `verdictJson` is null until `finishExperiment` freezes the evaluation's
+ *   verdict at that moment — later edits to old log entries must never
+ *   silently change a completed experiment's verdict.
+ * - `endedAt` is set by `finishExperiment` (completed) or `abandonExperiment`
+ *   (abandoned); null while `active`.
+ */
+export const EXPERIMENT_STATUSES = ['active', 'completed', 'abandoned'] as const;
+export type ExperimentStatus = (typeof EXPERIMENT_STATUSES)[number];
+
+export const experiment = sqliteTable('experiment', {
+  id: text('id').primaryKey(),
+  // Normalized (normalizeWatchTerm) suspect ingredient term.
+  term: text('term').notNull(),
+  // 'YYYY-MM-DD', local calendar day — first elimination day.
+  startDate: text('start_date').notNull(),
+  // Always 14 (DEFAULT_PROTOCOL) — stored per-row so a future protocol change
+  // never rewrites an in-progress experiment's own schedule.
+  baselineDays: integer('baseline_days').notNull(),
+  // User's choice: 7 | 14 | 21 | 28 (ELIMINATION_CHOICES).
+  eliminationDays: integer('elimination_days').notNull(),
+  // Always 3 (DEFAULT_PROTOCOL) — see baselineDays comment.
+  challengeDays: integer('challenge_days').notNull(),
+  // Always 3 (DEFAULT_PROTOCOL) — see baselineDays comment.
+  observationDays: integer('observation_days').notNull(),
+  status: text('status', { enum: EXPERIMENT_STATUSES }).notNull(),
+  // Frozen ExperimentVerdict (JSON) set once, at finish; null otherwise.
+  verdictJson: text('verdict_json'),
+  // Epoch ms — set by finishExperiment/abandonExperiment; null while active.
+  endedAt: integer('ended_at'),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+export type Experiment = typeof experiment.$inferSelect;
+export type NewExperiment = typeof experiment.$inferInsert;

@@ -23,6 +23,7 @@ import { db, sqlite } from '../client';
 import migrations from '../migrations/migrations';
 import {
   dayCheckIn,
+  experiment,
   goal,
   logEntry,
   mealComponent,
@@ -50,6 +51,7 @@ const APP_TABLES = [
   medicationEvent,
   medicationDose,
   dayCheckIn,
+  experiment,
 ];
 
 /** Deletes every row from every app table. Call in `beforeEach` for a clean slate within one file's shared in-memory DB. */
