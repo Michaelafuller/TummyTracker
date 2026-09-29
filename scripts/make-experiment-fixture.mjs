@@ -24,6 +24,11 @@ const PROTOCOL = { baselineDays: 14, eliminationDays: 14, challengeDays: 3, obse
 /** The experiment started this many days before "today" — 14 + 3 + 3 = 20
  * schedule days (start … start+19), so today is the first "ready" day. */
 const STARTED_DAYS_AGO = 20;
+/** Baseline days (of the first rough ones) with an ibuprofen dose — for the
+ * #20 Insights check: a "Medications linked to rough days" finding (the dose
+ * day and the next day are all rough) and a confounder caveat on the lactose
+ * ingredient finding (7 of its 12 hit meals fall in ibuprofen's window). */
+const IBUPROFEN_DOSE_DAYS = 6;
 /** Baseline days (of 14) with a bad BM, and challenge days (of 3) with one. Observation days always have one. */
 const BASELINE_BAD_DAYS = 10;
 const CHALLENGE_BAD_DAYS = 2;
@@ -138,14 +143,55 @@ export function buildExperimentFixture(todayKey = keyOf(new Date())) {
     entries.push(badBm(`fixture-observation-${day}-bm`, day));
   }
 
+  // Ibuprofen 200 mg at 07:00 on the first IBUPROFEN_DOSE_DAYS baseline days.
+  const baselineStart = addDays(startDate, -PROTOCOL.baselineDays);
+  const medicationEvents = [];
+  const medicationDoses = [];
+  for (let i = 0; i < IBUPROFEN_DOSE_DAYS; i++) {
+    const day = addDays(baselineStart, i);
+    const takenAt = at(day, 7);
+    medicationEvents.push({
+      id: `fixture-ibuprofen-event-${day}`,
+      takenAt,
+      timeKnown: true,
+      notes: null,
+      createdAt: takenAt,
+      updatedAt: takenAt,
+    });
+    medicationDoses.push({
+      id: `fixture-ibuprofen-dose-${day}`,
+      eventId: `fixture-ibuprofen-event-${day}`,
+      medicationId: 'fixture-medication-ibuprofen',
+      dose: 200,
+      doseUnit: 'mg',
+      createdAt: takenAt,
+      updatedAt: takenAt,
+    });
+  }
+  const baselineStartedAt = at(baselineStart, 6);
+
   const startedAt = at(startDate, 8);
   return {
     version: 5,
     entries,
     mealComponents: [],
-    medications: [],
-    medicationEvents: [],
-    medicationDoses: [],
+    medications: [
+      {
+        id: 'fixture-medication-ibuprofen',
+        name: 'Ibuprofen',
+        defaultDose: 200,
+        doseUnit: 'mg',
+        frequency: 'as needed',
+        startDate: null,
+        endDate: null,
+        isActive: true,
+        notes: null,
+        createdAt: baselineStartedAt,
+        updatedAt: baselineStartedAt,
+      },
+    ],
+    medicationEvents,
+    medicationDoses,
     dayCheckIns: [],
     experiments: [
       {

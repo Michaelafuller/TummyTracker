@@ -153,6 +153,18 @@
   the PDF read only the frozen verdict. Device verdict path:
   `node scripts/make-experiment-fixture.mjs` → `adb push` → import (flows
   `za-…`, `zb-…`).
+- **Medications in the correlation engine (owner-decided 2026-09-28, GitHub
+  #20).** A separate day-level module (`src/features/analysis/medications.ts`)
+  — the food engine's numbers are untouched. Exposure = each logged dose's
+  day + the next day; a built-in antibiotic name list
+  (`src/lib/medicationClasses.ts`, heuristic) counts 7 days after each dose.
+  Rough day = an `isOutcome` entry only (check-ins count as coverage, never
+  roughness — the #13 rule). Only covered days are compared; "taken nearly
+  every day" and "too few days" get notes, not findings. Confounders are a
+  **caveat only** on food/ingredient/combination cards ("N of the M meals
+  followed by a rough outcome were eaten while you were taking X"), shown
+  when ≥ 2 and ≥ half of the hit meals fall in one medication's window.
+  Insights only (not the PDF or "What came before").
 - **Real-SQLite repository tests (2026-09-27, GitHub #18).** `jest/expo-sqlite-node.ts`
   is a Jest-only fake `expo-sqlite` backed by Node's built-in `node:sqlite`
   (**Node ≥ 22.13 to run the tests**; no dependency). A DB test file starts

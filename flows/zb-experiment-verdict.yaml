@@ -7,6 +7,9 @@ appId: com.tummytracker.app.dev
 #   - Finish → the verdict is frozen; the Home row is gone
 #   - Insights → the watchlist item shows "Last experiment: Likely a trigger…"
 #   - Past experiments lists it
+#   - #20 (same fixture): Insights shows "Medications linked to rough days"
+#     with the ibuprofen finding, and the lactose ingredient card carries the
+#     confounder caveat
 ---
 - launchApp
 - runFlow: _helpers/reconnect-dev-client.yaml
@@ -52,3 +55,22 @@ appId: com.tummytracker.app.dev
 - waitForAnimationToEnd
 - assertVisible: "Experiments"
 - assertVisible: "Open lactose experiment, .*"
+- back
+- waitForAnimationToEnd
+
+# --- #20: medications in Insights (the fixture doses ibuprofen on 6 rough days) ---
+- scrollUntilVisible:
+    element:
+      text: "7 of the 12 meals followed by a rough outcome were eaten while you were taking Ibuprofen\."
+    direction: UP
+    centerElement: true
+- scrollUntilVisible:
+    element:
+      text: "Medications linked to rough days"
+    direction: DOWN
+- scrollUntilVisible:
+    element:
+      text: "7 of 7 days on or after Ibuprofen were rough.*"
+    direction: DOWN
+    centerElement: true
+- assertVisible: "High confidence · 7 days"

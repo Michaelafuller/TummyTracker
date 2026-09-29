@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { parseBackupJson } from '@/lib/backup';
+import { findingInstances } from '@/features/analysis/drilldown';
+import { analyzeMedicationDays, confounderCaveat, medicationExposureDays } from '@/features/analysis/medications';
 import { currentPhase, evaluateExperiment, experimentSchedule } from '../engine';
 
 // The fixture generator is a dependency-free Node ESM script (scripts/
@@ -70,6 +72,20 @@ describe('scripts/make-experiment-fixture.mjs', () => {
     expect(experimentSchedule(exp).lastDay).toBe('2026-09-27');
     expect(currentPhase(exp, '2026-09-27').phase).toBe('observation');
     expect(currentPhase(exp, '2026-09-28').phase).toBe('ready');
+  });
+
+  it('also yields the #20 Insights checks: an ibuprofen finding and a caveat on the lactose finding', () => {
+    const parsed = parseBackupJson(generate('2026-09-28').text);
+    if (!parsed.ok) throw new Error(parsed.error);
+    const { findings } = analyzeMedicationDays(
+      parsed.entries, parsed.dayCheckIns, parsed.medications, parsed.medicationEvents, parsed.medicationDoses,
+    );
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({ name: 'Ibuprofen', exposedDays: 7, exposedRough: 7, confidence: 'high' });
+
+    const exposure = medicationExposureDays(parsed.medications, parsed.medicationEvents, parsed.medicationDoses);
+    const caveat = confounderCaveat(findingInstances(parsed.entries, 'tag', 'lactose'), exposure, parsed.medications);
+    expect(caveat).toMatchObject({ name: 'Ibuprofen', overlapping: 7, hits: 12 });
   });
 
   it('gives every entry and the experiment a stable, unique fixture- id', () => {

@@ -2,7 +2,8 @@ appId: com.tummytracker.app.dev
 # ZA — Load the backdated experiment fixture (GitHub #19 Cycle B, 2026-09-28).
 # An experiment takes ~20 real days, so the verdict path is reached with a
 # generated backup: an active "lactose" experiment started 20 days ago plus
-# logs that evaluate to "Likely a trigger" today.
+# logs that evaluate to "Likely a trigger" today — and ibuprofen doses on six
+# rough days for the #20 medications-in-Insights check.
 #
 # BEFORE this flow (on the computer, the same day you run it):
 #   node scripts/make-experiment-fixture.mjs
