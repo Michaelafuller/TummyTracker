@@ -15,6 +15,18 @@ jest.mock('@/features/checkin/useDayCheckIns', () => ({
   useDayCheckIns: () => mockCheckIns,
 }));
 
+// The Medications section and the confounder caveats (GitHub #20) read the
+// medication tables through live-query hooks — mock them so this screen test
+// never opens the real expo-sqlite client.
+let mockMeds: unknown[] = [];
+let mockMedEvents: unknown[] = [];
+let mockMedDoses: unknown[] = [];
+jest.mock('@/features/medications/useMedicationData', () => ({
+  useMedications: () => mockMeds,
+  useMedicationEvents: () => mockMedEvents,
+  useMedicationDoses: () => mockMedDoses,
+}));
+
 const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush }),
@@ -74,6 +86,9 @@ const baseEntry = {
 beforeEach(() => {
   mockPush.mockClear();
   mockCheckIns = [];
+  mockMeds = [];
+  mockMedEvents = [];
+  mockMedDoses = [];
 });
 
 describe('sentence helpers', () => {
@@ -344,5 +359,195 @@ describe('InsightsScreen finding drill-down (HANDOFF.md finding drill-down)', ()
 
     expect(getByText('Nutrients')).toBeTruthy();
     expect(queryByLabelText('See all logs: Higher fat')).toBeNull();
+  });
+});
+
+describe('medications in Insights (GitHub #20)', () => {
+  const DAY_MS = 24 * HOUR;
+  let seq = 0;
+
+  function med(id: string, name: string) {
+    return {
+      id,
+      name,
+      defaultDose: null,
+      doseUnit: null,
+      frequency: null,
+      startDate: null,
+      endDate: null,
+      isActive: true,
+      notes: null,
+      createdAt: 0,
+      updatedAt: 0,
+    };
+  }
+
+  function doseAt(medicationId: string, takenAt: number) {
+    const eventId = `ev${seq++}`;
+    mockMedEvents.push({ id: eventId, takenAt, timeKnown: true, notes: null, createdAt: 0, updatedAt: 0 });
+    mockMedDoses.push({
+      id: `do${seq++}`,
+      eventId,
+      medicationId,
+      dose: 1,
+      doseUnit: 'tablet',
+      createdAt: 0,
+      updatedAt: 0,
+    });
+  }
+
+  /** Local noon of 2026-03-01 + `offset` days. */
+  function dayAt(offset: number, hour = 12): number {
+    return new Date(2026, 2, 1 + offset, hour).getTime();
+  }
+
+  /**
+   * Ibuprofen fixture: 20 covered exposed days (a dose each day 0..19) with 12
+   * rough, and 20 covered other days (100..119) with 5 rough. Every meal has a
+   * unique name so no food finding can form.
+   */
+  function ibuprofenDays() {
+    const rows: unknown[] = [];
+    const add = (offset: number, rough: boolean) => {
+      rows.push({ ...baseEntry, id: `d${seq++}`, type: 'meal', name: `Meal ${offset}`, loggedAt: dayAt(offset) });
+      if (rough) {
+        rows.push({
+          ...baseEntry,
+          id: `d${seq++}`,
+          type: 'symptom',
+          name: 'Symptom',
+          loggedAt: dayAt(offset, 18),
+          severity: 4,
+        });
+      }
+    };
+    for (let i = 0; i < 20; i++) add(i, i < 12);
+    for (let i = 0; i < 20; i++) add(100 + i, i < 5);
+    mockMeds = [med('ibu', 'Ibuprofen')];
+    for (let i = 0; i < 20; i++) doseAt('ibu', dayAt(i));
+    return rows;
+  }
+
+  function chickenFixture() {
+    const rows: unknown[] = [];
+    for (const [i, loggedAt] of [0, 48 * HOUR, 96 * HOUR].entries()) {
+      rows.push({ ...baseEntry, id: `cs${i}`, type: 'meal', name: 'Chicken Salad', loggedAt });
+      rows.push({
+        ...baseEntry,
+        id: `cso${i}`,
+        type: 'symptom',
+        name: 'Symptom',
+        loggedAt: loggedAt + HOUR,
+        severity: 4,
+      });
+    }
+    for (const [i, loggedAt] of [500 * HOUR, 548 * HOUR, 596 * HOUR].entries()) {
+      rows.push({ ...baseEntry, id: `r${i}`, type: 'meal', name: 'Rice', loggedAt });
+    }
+    return rows;
+  }
+
+  const FOOD_SENTENCE = '3 of 3 meals were followed by a rough outcome within 24 h (100% vs 50% baseline).';
+
+  it('shows a medication finding card with the days chip, and the footer', async () => {
+    mockEntries = ibuprofenDays();
+    const { getByText } = await renderScreen(<InsightsScreen />);
+
+    expect(getByText('Medications linked to rough days')).toBeTruthy();
+    expect(getByText('Ibuprofen')).toBeTruthy();
+    expect(getByText('12 of 20 days on or after Ibuprofen were rough (60% vs 25% on other logged days).')).toBeTruthy();
+    expect(getByText('High confidence · 20 days')).toBeTruthy();
+    expect(getByText("Days count only when you logged something. Linked doesn't mean caused.")).toBeTruthy();
+  });
+
+  it('uses the "during or within a week after" wording for an antibiotic', async () => {
+    const rows: unknown[] = [];
+    for (let i = 0; i < 8; i++) {
+      rows.push({ ...baseEntry, id: `a${seq++}`, type: 'meal', name: `Meal ${i}`, loggedAt: dayAt(i) });
+      if (i < 6) {
+        rows.push({ ...baseEntry, id: `a${seq++}`, type: 'symptom', name: 'S', loggedAt: dayAt(i, 18), severity: 4 });
+      }
+    }
+    for (let i = 0; i < 10; i++) {
+      rows.push({ ...baseEntry, id: `a${seq++}`, type: 'meal', name: `Meal ${100 + i}`, loggedAt: dayAt(100 + i) });
+      if (i < 1) {
+        rows.push({ ...baseEntry, id: `a${seq++}`, type: 'symptom', name: 'S', loggedAt: dayAt(100, 18), severity: 4 });
+      }
+    }
+    mockEntries = rows;
+    mockMeds = [med('abx', 'Amoxicillin')];
+    doseAt('abx', dayAt(0));
+    const { getByText } = await renderScreen(<InsightsScreen />);
+
+    expect(
+      getByText('6 of 8 days during or within a week after Amoxicillin were rough (75% vs 10% on other logged days).'),
+    ).toBeTruthy();
+  });
+
+  it('shows notes for a too-few-days and a nearly-every-day medication', async () => {
+    // 2 logged days (a dose on day 0 covers day 0-1), and a daily medication over 30 covered days.
+    const rows: unknown[] = [];
+    for (let i = 0; i < 30; i++) {
+      rows.push({ ...baseEntry, id: `n${seq++}`, type: 'meal', name: `Meal ${i}`, loggedAt: dayAt(i) });
+    }
+    mockEntries = rows;
+    mockMeds = [med('ibu', 'Ibuprofen'), med('ome', 'Omeprazole')];
+    doseAt('ibu', dayAt(0));
+    for (let i = 0; i < 30; i++) doseAt('ome', dayAt(i));
+    const { getByText } = await renderScreen(<InsightsScreen />);
+
+    expect(getByText('Medications linked to rough days')).toBeTruthy();
+    expect(getByText('Ibuprofen — only 2 logged days so far.')).toBeTruthy();
+    expect(getByText("Omeprazole — taken nearly every day, so there's nothing to compare against.")).toBeTruthy();
+  });
+
+  it('hides the medications section when there are no doses', async () => {
+    mockEntries = chickenFixture();
+    mockMeds = [med('ibu', 'Ibuprofen')];
+    const { queryByText } = await renderScreen(<InsightsScreen />);
+    expect(queryByText('Medications linked to rough days')).toBeNull();
+  });
+
+  it('adds a caveat line to a food card when its rough outcomes overlap a medication, numbers unchanged', async () => {
+    mockEntries = chickenFixture();
+    const { getByText, queryByText, unmount } = await renderScreen(<InsightsScreen />);
+    expect(getByText(FOOD_SENTENCE)).toBeTruthy();
+    expect(queryByText(/rough outcomes came while you were taking/)).toBeNull();
+    await unmount();
+
+    mockMeds = [med('amox', 'Amoxicillin')];
+    doseAt('amox', 0);
+    const withMed = await renderScreen(<InsightsScreen />);
+    expect(withMed.getByText(FOOD_SENTENCE)).toBeTruthy();
+    expect(withMed.getByText('Chicken Salad')).toBeTruthy();
+    expect(withMed.getByText('Low confidence · 3 meals')).toBeTruthy();
+    expect(withMed.getByText('3 of these 3 rough outcomes came while you were taking Amoxicillin.')).toBeTruthy();
+  });
+
+  it('adds a caveat line to an ingredient card too', async () => {
+    const rows: unknown[] = [];
+    for (const [i, loggedAt] of [0, 48 * HOUR, 96 * HOUR].entries()) {
+      rows.push({ ...baseEntry, id: `t${i}`, type: 'meal', name: `Dish ${i}`, loggedAt, tagsJson: '["lactose"]' });
+      rows.push({ ...baseEntry, id: `to${i}`, type: 'symptom', name: 'S', loggedAt: loggedAt + HOUR, severity: 4 });
+    }
+    for (const [i, loggedAt] of [500 * HOUR, 548 * HOUR, 596 * HOUR].entries()) {
+      rows.push({ ...baseEntry, id: `tr${i}`, type: 'meal', name: `Other ${i}`, loggedAt, tagsJson: '["rice"]' });
+    }
+    mockEntries = rows;
+    mockMeds = [med('amox', 'Amoxicillin')];
+    doseAt('amox', 0);
+    const { getByText } = await renderScreen(<InsightsScreen />);
+    expect(getByText('Ingredients linked to rough outcomes')).toBeTruthy();
+    expect(getByText('3 of these 3 rough outcomes came while you were taking Amoxicillin.')).toBeTruthy();
+  });
+
+  it('shows no caveat when the medication does not overlap the food outcomes', async () => {
+    mockEntries = chickenFixture();
+    mockMeds = [med('amox', 'Amoxicillin')];
+    // A dose two years later: exposure never touches the chicken meals.
+    doseAt('amox', 2 * 365 * DAY_MS + 1000 * DAY_MS);
+    const { getByText, queryByText } = await renderScreen(<InsightsScreen />);
+    expect(getByText(FOOD_SENTENCE)).toBeTruthy();
+    expect(queryByText(/rough outcomes came while you were taking/)).toBeNull();
   });
 });

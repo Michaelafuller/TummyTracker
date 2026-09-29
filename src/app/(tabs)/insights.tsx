@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -17,14 +17,26 @@ import {
   type NutrientOutcomeFinding,
   type OutcomeFinding,
 } from '@/features/analysis/insights';
+import { findingInstances } from '@/features/analysis/drilldown';
+import {
+  analyzeMedicationDays,
+  confounderCaveat,
+  medicationExposureDays,
+  pairInstances,
+  type ConfounderCaveat,
+  type MedicationFinding,
+  type MedicationNote,
+} from '@/features/analysis/medications';
 import { useDayCheckIns } from '@/features/checkin/useDayCheckIns';
 import { useAllEntries } from '@/features/logging/useEntries';
+import { useMedicationDoses, useMedicationEvents, useMedications } from '@/features/medications/useMedicationData';
 import { WatchButton } from '@/features/watchlist/WatchButton';
 import { WatchlistSection } from '@/features/watchlist/WatchlistSection';
 import { useTheme } from '@/hooks/use-theme';
 import { bmRegularity, bristolDistribution, weeklyBmCounts } from '@/lib/bmTrends';
 import { weeklyIntake, weeklyOutcomes } from '@/lib/chartData';
 import { dayCoverage } from '@/lib/dayCoverage';
+import { medicationClass } from '@/lib/medicationClasses';
 import { NUTRITION_NOUNS } from '@/lib/nutrition';
 import type { ConfidenceTier } from '@/lib/stats';
 
@@ -57,7 +69,44 @@ export function nutrientSentence(finding: NutrientOutcomeFinding): string {
   );
 }
 
-function ConfidenceChip({ confidence, n }: { confidence: ConfidenceTier; n: number }) {
+const MEDICATION_FOOTER = "Days count only when you logged something. Linked doesn't mean caused.";
+
+/** Sentence for a medication finding — never claims causation. */
+export function medicationSentence(finding: MedicationFinding): string {
+  const pct = Math.round(finding.exposedRate * 100);
+  const otherPct = Math.round(finding.otherRate * 100);
+  const window =
+    medicationClass(finding.name) === 'antibiotic' ? 'during or within a week after' : 'on or after';
+  return (
+    `${finding.exposedRough} of ${finding.exposedDays} days ${window} ${finding.name.trim()} were rough ` +
+    `(${pct}% vs ${otherPct}% on other logged days).`
+  );
+}
+
+/** Line for a medication that can't be compared yet. */
+export function medicationNoteSentence(note: MedicationNote): string {
+  const name = note.name.trim();
+  if (note.reason === 'nearly-every-day') {
+    return `${name} — taken nearly every day, so there's nothing to compare against.`;
+  }
+  if (note.exposedDays === 0) return `${name} — no logged days so far.`;
+  return `${name} — only ${note.exposedDays} logged ${note.exposedDays === 1 ? 'day' : 'days'} so far.`;
+}
+
+/** Caveat line inside a food/ingredient/combination card. */
+export function caveatSentence(caveat: ConfounderCaveat): string {
+  return `${caveat.overlapping} of these ${caveat.hits} rough outcomes came while you were taking ${caveat.name.trim()}.`;
+}
+
+function ConfidenceChip({
+  confidence,
+  n,
+  unit,
+}: {
+  confidence: ConfidenceTier;
+  n: number;
+  unit: 'meals' | 'days';
+}) {
   const theme = useTheme();
   const backgroundColor =
     confidence === 'high' ? theme.primary : confidence === 'medium' ? theme.backgroundSelected : theme.border;
@@ -66,8 +115,16 @@ function ConfidenceChip({ confidence, n }: { confidence: ConfidenceTier; n: numb
     <View style={[styles.chip, { backgroundColor }]}>
       <ThemedText
         type="small"
-        style={[styles.chipText, { color: textColor }]}>{`${confidenceLabel(confidence)} confidence · ${n} meals`}</ThemedText>
+        style={[styles.chipText, { color: textColor }]}>{`${confidenceLabel(confidence)} confidence · ${n} ${unit}`}</ThemedText>
     </View>
+  );
+}
+
+function CaveatLine({ text }: { text: string }) {
+  return (
+    <ThemedText type="small" themeColor="textSecondary">
+      {text}
+    </ThemedText>
   );
 }
 
@@ -77,6 +134,7 @@ function Card({
   sample,
   confidence,
   n,
+  unit = 'meals',
   children,
   onPress,
   pressLabel,
@@ -86,6 +144,8 @@ function Card({
   sample?: string;
   confidence?: ConfidenceTier;
   n?: number;
+  /** What `n` counts — meals for food findings, days for medication findings. */
+  unit?: 'meals' | 'days';
   children?: React.ReactNode;
   onPress?: () => void;
   pressLabel?: string;
@@ -100,7 +160,7 @@ function Card({
           {sample}
         </ThemedText>
       ) : null}
-      {confidence != null && n != null ? <ConfidenceChip confidence={confidence} n={n} /> : null}
+      {confidence != null && n != null ? <ConfidenceChip confidence={confidence} n={n} unit={unit} /> : null}
       {children}
     </>
   );
@@ -128,11 +188,27 @@ export default function InsightsScreen() {
   const router = useRouter();
   const entries = useAllEntries();
   const checkIns = useDayCheckIns();
+  const meds = useMedications();
+  const medEvents = useMedicationEvents();
+  const medDoses = useMedicationDoses();
   const insets = useSafeAreaInsets();
   const { summary, nutrientFindings, foodFindings, ingredientFindings, pairFindings } = computeInsights(entries);
   // Lazy-init so Date.now() is read once per mount, not on every render pass
   // (the render function itself must stay pure/idempotent).
   const [now] = useState(() => Date.now());
+  // Medication exposure and findings are computed once per data change and
+  // shared by the Medications section and the confounder caveats (#20).
+  const exposure = useMemo(() => medicationExposureDays(meds, medEvents, medDoses), [meds, medEvents, medDoses]);
+  const medicationAnalysis = useMemo(
+    () => analyzeMedicationDays(entries, checkIns, meds, medEvents, medDoses),
+    [entries, checkIns, meds, medEvents, medDoses],
+  );
+  const caveatFor = (instances: Parameters<typeof confounderCaveat>[0]): string | null => {
+    if (exposure.size === 0) return null;
+    const caveat = confounderCaveat(instances, exposure, meds);
+    return caveat ? caveatSentence(caveat) : null;
+  };
+  const hasMedicationSection = medicationAnalysis.findings.length > 0 || medicationAnalysis.notes.length > 0;
   const coverage = dayCoverage(entries, checkIns, now);
   const roughOutcomeBuckets = weeklyOutcomes(entries, now);
   const hasRoughOutcomeData = roughOutcomeBuckets.some((b) => b.count > 0);
@@ -145,7 +221,8 @@ export default function InsightsScreen() {
     nutrientFindings.length > 0 ||
     foodFindings.length > 0 ||
     ingredientFindings.length > 0 ||
-    pairFindings.length > 0;
+    pairFindings.length > 0 ||
+    medicationAnalysis.findings.length > 0;
 
   return (
     <ThemedView style={styles.container}>
@@ -225,52 +302,88 @@ export default function InsightsScreen() {
         {ingredientFindings.length > 0 ? (
           <View style={styles.section}>
             <ThemedText type="subtitle">Ingredients linked to rough outcomes</ThemedText>
-            {ingredientFindings.map((finding) => (
-              <Card
-                key={finding.key}
-                title={finding.label}
-                body={outcomeSentence(finding)}
-                confidence={finding.confidence}
-                n={finding.occurrences}
-                onPress={() =>
-                  router.push({ pathname: '/insight/detail', params: { kind: 'tag', value: finding.label } })
-                }
-                pressLabel={`See all logs: ${finding.label}`}>
-                <BarMeter label={finding.label} rate={finding.hitRate} baseRate={finding.baseRate} />
-                <WatchButton tag={finding.label} />
-              </Card>
-            ))}
+            {ingredientFindings.map((finding) => {
+              const caveat = caveatFor(findingInstances(entries, 'tag', finding.key));
+              return (
+                <Card
+                  key={finding.key}
+                  title={finding.label}
+                  body={outcomeSentence(finding)}
+                  confidence={finding.confidence}
+                  n={finding.occurrences}
+                  onPress={() =>
+                    router.push({ pathname: '/insight/detail', params: { kind: 'tag', value: finding.label } })
+                  }
+                  pressLabel={`See all logs: ${finding.label}`}>
+                  <BarMeter label={finding.label} rate={finding.hitRate} baseRate={finding.baseRate} />
+                  {caveat ? <CaveatLine text={caveat} /> : null}
+                  <WatchButton tag={finding.label} />
+                </Card>
+              );
+            })}
           </View>
         ) : null}
 
         {pairFindings.length > 0 ? (
           <View style={styles.section}>
             <ThemedText type="subtitle">Combinations</ThemedText>
-            {pairFindings.map((finding) => (
-              <Card key={finding.key} title={finding.label} body={outcomeSentence(finding)} confidence={finding.confidence} n={finding.occurrences}>
-                <BarMeter label={finding.label} rate={finding.hitRate} baseRate={finding.baseRate} />
-              </Card>
-            ))}
+            {pairFindings.map((finding) => {
+              const caveat = caveatFor(pairInstances(entries, finding.key));
+              return (
+                <Card key={finding.key} title={finding.label} body={outcomeSentence(finding)} confidence={finding.confidence} n={finding.occurrences}>
+                  <BarMeter label={finding.label} rate={finding.hitRate} baseRate={finding.baseRate} />
+                  {caveat ? <CaveatLine text={caveat} /> : null}
+                </Card>
+              );
+            })}
           </View>
         ) : null}
 
         {foodFindings.length > 0 ? (
           <View style={styles.section}>
             <ThemedText type="subtitle">Foods linked to rough outcomes</ThemedText>
-            {foodFindings.map((finding) => (
+            {foodFindings.map((finding) => {
+              const caveat = caveatFor(findingInstances(entries, 'food', finding.label));
+              return (
+                <Card
+                  key={finding.key}
+                  title={finding.label}
+                  body={outcomeSentence(finding)}
+                  confidence={finding.confidence}
+                  n={finding.occurrences}
+                  onPress={() =>
+                    router.push({ pathname: '/insight/detail', params: { kind: 'food', value: finding.label } })
+                  }
+                  pressLabel={`See all logs: ${finding.label}`}>
+                  <BarMeter label={finding.label} rate={finding.hitRate} baseRate={finding.baseRate} />
+                  {caveat ? <CaveatLine text={caveat} /> : null}
+                </Card>
+              );
+            })}
+          </View>
+        ) : null}
+
+        {hasMedicationSection ? (
+          <View style={styles.section}>
+            <ThemedText type="subtitle">Medications linked to rough days</ThemedText>
+            {medicationAnalysis.findings.map((finding) => (
               <Card
-                key={finding.key}
-                title={finding.label}
-                body={outcomeSentence(finding)}
+                key={finding.medicationId}
+                title={finding.name}
+                body={medicationSentence(finding)}
                 confidence={finding.confidence}
-                n={finding.occurrences}
-                onPress={() =>
-                  router.push({ pathname: '/insight/detail', params: { kind: 'food', value: finding.label } })
-                }
-                pressLabel={`See all logs: ${finding.label}`}>
-                <BarMeter label={finding.label} rate={finding.hitRate} baseRate={finding.baseRate} />
-              </Card>
+                n={finding.exposedDays}
+                unit="days"
+              />
             ))}
+            {medicationAnalysis.notes.map((note) => (
+              <ThemedText key={note.medicationId} type="small" themeColor="textSecondary">
+                {medicationNoteSentence(note)}
+              </ThemedText>
+            ))}
+            <ThemedText type="small" themeColor="textSecondary">
+              {MEDICATION_FOOTER}
+            </ThemedText>
           </View>
         ) : null}
 
