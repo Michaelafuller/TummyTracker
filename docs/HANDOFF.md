@@ -1,187 +1,189 @@
-# HANDOFF.md — Execute session: Elimination experiment, Cycle B, GitHub #19
+# HANDOFF.md — Execute session: Medications in the correlation engine, GitHub #20
 
-> **Read first:** this file only. `CLAUDE.md` is auto-loaded (§0: synchronous
-> repository transactions; the day check-in notification pattern; the
-> experiment rules; the real-SQLite test harness). **You are on the Cycle A
-> branch (`worktree-agent-a93006f35a36fc943`) in its worktree** — Cycle A is
-> reviewed but not merged to `main` yet (the owner's device run uses `main`).
+> **Read first:** this file only. `CLAUDE.md` is auto-loaded. **You are on the
+> experiments branch (`worktree-agent-a93006f35a36fc943`) in its worktree** —
+> #19 is reviewed but unmerged; this cycle stacks on it (owner, 2026-09-28).
 > Commit here; never touch the main checkout.
 >
-> **Pure JS/TS** — no new dependency, **no schema change**, no new permission
-> (notifications are pre-approved), no native change, no EAS build.
+> **Pure JS/TS** — no new dependency, **no schema change**, no permission, no
+> native change, no EAS build.
 
-**Planned 2026-09-28 (Opus plan session) — GitHub
-Michaelafuller/TummyTracker#19, Cycle B.** Owner: "proceed with Cycle B" on
-the split agreed 2026-09-27: phase-change notifications, past-experiment
-history, experiments in the PDF, polish. Plan-session defaults (flag in the
-summary; owner may override): reminders fire at **09:00 local**; starting an
-experiment **requests notification permission** (it's a direct user action)
-but the experiment starts either way.
+**Planned 2026-09-28 (Opus plan session, owner-reviewed) — GitHub
+Michaelafuller/TummyTracker#20.** Done-when (issue): "medications are handled
+as confounders and appear as candidate exposures in Insights." Owner
+decisions (2026-09-28):
+
+1. **Confounders = a caveat only.** Food/ingredient/combination numbers and
+   confidence tiers stay exactly as they are; a finding whose rough outcomes
+   mostly overlap one medication gets a caveat line.
+2. **Effect window = built-in defaults.** A dose counts on its day and the
+   next day; a small built-in list of **antibiotics** counts for its day plus
+   the **7 days after** each dose. No schema change; unknown names get the
+   default.
+3. **Show medication findings in Insights only** (not the PDF, not "What came
+   before" — later if wanted).
+4. Build on the experiments branch.
+
+Plan-session judgment (flag it; owner may override): for medications a
+**rough day** = a day with ≥ 1 `isOutcome` entry. Day check-ins count toward
+**coverage** only, never roughness — CLAUDE.md §0's #13 rule ("the correlation
+engine never reads check-ins as outcomes") applies here, unlike experiments.
 
 ---
 
 ## 0. Invariants — read twice
 
-- **A notification is never a record.** Tapping one opens the app; it never
-  logs a dose/food, never marks a challenge day eaten, never finishes an
-  experiment.
-- **Own slot, own cancel.** Experiment notifications use
-  `data.slot = 'experiment-phase'`; cancel/refresh filter on that slot only
-  (reminders, Goals check-in and day check-in are untouched — same test as
-  #13's `dayCheckInService`).
-- **Refreshes are serialized** (the #13 review bug: overlapping
-  cancel-then-schedule doubled the horizon). Reuse the same queue pattern as
-  `refreshDayCheckIn`.
-- **Scheduling never requests permission** — only `startExperiment`'s screen
-  does, once, at the moment the user starts.
-- **Frozen verdicts stay frozen** — history and the PDF read `verdictJson`
-  for completed experiments; they never re-evaluate a finished one.
-- **The engine does not change** (`src/features/experiments/engine.ts`
-  verdict rules, `src/features/analysis/*`).
-- Every user-authored string in the PDF goes through `escapeHtml`.
-- Stage files by path; no `await` inside a `db.transaction` callback.
+- **The existing engine's numbers don't change.** `computeInsights`,
+  `analyzeOutcomeRates`, `isOutcome`, `drilldown.ts` and every existing test
+  stay as they are. Medication analysis is a **new module** the Insights
+  screen composes alongside them.
+- **Nothing is inferred.** Exposure comes only from logged dose rows (via
+  `flattenDoseRecords`). Never from `frequency`, start/end dates or "active".
+- **Only covered days are compared.** A day with no log entry and no check-in
+  is neither exposed-and-fine nor unexposed-and-fine — it's left out.
+- **Wording never claims causation.** "linked to rough days", "came while you
+  were taking" — never "caused by", "because of", "safe".
+- **Day math by local calendar day** (`formatDateInput`, `Date#setDate`).
+- Stage by path; no `await` in a `db.transaction` callback (none expected).
 
-## 1. Phase notifications — `src/features/experiments/experimentNotifications.ts`
-
-Pure model (`experimentNotificationsModel.ts`, no expo import):
+## 1. Built-in class list — `src/lib/medicationClasses.ts`
 
 ```ts
-export const EXPERIMENT_SLOT = 'experiment-phase';
-export const REMINDER_HOUR = 9;
-export interface PlannedNotification { fireAt: Date; title: string; body: string; kind: 'challenge' | 'observation' | 'ready'; dayKey: string }
-/** Every reminder for this experiment's schedule, at 09:00 local on:
- *  each challenge day ("Challenge day 2 of 3: eat <term> once today and log it"),
- *  the first observation day ("Back to avoiding <term> — keep logging for 3 more days"),
- *  and the day after the last observation day ("Your <term> experiment is ready — see the verdict").
- *  Only fire times strictly after `now` are returned. */
-export function plannedExperimentNotifications(exp: ExperimentLike, now: number): PlannedNotification[]
+export type MedicationClass = 'antibiotic';
+/** Lowercase name tokens: amoxicillin, augmentin, amoxicillin-clavulanate, azithromycin, zithromax,
+ *  z-pak, clarithromycin, doxycycline, minocycline, tetracycline, ciprofloxacin, cipro, levofloxacin,
+ *  metronidazole, flagyl, cephalexin, keflex, cefuroxime, cefdinir, clindamycin, nitrofurantoin,
+ *  macrobid, trimethoprim, sulfamethoxazole, bactrim, penicillin, erythromycin, rifaximin, vancomycin */
+export const ANTIBIOTIC_NAMES: readonly string[]
+/** Word-boundary match of the medication's name (normalized like watch terms) against the list —
+ *  "Amoxicillin 500" and "amoxicillin-clavulanate" match; "moxi" doesn't. */
+export function medicationClass(name: string): MedicationClass | null
+/** Days AFTER the dose day that still count as exposed: antibiotic → 7, otherwise → 1. */
+export function effectTailDays(name: string): number
 ```
 
-Service (mirrors `src/features/checkin/dayCheckInService.ts`):
+Comment the list as a heuristic for common names, not a drug database.
 
-- `refreshExperimentNotifications()` — serialized; cancel every scheduled
-  notification with our slot; if there's an active experiment, schedule each
-  planned one (`SchedulableTriggerInputTypes.DATE`, `CHANNEL_ID`),
-  `data: { slot, experimentId, kind, dayKey }`. No active experiment → just
-  the cancel. Never requests permission; if permission isn't granted,
-  scheduling simply no-ops (check `getPermissionsAsync().granted` first).
-- Call it: in `MigrationGate`'s success effect (next to the other refreshes);
-  after `startExperiment`, `abandonExperiment`, `finishExperiment` (from the
-  screens — fire-and-forget); after a backup import (Settings).
-- Start screen: after a successful start, call
-  `ensureNotificationPermission()`; if declined, the experiment screen shows
-  a `textSecondary` hint "Turn on notifications to get a reminder when each
-  phase starts." (only while active and permission isn't granted).
-- **Tap handling:** extend the Home-mounted response handling (see
-  `useDayCheckInResponses`) with a sibling hook `useExperimentNotificationResponses()`:
-  a default-action tap on one of ours → `router.push('/experiment/<id>')`
-  once per notification id, then `clearLastNotificationResponse()`. A tap
-  for an experiment that no longer exists or isn't active → do nothing.
-  Must not interfere with the day check-in hook (both read the same "last
-  response"; each ignores the other's slot).
+## 2. Pure analysis — `src/features/analysis/medications.ts` (main test target)
 
-## 2. History
+```ts
+/** Per medication id: the set of local day keys it counts as "exposed" —
+ *  each dose's day plus effectTailDays(med.name) days after. Medications with no doses are absent. */
+export function medicationExposureDays(meds, events, doses): Map<string, Set<string>>
 
-- `src/app/experiment/history.tsx` (title "Experiments"): every experiment,
-  newest first — term, date range (`formatDayRange(startDate, lastDay)`),
-  status line: completed → frozen verdict headline + confidence
-  ("Likely a trigger · medium"); abandoned → "Ended early"; active →
-  `phaseStatusLine`. Tap → `/experiment/<id>`. Empty state "No experiments yet."
-- Insights → Watchlist item: under the stats line, the **latest finished**
-  experiment for that term, if any: "Last experiment: Likely a trigger ·
-  medium (Oct 17)" → opens it. Keep the Cycle A "Start experiment" /
-  "Experiment running" links as they are.
-- Insights → a "Past experiments" link (`accessibilityLabel="See past
-  experiments"`) under the Watchlist section, shown when ≥ 1 experiment exists.
-- Hook: `useExperiments()` (all, newest first) in `useExperiments.ts`.
+/** Covered = any log entry (any type) or a day check-in; rough = any isOutcome entry. */
+export function coveredAndRoughDays(entries, checkIns): { covered: Set<string>; rough: Set<string> }
 
-## 3. PDF report — `src/lib/report.ts`
+export type MedicationFinding = {
+  medicationId: string; name: string;
+  exposedDays: number; exposedRough: number; exposedRate: number;   // covered exposed days
+  otherDays: number;   otherRough: number;   otherRate: number;     // covered unexposed days
+  confidence: ConfidenceTier;
+};
+export type MedicationNote = { medicationId: string; name: string;
+  reason: 'nearly-every-day' | 'too-few-days'; exposedDays: number };
 
-- `buildReportHtml(entries, now, rangeDays, medications?, experiments?)` —
-  optional 5th param, same pattern as #17 (omitted → output unchanged).
-- **Experiments section** (after Medications, before Journal), only when
-  experiments were passed and at least one **overlaps the report range**
-  (its schedule from `startDate` to `lastDay` intersects the window) or is
-  active:
-  - One sentence first: "Elimination experiments the user ran. Verdicts are
-    observations from their own logs, not diagnoses."
-  - Table: **Tested** (term) · **Dates** ("Sep 28 – Oct 17") · **Status**
-    (Completed / Ended early / In progress — <phase>) · **Result**
-    (completed: headline + confidence + `verdictRatesSentence`; otherwise "—").
-  - Completed rows read the frozen `verdictJson` only.
-- `settings.tsx` report handler passes `listAllExperiments()`.
+export function analyzeMedicationDays(entries, checkIns, meds, events, doses):
+  { findings: MedicationFinding[]; notes: MedicationNote[] }
+```
 
-## 4. Device-test fixture — `scripts/make-experiment-fixture.mjs`
+Rules (named exported constants):
 
-A dependency-free Node script (ESM, like `generate-icons.mjs`) that writes a
-**backup v5 JSON** to a path given as its first argument (default
-`.qa-shots/experiment-ready-backup.json`, gitignored). Dates are computed
-**relative to the day it runs**, so the owner can generate it just before a
-device run:
+- Only medications with ≥ 1 dose are considered (active or inactive).
+- `too-few-days`: fewer than **5** covered exposed days.
+- `nearly-every-day`: covered exposed days ≥ **90 %** of all covered days,
+  **or** fewer than **5** covered unexposed days.
+- Otherwise a **finding** only when `exposedRate > otherRate` (excess risk).
+  Confidence mirrors `analyzeOutcomeRates`: **high** when
+  `wilsonLowerBound(exposedRough, exposedDays) > otherRate`; **medium** when
+  `exposedRate ≥ otherRate + MEDIUM_HIT_RATE_MARGIN` and
+  `exposedDays ≥ MEDIUM_CONFIDENCE_MIN_MEALS`; else **low**. Show low ones
+  only when there's no medium/high medication finding, capped at
+  `MAX_LOW_CONFIDENCE_FINDINGS` — same policy as foods; reuse those constants
+  from `temporal.ts`.
+- Findings sorted by `exposedRate − otherRate` descending; notes A–Z.
 
-- A **completed-able** experiment on `lactose`, `status: 'active'`,
-  `startDate` = 21 days ago, 14/3/3 protocol → phase `ready` today.
-- Log entries producing a clear **likely-trigger** verdict: baseline days each
-  with a lactose-tagged meal (`tagsJson: ["lactose"]`) and a bad-Bristol BM on
-  10 of 14; elimination days each with a non-lactose meal, no outcomes;
-  challenge days with a lactose meal + a bad BM on 2 of 3; observation days
-  with a meal + a bad BM on each.
-- Stable ids prefixed `fixture-` so a re-import skips duplicates.
-- A Jest test imports the script's pure builder (export it as a function the
-  script's CLI wrapper calls) and asserts: the JSON parses with
-  `parseBackupJson`, and `evaluateExperiment` on the parsed data with today's
-  key returns `kind: 'likely-trigger'`.
-- The script prints the exact `adb push` command for the owner to run (it
-  does not run adb itself).
+Confounder caveats:
 
-## 5. Polish
+```ts
+export type ConfounderCaveat = { medicationId: string; name: string; overlapping: number; hits: number };
+/** For one finding's instances (meals + whether each was followed by a rough outcome):
+ *  a hit "overlaps" a medication when the MEAL's day is in that medication's exposure days.
+ *  Returns the medication with the most overlapping hits when that's ≥ 2 and ≥ half the hits
+ *  (ties → A–Z by name); otherwise null. */
+export function confounderCaveat(instances: readonly { entry: LogEntry; followedByOutcome: boolean }[],
+  exposure: Map<string, Set<string>>, meds: readonly Medication[]): ConfounderCaveat | null
+/** Instances for a combination finding ("a + b"): food entries whose tags contain both,
+ *  flagged exactly like drilldown.findingInstances. */
+export function pairInstances(entries, pairKey: string): { entry: LogEntry; followedByOutcome: boolean }[]
+```
 
-- Home row when the experiment is `ready`: "Lactose experiment · Verdict
-  ready" (if Cycle A doesn't already) — check and leave it if it does.
-- Anything else you notice: list it in the summary, don't do it.
+Use `findingInstances(entries, 'food' | 'tag', value)` for foods/ingredients
+(don't fork it). Export any tiny helper you need from `drilldown.ts` rather
+than duplicating the "followed by an outcome" join.
 
-## 6. Tests (same change)
+## 3. Insights screen — `src/app/(tabs)/insights.tsx`
 
-- Model: fire times for every phase boundary (incl. DST-crossing), none in
-  the past, copy strings, empty for a finished schedule.
-- Service (mock expo-notifications like `dayCheckInService.test.ts`): cancels
-  only its slot; schedules the planned set with `data`; overlapping refreshes
-  schedule once (stateful fake — copy #13's serialization test); no active
-  experiment → cancel only; permission not granted → no schedule calls.
-- Response hook: tap on ours pushes the route once and clears; other slots
-  ignored; inactive/missing experiment ignored.
-- History screen, watchlist "Last experiment" line, "Past experiments" link.
-- Report: section present/absent rules, overlap rule, frozen verdict used
-  even when entries would now evaluate differently, escaping of the term.
-- Fixture builder test (§4).
-- Settings: report passes experiments; import triggers a notification refresh.
+- Data: `useDayCheckIns()`, `useMedications()`, `useMedicationEvents()`,
+  `useMedicationDoses()`; compute exposure once (memoized) and pass it down.
+- **New section "Medications linked to rough days"** after "Foods linked to
+  rough outcomes", when there are findings **or** notes:
+  - each finding as a `Card` (reuse), title = medication name, body
+    "12 of 20 days on or after ibuprofen were rough (60% vs 25% on other
+    logged days).", the confidence chip (label "N days" instead of "N meals"
+    — add a prop to `ConfidenceChip`/`Card` rather than a second chip).
+    Antibiotics: body says "during or within a week after" instead of "on or
+    after".
+  - notes as `textSecondary` lines: "Omeprazole — taken nearly every day, so
+    there's nothing to compare against." / "Ibuprofen — only 3 logged days so
+    far."
+  - one footer line: "Days count only when you logged something. Linked
+    doesn't mean caused."
+- **Caveats on existing cards:** for each ingredient, combination and food
+  finding, when `confounderCaveat` returns one, add a `textSecondary` line
+  inside its card: "5 of these 7 rough outcomes came while you were taking
+  amoxicillin." The card's numbers, chip and ordering are unchanged.
 
-## 7. Definition of done
+## 4. Tests (same change)
+
+- `medicationClasses`: matches incl. brand names and "-clavulanate" forms,
+  word boundaries, case/whitespace, unknown → null, tail days.
+- `analysis/medications`: exposure days (default next day; antibiotic 7-day
+  tail; overlapping doses union; month and DST boundaries); covered/rough
+  (check-in covers but never roughs); every rule (too-few, nearly-every-day
+  both ways, no excess → neither finding nor note, each confidence tier,
+  low-only policy + cap, sorting); inactive medication with doses included;
+  frequency/start/end never change anything.
+- `confounderCaveat`: < 2 overlaps → null; exactly half → caveat; below half →
+  null; misses (not followed) never count; tie → A–Z; `pairInstances`
+  order-free matching.
+- Insights screen: medication section + notes + footer; a caveat line on a
+  food card (and absent when no overlap); existing card numbers unchanged.
+- Every existing `insights`/`temporal`/`drilldown` analysis test green,
+  untouched.
+
+## 5. Definition of done
 
 - `npm run typecheck`, `npm run lint` (0 warnings), `npm run bundle:check`.
-- **Targeted Jest only (never the full suite):** every test file you created
-  or touched + `report`, `backup`, `settings`, `index`, `insights`,
-  `dayCheckInService`, `useDayCheckInResponses`, all
-  `src/features/experiments/__tests__/*`, `src/app/experiment/__tests__/*`.
-  `(tabs)`/`[id]`/settings paths via `npx jest --runTestsByPath "<path>"`.
+- **Targeted Jest only (never the full suite):** files you created/touched +
+  `src/features/analysis/__tests__/*`, `medications` (lib), `watchlist`,
+  `insights` screen (`npx jest --runTestsByPath "src/app/(tabs)/__tests__/insights.test.tsx"`),
+  `report`, `lookback`.
 - No `@ts-ignore`, no lint disables, no `any` without `// reason:`, no new
-  deps, no schema change, no new permission.
+  deps, no schema change. LF line endings.
 - Do NOT run Maestro, EAS, `npx expo start` or `adb`. Do NOT edit `flows/`,
-  `CLAUDE.md` or `docs/`. Keep LF line endings. Don't push, don't merge.
+  `CLAUDE.md` or `docs/`. Don't push, don't merge.
 - Commits (stage by path), suggested split:
-  `feat(experiments): phase reminder notifications + tap-to-open` ·
-  `feat(experiments): experiment history and last result on the watchlist` ·
-  `feat(report): experiments section in the doctor PDF` ·
-  `test(e2e): backdated experiment fixture generator for device checks` —
+  `feat(meds): built-in antibiotic list and effect windows` ·
+  `feat(analysis): medication day analysis and food-finding confounder caveats` ·
+  `feat(insights): medications section and confounder caveats` —
   each ending `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`.
 - Execute summary: files per commit, hashes, rung results, targeted Jest
-  counts, the planned-notification list for a sample experiment (pasted from
-  a test), deviations with reasons, polish items noticed, review pointers.
+  counts, one worked example (fixture → finding sentence, and one caveat)
+  pasted from a test, deviations, review pointers.
 
-## 8. After this (review + test session)
+## 6. After this
 
-- Opus review; CLAUDE.md §0 note (experiment notifications), PROGRESS.
-- Flow (Opus): generate the fixture → `adb push` → Settings → Import →
-  pick the file → Home row "Verdict ready" → experiment screen verdict
-  "Likely a trigger" → Finish → history shows it → watchlist "Last experiment".
-- Merge Cycle A + B to `main` after the owner's #13–#18 device run.
+- Opus review (§0 invariants, rule constants, wording); CLAUDE.md §0 note;
+  PROGRESS; Maestro flow (seed an ibuprofen pattern + a meal overlapping it →
+  section + caveat visible).
