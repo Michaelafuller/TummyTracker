@@ -512,7 +512,7 @@ describe('medications in Insights (GitHub #20)', () => {
     mockEntries = chickenFixture();
     const { getByText, queryByText, unmount } = await renderScreen(<InsightsScreen />);
     expect(getByText(FOOD_SENTENCE)).toBeTruthy();
-    expect(queryByText(/rough outcomes came while you were taking/)).toBeNull();
+    expect(queryByText(/were eaten while you were taking/)).toBeNull();
     await unmount();
 
     mockMeds = [med('amox', 'Amoxicillin')];
@@ -521,7 +521,7 @@ describe('medications in Insights (GitHub #20)', () => {
     expect(withMed.getByText(FOOD_SENTENCE)).toBeTruthy();
     expect(withMed.getByText('Chicken Salad')).toBeTruthy();
     expect(withMed.getByText('Low confidence · 3 meals')).toBeTruthy();
-    expect(withMed.getByText('3 of these 3 rough outcomes came while you were taking Amoxicillin.')).toBeTruthy();
+    expect(withMed.getByText('3 of the 3 meals followed by a rough outcome were eaten while you were taking Amoxicillin.')).toBeTruthy();
   });
 
   it('adds a caveat line to an ingredient card too', async () => {
@@ -538,7 +538,7 @@ describe('medications in Insights (GitHub #20)', () => {
     doseAt('amox', 0);
     const { getByText } = await renderScreen(<InsightsScreen />);
     expect(getByText('Ingredients linked to rough outcomes')).toBeTruthy();
-    expect(getByText('3 of these 3 rough outcomes came while you were taking Amoxicillin.')).toBeTruthy();
+    expect(getByText('3 of the 3 meals followed by a rough outcome were eaten while you were taking Amoxicillin.')).toBeTruthy();
   });
 
   it('shows no caveat when the medication does not overlap the food outcomes', async () => {
@@ -548,6 +548,6 @@ describe('medications in Insights (GitHub #20)', () => {
     doseAt('amox', 2 * 365 * DAY_MS + 1000 * DAY_MS);
     const { getByText, queryByText } = await renderScreen(<InsightsScreen />);
     expect(getByText(FOOD_SENTENCE)).toBeTruthy();
-    expect(queryByText(/rough outcomes came while you were taking/)).toBeNull();
+    expect(queryByText(/were eaten while you were taking/)).toBeNull();
   });
 });

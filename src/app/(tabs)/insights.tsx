@@ -95,7 +95,8 @@ export function medicationNoteSentence(note: MedicationNote): string {
 
 /** Caveat line inside a food/ingredient/combination card. */
 export function caveatSentence(caveat: ConfounderCaveat): string {
-  return `${caveat.overlapping} of these ${caveat.hits} rough outcomes came while you were taking ${caveat.name.trim()}.`;
+  // Counts MEALS followed by a rough outcome (the card's own unit), not outcomes.
+  return `${caveat.overlapping} of the ${caveat.hits} meals followed by a rough outcome were eaten while you were taking ${caveat.name.trim()}.`;
 }
 
 function ConfidenceChip({

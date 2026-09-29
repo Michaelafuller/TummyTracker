@@ -608,8 +608,7 @@ describe('confounderCaveat', () => {
     const instances = findingInstances(entries, 'food', 'Chicken Salad');
     const caveat = confounderCaveat(instances, exposureOf({ amox: [0, 1, 2, 3, 4, 5, 6, 7] }), meds);
     expect(caveat).not.toBeNull();
-    const sentence = `${caveat?.overlapping} of these ${caveat?.hits} rough outcomes came while you were taking ${caveat?.name}.`;
-    expect(sentence).toBe('3 of these 4 rough outcomes came while you were taking Amoxicillin.');
+    expect(caveat).toMatchObject({ overlapping: 3, hits: 4, name: 'Amoxicillin' });
   });
 });
 
