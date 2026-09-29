@@ -47,6 +47,19 @@ export function findingInstances(
   value: string,
 ): DrilldownInstance[] {
   const matching = entries.filter((entry) => matchesFinding(entry, kind, value));
+  return flagFollowedByOutcome(matching, entries);
+}
+
+/**
+ * Flags each of `matching` with whether some OTHER entry in `entries` counts
+ * as a rough outcome within `DEFAULT_WINDOW_MS` strictly after it, newest
+ * first. The one "followed by an outcome" join, shared by `findingInstances`
+ * and the medication caveat's `pairInstances`.
+ */
+export function flagFollowedByOutcome(
+  matching: readonly LogEntry[],
+  entries: readonly LogEntry[],
+): DrilldownInstance[] {
   const outcomes = entries.filter(isOutcome);
 
   const instances: DrilldownInstance[] = matching.map((entry) => ({
