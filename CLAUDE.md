@@ -176,6 +176,15 @@
   toward 100 %). The detail screen's 6/24/48/72 h timing profile is context
   only and never creates findings. Everything else (What came before,
   medication caveats, experiments, watchlist, PDF findings) stays at 24 h.
+- **Dose-response (owner-decided 2026-09-30, GitHub #22).** Spike: food,
+  ingredient and combination findings were amount-blind (the engine reads only
+  entry name + union tags; servings live on `mealComponent`). Amount =
+  component `servings` (missing → 1; food = the meal's total, ingredient = the
+  servings of components carrying the tag). Each food/ingredient finding's
+  meals split at the median amount, snapped to an amount actually eaten; both
+  sides need ≥ 4 meals. Cards show a line only when larger is ≥ 20 points
+  worse; the finding detail shows the split numbers whenever there's enough
+  data. Not in the PDF; no existing number changes.
 - **Real-SQLite repository tests (2026-09-27, GitHub #18).** `jest/expo-sqlite-node.ts`
   is a Jest-only fake `expo-sqlite` backed by Node's built-in `node:sqlite`
   (**Node ≥ 22.13 to run the tests**; no dependency). A DB test file starts

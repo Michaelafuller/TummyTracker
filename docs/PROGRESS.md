@@ -152,6 +152,13 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   Review fix: the suspect must have been eaten in the baseline, otherwise a
   "drop" while avoiding it proves nothing (new inconclusive rule + preview
   warning); the watchlist store now refreshes after a start.
+- **Dose-response (GitHub #22):** spike confirmed findings ignored portion
+  size; ingredient/food cards now show "More than 1 serving: 4 of 5 (80%) ·
+  1 or less: 1 of 6 (17%)" when larger amounts are clearly worse, and the
+  finding detail has a "By amount" block + per-meal servings. Review fix: the
+  split was labelled with an even-count median nobody ate ("1.5 servings").
+  Jest-only — the device fixture logs 1 serving everywhere, so there's no
+  device check for the dose line.
 - **Reaction latency + a second window (GitHub #21):** "Usually about N h
   later (range)" on findings (Insights, detail, PDF); a guarded "Slower
   patterns (within 48 h)" section (medium/high only, never duplicating a
@@ -245,7 +252,7 @@ analysis.
 | 8 | ~~**Elimination experiment mode** (GH #19)~~ — *✅ Cycles A + B 2026-09-28 (device check owed)* | The north star's "act on it": pick a suspect → guided avoid-then-reintroduce period → before/during/after outcome comparison with a confidence verdict. Turns correlation into a near-controlled test. | L | Epic — plan first. Reuses watchlist (save-time warnings), outcome engine, reminders. Depends on #2 for a real baseline. |
 | 9 | ~~**Medications in the correlation engine** (GH #20)~~ — *✅ 2026-09-28 (device check owed; on the #19 branch)* | NSAIDs, antibiotics and PPIs strongly affect digestion; today a bad antibiotic week is blamed on food. Treat meds as confounders and candidate exposures. | M–L | Plan first. The #11 helpers already make the data analysis-ready; the engine deliberately doesn't read it yet. |
 | 10 | ~~**Reaction latency + multiple windows** (GH #21)~~ — *✅ 2026-09-30 (device check owed; on the #19 branch)* | Every outcome counts "within 24 h", but reactions range from hours (lactose) to 1–3 days (some FODMAP/gluten). Show when outcomes tend to follow each trigger; compare windows. | M | Also makes findings more explainable. |
-| 11 | **Dose-response** (GH #22) | Servings are stored, but the engine appears to treat an ingredient as present/absent — "a splash of milk is fine, a latte isn't" is exactly what the app should find. | S spike → M | First confirm in `temporal.ts` whether servings are ignored (not verified in review). |
+| 11 | ~~**Dose-response** (GH #22)~~ — *✅ 2026-09-30 (on the #19 branch)* | Servings are stored, but the engine appears to treat an ingredient as present/absent — "a splash of milk is fine, a latte isn't" is exactly what the app should find. | S spike → M | First confirm in `temporal.ts` whether servings are ignored (not verified in review). |
 | 12 | **Confounder tracking** (GH #23) | Sleep, stress, menstrual cycle, alcohol and caffeine drive gut symptoms and currently land on food. Even one daily "stress 1–5" helps. | M | Could fold into #2's daily check-in. Additive migration. |
 | 13 | **"By chance" indicator on findings** (GH #24) | Many ingredients × few logs = some spurious correlations. Show how many findings like this you'd expect by chance. | S–M | Complements the existing confidence tiers. |
 | 14 | **Saved recipes / "my meals" with ingredients** (GH #25) | Homemade and restaurant food has a name but no ingredients, blinding the ingredient engine where it matters most. | M | Re-used like Recent meals. |
