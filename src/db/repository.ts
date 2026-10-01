@@ -14,7 +14,7 @@ import {
   unionComponentTags,
   type MealComponentDraft,
 } from '@/lib/mealAggregate';
-import { serializeTags } from '@/lib/ingredients';
+import { mergeTags, parseTagsJson, serializeTags } from '@/lib/ingredients';
 import { backfillTargets, groupSavedMeals, savedMealNameKey, type SavedMealWithComponents } from '@/lib/savedMeals';
 import type { TagBackfillRowUpdate } from '@/lib/tagBackfill';
 import type { NutritionField } from '@/lib/validation';
@@ -1172,14 +1172,56 @@ export async function deleteSavedMeal(id: string): Promise<void> {
   });
 }
 
+/** Anything with drizzle's sync `select` — the db itself or a transaction. */
+type SelectSource = Pick<typeof db, 'select'>;
+
+/** SQLite caps bound parameters; stay well under it for `inArray` lookups. */
+const BACKFILL_ID_CHUNK = 500;
+
+/**
+ * The backfill targets for `nameKey` read from `source` (see `backfillTargets`
+ * for the rule): same-name food entries whose only tags are their own name
+ * and their items' names. Shared by the count the UI shows and the write.
+ */
+function savedMealBackfillTargetsIn(source: SelectSource, nameKey: string): LogEntry[] {
+  const candidates = source
+    .select()
+    .from(logEntry)
+    .where(inArray(logEntry.type, [...FOOD_TYPES]))
+    .all()
+    .filter((entry) => savedMealNameKey(entry.name) === nameKey);
+  const ids = candidates.map((entry) => entry.id);
+  const componentNames = new Map<string, string[]>();
+  for (let i = 0; i < ids.length; i += BACKFILL_ID_CHUNK) {
+    const rows = source
+      .select({ entryId: mealComponent.entryId, name: mealComponent.name })
+      .from(mealComponent)
+      .where(inArray(mealComponent.entryId, ids.slice(i, i + BACKFILL_ID_CHUNK)))
+      .all();
+    for (const row of rows) {
+      const names = componentNames.get(row.entryId) ?? [];
+      names.push(row.name);
+      componentNames.set(row.entryId, names);
+    }
+  }
+  return backfillTargets(candidates, nameKey, componentNames);
+}
+
+/** How many past entries `backfillSavedMealTags` would update right now (for the offer's wording). */
+export async function countSavedMealBackfillTargets(nameKey: string): Promise<number> {
+  return savedMealBackfillTargetsIn(db, nameKey).length;
+}
+
 /**
  * The opt-in backfill (GitHub #25): gives past food entries named like a
- * saved meal (`nameKey`) the template's ingredient tags, but ONLY entries
- * that have no tags at all (`backfillTargets`). Their `tagsJson` becomes
- * `tags`; `ingredientsText` is set from the template only when the entry's is
- * null/empty; `updatedAt` is bumped. Components of those entries are never
- * touched. Targets are recomputed inside the transaction — never trust a
- * count the UI computed earlier. Returns how many entries were updated.
+ * saved meal (`nameKey`) the template's tags, but ONLY entries with no
+ * ingredient information — every tag they have is just a name
+ * (`backfillTargets`). `tags` are merged after the entry's existing name tags
+ * (additive, order-preserving, like the tag backfill); `ingredientsText` is
+ * set from the template only when the entry's is null/empty; `updatedAt` is
+ * bumped. Components of those entries are never touched. Targets are
+ * recomputed inside the transaction — never trust a count the UI computed
+ * earlier. Returns how many entries were updated.
  */
 export async function backfillSavedMealTags(
   nameKey: string,
@@ -1187,20 +1229,15 @@ export async function backfillSavedMealTags(
   ingredientsText: string | null,
 ): Promise<number> {
   if (tags.length === 0) return 0;
-  const tagsJson = serializeTags([...tags]);
   const now = Date.now();
   const text = ingredientsText?.trim() ? ingredientsText : null;
 
   // Sync callback — see createLogEntries' comment above for why.
   return db.transaction((tx) => {
-    const foodEntries = tx
-      .select()
-      .from(logEntry)
-      .where(inArray(logEntry.type, [...FOOD_TYPES]))
-      .all();
-    const targets = backfillTargets(foodEntries, nameKey);
+    const targets = savedMealBackfillTargetsIn(tx, nameKey);
     for (const target of targets) {
-      const patch: Partial<NewLogEntry> = { tagsJson, updatedAt: now };
+      const merged = mergeTags(parseTagsJson(target.tagsJson), [...tags]);
+      const patch: Partial<NewLogEntry> = { tagsJson: serializeTags(merged), updatedAt: now };
       if (text && !target.ingredientsText?.trim()) patch.ingredientsText = text;
       tx.update(logEntry).set(patch).where(eq(logEntry.id, target.id)).run();
     }

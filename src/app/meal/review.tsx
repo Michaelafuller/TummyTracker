@@ -13,6 +13,7 @@ import { Spacing } from '@/constants/theme';
 import { FOOD_TYPES, MEAL_SLOTS, type MealSlot } from '@/db/schema';
 import {
   backfillSavedMealTags,
+  countSavedMealBackfillTargets,
   createMealWithComponents,
   deleteSavedMeal,
   findSavedMealByNameKey,
@@ -36,7 +37,7 @@ import { dayBounds } from '@/lib/datetime';
 import { evaluateGoals, exceededCaps, withPendingNutrition, type GoalEvaluation } from '@/lib/goals';
 import { aggregateComponents, mealIngredientsText, unionComponentTags } from '@/lib/mealAggregate';
 import { NUTRITION_NOUNS, nutritionUnit } from '@/lib/nutrition';
-import { backfillTargets, savedMealNameKey, validateSavedMealName } from '@/lib/savedMeals';
+import { ingredientTagsOf, savedMealNameKey, validateSavedMealName } from '@/lib/savedMeals';
 import { MAX_NOTES_LENGTH } from '@/lib/validation';
 import { describeWatchedMatches, findWatchedTagsInTags } from '@/lib/watchlist';
 
@@ -165,11 +166,16 @@ export default function MealReviewScreen() {
   const templateSignature = JSON.stringify([state.name.trim(), state.type, state.mealSlot, components]);
   const savedToMyMeals = savedSignature === templateSignature;
 
-  /** The offer to add the template's ingredients to past, tag-less meals of the same name (explicit choice only). */
+  /**
+   * The offer to add the template's ingredients to past same-name meals that
+   * have none (explicit choice only). Only when the template's items carry
+   * ingredient tags — item names alone add nothing a name-only meal lacks.
+   */
   async function offerBackfill(name: string, nameKey: string) {
+    if (ingredientTagsOf(components).length === 0) return;
     const tags = unionComponentTags(components);
-    if (tags.length === 0) return;
-    const count = backfillTargets(allEntries, nameKey).length;
+    // Same target rule as the write (the repository reads item names too).
+    const count = await countSavedMealBackfillTargets(nameKey);
     if (count === 0) return;
     const add = await confirmAsync(
       'Add ingredients to past meals?',

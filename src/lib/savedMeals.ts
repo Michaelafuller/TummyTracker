@@ -2,7 +2,7 @@
 // A saved meal is a template: it never is, or links to, a log entry.
 
 import { FOOD_TYPES, type LogEntry, type SavedMeal, type SavedMealComponent } from '@/db/schema';
-import { parseTagsJson } from '@/lib/ingredients';
+import { mergeTags, normalizeTag, parseTagsJson } from '@/lib/ingredients';
 import type { MealComponentDraft } from '@/lib/mealAggregate';
 
 /** Case/whitespace-insensitive identity of a saved meal's name (unique per template). */
@@ -43,18 +43,34 @@ export function savedMealToDrafts(components: readonly SavedMealComponent[]): Me
 /**
  * The past entries the opt-in "add ingredients to past meals" backfill may
  * touch: food entries (meal/snack — never a bowel movement or symptom) whose
- * trimmed, lowercased name equals `nameKey` AND that carry no tags at all.
- * An entry with any tag is never a target — the backfill is additive for
- * entries that have nothing, never a merge into existing tags.
+ * trimmed, lowercased name equals `nameKey` AND that carry no ingredient
+ * information — every tag they have is just a name: the entry's own or one
+ * of its items' (`componentNamesByEntry`, keyed by entry id). That is what a
+ * name-only meal looks like, because `createMealWithComponents` always adds
+ * each item's name to the tag union (review 2026-09-30: requiring "no tags at
+ * all" matched only pre-builder rows). An entry with any other tag is never a
+ * target.
  */
-export function backfillTargets(entries: readonly LogEntry[], nameKey: string): LogEntry[] {
+export function backfillTargets(
+  entries: readonly LogEntry[],
+  nameKey: string,
+  componentNamesByEntry: ReadonlyMap<string, readonly string[]> = new Map(),
+): LogEntry[] {
   const food = FOOD_TYPES as readonly string[];
-  return entries.filter(
-    (entry) =>
-      food.includes(entry.type) &&
-      savedMealNameKey(entry.name) === nameKey &&
-      parseTagsJson(entry.tagsJson).length === 0,
-  );
+  return entries.filter((entry) => {
+    if (!food.includes(entry.type) || savedMealNameKey(entry.name) !== nameKey) return false;
+    const nameTags = new Set([entry.name, ...(componentNamesByEntry.get(entry.id) ?? [])].map(normalizeTag));
+    return parseTagsJson(entry.tagsJson).every((tag) => nameTags.has(tag));
+  });
+}
+
+/**
+ * The tags a template's items carry from their ingredients (barcode data or
+ * typed ingredient text) — NOT their names. Empty means the template has no
+ * ingredient information, so the backfill has nothing to offer.
+ */
+export function ingredientTagsOf(components: readonly Pick<MealComponentDraft, 'tagsJson'>[]): string[] {
+  return mergeTags(...components.map((component) => parseTagsJson(component.tagsJson)));
 }
 
 /** A stable, test-friendly id fragment for a saved meal's row ("Chicken Rice" -> "chicken-rice"). */

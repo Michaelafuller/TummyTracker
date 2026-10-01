@@ -3,6 +3,7 @@ import { act, fireEvent, render } from '@testing-library/react-native';
 
 import {
   backfillSavedMealTags,
+  countSavedMealBackfillTargets,
   createMealWithComponents,
   deleteSavedMeal,
   findSavedMealByNameKey,
@@ -29,6 +30,7 @@ jest.mock('@/db/repository', () => ({
   findSavedMealByNameKey: jest.fn().mockResolvedValue(undefined),
   deleteSavedMeal: jest.fn().mockResolvedValue(undefined),
   backfillSavedMealTags: jest.fn().mockResolvedValue(0),
+  countSavedMealBackfillTargets: jest.fn().mockResolvedValue(0),
   listWatchlistItems: jest.fn(),
   addWatchlistItem: jest.fn(),
   removeWatchlistItem: jest.fn(),
@@ -70,6 +72,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   (findSavedMealByNameKey as jest.Mock).mockResolvedValue(undefined);
   (backfillSavedMealTags as jest.Mock).mockResolvedValue(0);
+  (countSavedMealBackfillTargets as jest.Mock).mockResolvedValue(0);
   useMealBuilderStore.setState({
     components: [draft('Peas', { calories: 100 }), draft('Rice', { calories: 200 })],
     reviewPrefill: null,
@@ -534,16 +537,33 @@ describe('MealReviewScreen backfill offer (GitHub #25)', () => {
     expect(backfillSavedMealTags).not.toHaveBeenCalled();
   });
 
+  // The offer needs ingredient tags on the template's items (item names alone add nothing).
+  function withIngredients() {
+    useMealBuilderStore.setState({
+      components: [draft('Peas', { calories: 100, tagsJson: '["peas"]' }), draft('Rice', { calories: 200 })],
+    });
+  }
+
+  it('offers nothing when the template has no ingredient tags, even with same-name past meals (review 2026-09-30)', async () => {
+    (countSavedMealBackfillTargets as jest.Mock).mockResolvedValue(3);
+    mockAllEntries = [todayEntry({ type: 'meal', name: 'Peas + 1 more' })];
+    const alert = spyOnAlert();
+    const { getByLabelText, findByText } = await render(<MealReviewScreen />);
+    await fireEvent.press(getByLabelText('Save as my meal'));
+    expect(await findByText('Saved to My meals')).toBeTruthy();
+    expect(alert.spy).not.toHaveBeenCalled();
+    expect(countSavedMealBackfillTargets).not.toHaveBeenCalled();
+    expect(backfillSavedMealTags).not.toHaveBeenCalled();
+  });
+
   it('offers with the target count; "Not now" writes nothing', async () => {
-    mockAllEntries = [
-      todayEntry({ type: 'meal', name: 'Peas + 1 more' }),
-      todayEntry({ type: 'snack', name: ' PEAS + 1 MORE ' }),
-      todayEntry({ type: 'meal', name: 'Peas + 1 more', tagsJson: '["peas"]' }),
-    ];
+    withIngredients();
+    (countSavedMealBackfillTargets as jest.Mock).mockResolvedValue(2);
     const alert = spyOnAlert({ [BACKFILL_TITLE]: 'Not now' });
     const { getByLabelText, findByText } = await render(<MealReviewScreen />);
     await fireEvent.press(getByLabelText('Save as my meal'));
 
+    expect(countSavedMealBackfillTargets).toHaveBeenCalledWith('peas + 1 more');
     expect(alert.messageOf(BACKFILL_TITLE)).toBe(
       "Add these ingredients to 2 past 'Peas + 1 more' meals that don't have any? This updates your Insights.",
     );
@@ -552,7 +572,8 @@ describe('MealReviewScreen backfill offer (GitHub #25)', () => {
   });
 
   it('only "Add" writes: backfills with the template tags and ingredient text, then confirms', async () => {
-    mockAllEntries = [todayEntry({ type: 'meal', name: 'Peas + 1 more' })];
+    withIngredients();
+    (countSavedMealBackfillTargets as jest.Mock).mockResolvedValue(1);
     (backfillSavedMealTags as jest.Mock).mockResolvedValue(1);
     let writesWhenAnswered = -1;
     const alert = spyOnAlert({
@@ -671,7 +692,7 @@ describe('MealReviewScreen template mode (editing a saved meal)', () => {
   });
 
   it('waits for the backfill choice before going back; "Add" writes, then leaves', async () => {
-    mockAllEntries = [todayEntry({ type: 'meal', name: 'Oatmeal bowl' })];
+    (countSavedMealBackfillTargets as jest.Mock).mockResolvedValue(1);
     (backfillSavedMealTags as jest.Mock).mockResolvedValue(1);
     let backWhenAnswered = -1;
     spyOnAlert({
@@ -692,7 +713,7 @@ describe('MealReviewScreen template mode (editing a saved meal)', () => {
   });
 
   it('"Not now" leaves without writing', async () => {
-    mockAllEntries = [todayEntry({ type: 'meal', name: 'Oatmeal bowl' })];
+    (countSavedMealBackfillTargets as jest.Mock).mockResolvedValue(1);
     spyOnAlert({ [BACKFILL_TITLE]: 'Not now' });
     const { getByTestId } = await render(<MealReviewScreen />);
     await fireEvent.press(getByTestId('review-save-changes'));

@@ -1,6 +1,7 @@
 import type { LogEntry, SavedMeal, SavedMealComponent } from '@/db/schema';
 import {
   backfillTargets,
+  ingredientTagsOf,
   groupSavedMeals,
   savedMealNameKey,
   savedMealSlug,
@@ -139,6 +140,33 @@ describe('backfillTargets', () => {
 
   it('returns nothing when no entry has that name', () => {
     expect(backfillTargets([entry({ name: 'Toast' })], key)).toEqual([]);
+  });
+
+  // Review 2026-09-30: every builder-logged meal's tags include its items' names.
+  it('treats tags that are only the entry name or its item names as "no ingredients"', () => {
+    const names = new Map([
+      ['items', ['Oats', 'Milk']],
+      ['ingredient', ['Oats']],
+    ]);
+    const entries = [
+      entry({ id: 'own-name', tagsJson: '["oatmeal"]' }),
+      entry({ id: 'items', tagsJson: '["oats","milk"]' }),
+      entry({ id: 'ingredient', tagsJson: '["oats","gluten"]' }),
+    ];
+    expect(backfillTargets(entries, key, names).map((e) => e.id)).toEqual(['own-name', 'items']);
+  });
+});
+
+describe('ingredientTagsOf', () => {
+  it("unions the items' own tags, never their names", () => {
+    expect(
+      ingredientTagsOf([
+        { tagsJson: '["oats","gluten"]' },
+        { tagsJson: null },
+        { tagsJson: '["gluten","milk"]' },
+      ]),
+    ).toEqual(['oats', 'gluten', 'milk']);
+    expect(ingredientTagsOf([{ tagsJson: null }, { tagsJson: '[]' }])).toEqual([]);
   });
 });
 

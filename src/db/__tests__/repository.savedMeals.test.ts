@@ -285,6 +285,44 @@ describe('backfillSavedMealTags', () => {
   });
 });
 
+describe('backfillSavedMealTags on meals logged through the builder (review 2026-09-30)', () => {
+  // Every meal since the meal builder is saved by createMealWithComponents,
+  // whose tag union always includes each item's own name — so "no ingredients"
+  // means "no tags beyond item/meal names", never "no tags at all".
+  async function logPast(name: string, items: MealComponentDraft[]): Promise<LogEntry> {
+    return repo.createMealWithComponents({ type: 'meal', name, loggedAt: 1000, mealSlot: null }, items);
+  }
+
+  it('fills a past name-only meal (one manual item, no ingredients), keeping its name tag', async () => {
+    const past = await logPast("Mom's lasagna", [{ name: "Mom's lasagna", servings: 1 }]);
+    expect(JSON.parse(past.tagsJson ?? '[]')).toEqual(["mom's lasagna"]);
+
+    const count = await repo.backfillSavedMealTags("mom's lasagna", ["mom's lasagna", 'pasta', 'cheese'], 'pasta, cheese');
+
+    expect(count).toBe(1);
+    const after = await repo.getLogEntry(past.id);
+    expect(JSON.parse(after?.tagsJson ?? '[]')).toEqual(["mom's lasagna", 'pasta', 'cheese']);
+    // Its display text was already its item name — only an empty text is filled.
+    expect(after?.ingredientsText).toBe(past.ingredientsText);
+  });
+
+  it('fills a past multi-item meal whose items carry no ingredients', async () => {
+    const past = await logPast("Mom's lasagna", [
+      { name: 'Lasagna', servings: 1 },
+      { name: 'Garlic bread', servings: 1 },
+    ]);
+    expect(await repo.backfillSavedMealTags("mom's lasagna", ['pasta'], null)).toBe(1);
+    expect(JSON.parse((await repo.getLogEntry(past.id))?.tagsJson ?? '[]')).toEqual(['lasagna', 'garlic bread', 'pasta']);
+  });
+
+  it('never touches a same-name meal whose items already carry ingredient tags', async () => {
+    const past = await logPast("Mom's lasagna", [{ name: 'Lasagna', servings: 1, tagsJson: '["wheat"]' }]);
+    const before = await repo.getLogEntry(past.id);
+    expect(await repo.backfillSavedMealTags("mom's lasagna", ['pasta'], null)).toBe(0);
+    expect(await repo.getLogEntry(past.id)).toEqual(before);
+  });
+});
+
 describe('insertSavedMealsPreservingIds (restore)', () => {
   function mealRow(id: string, name: string): SavedMeal {
     return { id, name, nameKey: name.trim().toLowerCase(), type: 'meal', mealSlot: null, createdAt: 1, updatedAt: 1 };
