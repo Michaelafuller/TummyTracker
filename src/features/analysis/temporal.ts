@@ -236,7 +236,15 @@ export function analyzeOutcomeRates(
   keysOf: (meal: LogEntry) => OutcomeKey[],
   options: OutcomeRateOptions = {},
 ): OutcomeFinding[] {
-  const { candidates } = outcomeRateCandidates(entries, keysOf, options);
+  return displayOutcomeFindings(outcomeRateCandidates(entries, keysOf, options).candidates);
+}
+
+/**
+ * The display rules of `analyzeOutcomeRates`, applied to a candidate list:
+ * every medium/high finding sorted by excess risk; low-confidence findings
+ * only when nothing better exists, capped at MAX_LOW_CONFIDENCE_FINDINGS.
+ */
+export function displayOutcomeFindings(candidates: readonly OutcomeFinding[]): OutcomeFinding[] {
   const highOrMedium = candidates.filter((f) => f.confidence !== 'low');
   const low = candidates.filter((f) => f.confidence === 'low');
 
@@ -261,16 +269,22 @@ export function tagHitRates(
   entries: readonly LogEntry[],
   windowMs: number = DEFAULT_WINDOW_MS,
 ): Map<string, number> {
-  const taggedMeals = entries.filter(
-    (e) => FOOD_TYPES_SET.has(e.type) && parseTagsJson(e.tagsJson).length > 0,
-  );
+  const taggedMeals: LogEntry[] = [];
+  const tagsByMeal = new Map<string, string[]>();
+  for (const e of entries) {
+    if (!FOOD_TYPES_SET.has(e.type)) continue;
+    const tags = parseTagsJson(e.tagsJson);
+    if (tags.length === 0) continue;
+    taggedMeals.push(e);
+    tagsByMeal.set(e.id, tags);
+  }
 
   const mealOutcomeMap = mealsFollowedByOutcome(entries, taggedMeals, windowMs);
 
   const byTag = new Map<string, { hits: number; total: number }>();
   for (const meal of taggedMeals) {
     const hit = mealOutcomeMap.get(meal.id) ?? false;
-    for (const tag of parseTagsJson(meal.tagsJson)) {
+    for (const tag of tagsByMeal.get(meal.id) ?? []) {
       const group = byTag.get(tag) ?? { hits: 0, total: 0 };
       group.total += 1;
       if (hit) group.hits += 1;

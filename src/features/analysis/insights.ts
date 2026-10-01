@@ -13,6 +13,7 @@ import { wilsonLowerBound, type ConfidenceTier } from '@/lib/stats';
 import {
   analyzeOutcomeRates,
   DEFAULT_WINDOW_MS,
+  displayOutcomeFindings,
   isOutcome,
   MEDIUM_CONFIDENCE_MIN_MEALS,
   mealsFollowedByOutcome,
@@ -134,12 +135,7 @@ export function analyzePairOutcomes(
   entries: readonly LogEntry[],
   windowMs: number = DEFAULT_WINDOW_MS,
 ): OutcomeFinding[] {
-  const findings = analyzeOutcomeRates(entries, pairKeysOf(entries), {
-    minOccurrences: MIN_PAIR_OCCURRENCES,
-    windowMs,
-  });
-  const passes = interactionFilter(entries, windowMs);
-  return findings.filter(passes).slice(0, MAX_PAIR_FINDINGS);
+  return pairAnalysis(entries, windowMs).shown;
 }
 
 /**
@@ -148,11 +144,14 @@ export function analyzePairOutcomes(
  * (frequency counted over all food entries' parsed tags).
  */
 function pairKeysOf(entries: readonly LogEntry[]): (meal: LogEntry) => OutcomeKey[] {
+  // Each food entry's tags are parsed once and reused (a per-call map, not a global cache).
+  const parsed = new Map<LogEntry, string[]>();
   const tagCounts = new Map<string, number>();
-  for (const entry of entries.filter(isFood)) {
-    for (const tag of parseTagsJson(entry.tagsJson)) {
-      tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
-    }
+  for (const entry of entries) {
+    if (!isFood(entry)) continue;
+    const tags = parseTagsJson(entry.tagsJson);
+    parsed.set(entry, tags);
+    for (const tag of tags) tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
   }
   const topTagSet = new Set(
     [...tagCounts.entries()]
@@ -162,11 +161,12 @@ function pairKeysOf(entries: readonly LogEntry[]): (meal: LogEntry) => OutcomeKe
   );
 
   return (meal) => {
-    const tags = parseTagsJson(meal.tagsJson).filter((t) => topTagSet.has(t));
+    const tags = (parsed.get(meal) ?? parseTagsJson(meal.tagsJson)).filter((t) => topTagSet.has(t));
     const keys: OutcomeKey[] = [];
     for (let i = 0; i < tags.length; i++) {
       for (let j = i + 1; j < tags.length; j++) {
-        const [a, b] = [tags[i], tags[j]].sort();
+        // Same order as `[a, b].sort()` (UTF-16 code-unit comparison), without the allocation.
+        const [a, b] = tags[i] <= tags[j] ? [tags[i], tags[j]] : [tags[j], tags[i]];
         const key = `${a} + ${b}`;
         keys.push({ key, label: key });
       }
@@ -191,20 +191,38 @@ function interactionFilter(
 }
 
 /**
- * Every compared pair's excess-risk result that passes the interaction filter,
- * at every tier (low included) — uncapped and without the low-only fallback.
- * `checked` is how many pairs had at least MIN_PAIR_OCCURRENCES meals. Used by
- * the chance check (chance.ts); `analyzePairOutcomes` keeps its own pipeline.
+ * One pass over the pair space: `shown` is exactly `analyzePairOutcomes`'s
+ * list (the fallback-applied findings, then the interaction filter, then the
+ * cap); `candidates` is every compared pair that passes the interaction
+ * filter at every tier (low included) — uncapped and without the low-only
+ * fallback — and `checked` is how many pairs had at least MIN_PAIR_OCCURRENCES
+ * meals. The chance check (chance.ts) uses `candidates`/`checked` for the
+ * count and `shown` to know which pairs the 24 h section already lists.
  */
+export function pairAnalysis(
+  entries: readonly LogEntry[],
+  windowMs: number = DEFAULT_WINDOW_MS,
+): { checked: number; candidates: OutcomeFinding[]; shown: OutcomeFinding[] } {
+  const raw = outcomeRateCandidates(entries, pairKeysOf(entries), {
+    minOccurrences: MIN_PAIR_OCCURRENCES,
+    windowMs,
+  });
+  const passes = interactionFilter(entries, windowMs);
+  return {
+    checked: raw.checked,
+    candidates: raw.candidates.filter(passes),
+    // The fallback is applied BEFORE the interaction filter, as it always was.
+    shown: displayOutcomeFindings(raw.candidates).filter(passes).slice(0, MAX_PAIR_FINDINGS),
+  };
+}
+
+/** Candidates-only view of `pairAnalysis` (see there). */
 export function pairCandidates(
   entries: readonly LogEntry[],
   windowMs: number = DEFAULT_WINDOW_MS,
 ): { checked: number; candidates: OutcomeFinding[] } {
-  const { checked, candidates } = outcomeRateCandidates(entries, pairKeysOf(entries), {
-    minOccurrences: MIN_PAIR_OCCURRENCES,
-    windowMs,
-  });
-  return { checked, candidates: candidates.filter(interactionFilter(entries, windowMs)) };
+  const { checked, candidates } = pairAnalysis(entries, windowMs);
+  return { checked, candidates };
 }
 
 export interface NutrientOutcomeFinding {
