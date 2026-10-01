@@ -551,3 +551,95 @@ describe('medications in Insights (GitHub #20)', () => {
     expect(queryByText(/were eaten while you were taking/)).toBeNull();
   });
 });
+
+describe('reaction latency and slower patterns (GitHub #21)', () => {
+  let seq = 0;
+  function meal(name: string, tags: string, loggedAt: number) {
+    return { ...baseEntry, id: `lm${seq++}`, type: 'meal', name, loggedAt, tagsJson: tags };
+  }
+  function symptom(loggedAt: number) {
+    return { ...baseEntry, id: `ls${seq++}`, type: 'symptom', name: 'Symptom', loggedAt, severity: 4 };
+  }
+  /** One meal per delay, 48 h apart, each followed by a symptom `delay` hours later. */
+  function triggerFixture(name: string, tags: string, delaysH: number[], spacingH: number) {
+    return delaysH.flatMap((delay, i) => {
+      const t = i * spacingH * HOUR;
+      return [meal(name, tags, t), symptom(t + delay * HOUR)];
+    });
+  }
+  function quiet(name: string, tags: string, count: number, startH: number) {
+    return Array.from({ length: count }, (_, i) => meal(name, tags, (startH + i * 72) * HOUR));
+  }
+
+  it('shows the typical latency under an ingredient card with 3 or more hits', async () => {
+    mockEntries = [
+      ...triggerFixture('Food', '["lactose"]', [3, 5, 8], 48),
+      ...quiet('Rice', '["rice"]', 3, 500),
+    ];
+
+    const { getByText, getAllByText } = await renderScreen(<InsightsScreen />);
+
+    expect(getByText('Ingredients linked to rough outcomes')).toBeTruthy();
+    // The ingredient card and the (same-named) food card both carry it.
+    expect(getAllByText('Usually about 5 h later (3–8 h)')).toHaveLength(2);
+  });
+
+  it('shows no latency line when a finding has fewer than 3 hits', async () => {
+    mockEntries = [
+      ...triggerFixture('Food', '["lactose"]', [3, 5], 48),
+      ...quiet('Food', '["lactose"]', 2, 300),
+      ...quiet('Rice', '["rice"]', 4, 700),
+    ];
+
+    const { getByText, queryByText } = await renderScreen(<InsightsScreen />);
+
+    expect(getByText('Ingredients linked to rough outcomes')).toBeTruthy();
+    expect(queryByText(/^Usually/)).toBeNull();
+  });
+
+  it('shows a slower-patterns section for a ~30 h trigger, with 48 h wording and latency, and opens detail with window=48', async () => {
+    mockEntries = [
+      ...triggerFixture('Onion soup', '["onion"]', [26, 28, 30, 32, 34, 38], 72),
+      ...quiet('Plain rice', '["rice"]', 6, 1000),
+    ];
+
+    const { getByText, getAllByText, getByLabelText, queryByText } = await renderScreen(<InsightsScreen />);
+
+    // Nothing at 24 h ...
+    expect(queryByText('Ingredients linked to rough outcomes')).toBeNull();
+    expect(queryByText('Foods linked to rough outcomes')).toBeNull();
+    expect(queryByText('Not enough data yet')).toBeNull();
+    // ... but the guarded 48 h section picks it up.
+    expect(getByText('Slower patterns (within 48 h)')).toBeTruthy();
+    expect(
+      getByText('These only show up when counting outcomes up to 48 hours after eating — slower reactions.'),
+    ).toBeTruthy();
+    expect(
+      getAllByText('6 of 6 meals were followed by a rough outcome within 48 h (100% vs 50% baseline).'),
+    ).toHaveLength(2);
+    expect(getAllByText('Usually about 30 h later (28–34 h)')).toHaveLength(2);
+
+    await fireEvent.press(getByLabelText('See all logs: onion'));
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/insight/detail',
+      params: { kind: 'tag', value: 'onion', window: '48' },
+    });
+    await fireEvent.press(getByLabelText('See all logs: Onion soup'));
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/insight/detail',
+      params: { kind: 'food', value: 'Onion soup', window: '48' },
+    });
+  });
+
+  it('hides the slower-patterns section when the pattern already shows at 24 h', async () => {
+    mockEntries = [
+      ...triggerFixture('Onion soup', '["onion"]', [3, 3, 3, 3, 3, 3], 72),
+      ...quiet('Plain rice', '["rice"]', 6, 1000),
+    ];
+
+    const { getByText, queryByText } = await renderScreen(<InsightsScreen />);
+
+    expect(getByText('Ingredients linked to rough outcomes')).toBeTruthy();
+    expect(queryByText(/Slower patterns/)).toBeNull();
+  });
+});

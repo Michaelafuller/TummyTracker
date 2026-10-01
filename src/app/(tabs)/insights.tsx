@@ -13,11 +13,13 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import {
+  analyzeSlowerPatterns,
   computeInsights,
   type NutrientOutcomeFinding,
   type OutcomeFinding,
 } from '@/features/analysis/insights';
-import { findingInstances } from '@/features/analysis/drilldown';
+import { findingInstances, type DrilldownInstance } from '@/features/analysis/drilldown';
+import { latencyLine, latencySummary } from '@/features/analysis/latency';
 import {
   analyzeMedicationDays,
   confounderCaveat,
@@ -27,6 +29,7 @@ import {
   type MedicationFinding,
   type MedicationNote,
 } from '@/features/analysis/medications';
+import { SLOW_WINDOW_MS } from '@/features/analysis/temporal';
 import { useDayCheckIns } from '@/features/checkin/useDayCheckIns';
 import { useAllEntries } from '@/features/logging/useEntries';
 import { useMedicationDoses, useMedicationEvents, useMedications } from '@/features/medications/useMedicationData';
@@ -50,12 +53,12 @@ function confidenceLabel(confidence: ConfidenceTier): string {
   return confidence === 'high' ? 'High' : confidence === 'medium' ? 'Medium' : 'Low';
 }
 
-/** Shared sentence for an ingredient/food/pair outcome finding. */
-export function outcomeSentence(finding: OutcomeFinding): string {
+/** Shared sentence for an ingredient/food/pair outcome finding (24 h unless `windowHours` says otherwise). */
+export function outcomeSentence(finding: OutcomeFinding, windowHours = 24): string {
   const pct = Math.round(finding.hitRate * 100);
   const basePct = Math.round(finding.baseRate * 100);
   return (
-    `${finding.hits} of ${finding.occurrences} meals were followed by a rough outcome within 24 h ` +
+    `${finding.hits} of ${finding.occurrences} meals were followed by a rough outcome within ${windowHours} h ` +
     `(${pct}% vs ${basePct}% baseline).`
   );
 }
@@ -99,6 +102,17 @@ export function caveatSentence(caveat: ConfounderCaveat): string {
   return `${caveat.overlapping} of the ${caveat.hits} meals followed by a rough outcome were eaten while you were taking ${caveat.name.trim()}.`;
 }
 
+/** "Usually about 5 h later (3–8 h)" from a finding's instances, or null with fewer than 3 hits. */
+function latencyFor(instances: readonly DrilldownInstance[]): string | null {
+  const summary = latencySummary(
+    instances.flatMap((instance) => (instance.outcomeDelayMs == null ? [] : [instance.outcomeDelayMs])),
+  );
+  return summary ? latencyLine(summary) : null;
+}
+
+const SLOWER_INTRO =
+  'These only show up when counting outcomes up to 48 hours after eating — slower reactions.';
+
 function ConfidenceChip({
   confidence,
   n,
@@ -132,6 +146,7 @@ function CaveatLine({ text }: { text: string }) {
 function Card({
   title,
   body,
+  latency,
   sample,
   confidence,
   n,
@@ -142,6 +157,8 @@ function Card({
 }: {
   title: string;
   body: string;
+  /** Typical reaction time, e.g. "Usually about 5 h later (3–8 h)" (#21). */
+  latency?: string | null;
   sample?: string;
   confidence?: ConfidenceTier;
   n?: number;
@@ -156,6 +173,11 @@ function Card({
     <>
       <ThemedText type="smallBold">{title}</ThemedText>
       <ThemedText type="small">{body}</ThemedText>
+      {latency ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          {latency}
+        </ThemedText>
+      ) : null}
       {sample ? (
         <ThemedText type="small" themeColor="textSecondary">
           {sample}
@@ -193,7 +215,13 @@ export default function InsightsScreen() {
   const medEvents = useMedicationEvents();
   const medDoses = useMedicationDoses();
   const insets = useSafeAreaInsets();
-  const { summary, nutrientFindings, foodFindings, ingredientFindings, pairFindings } = computeInsights(entries);
+  const insights = computeInsights(entries);
+  const { summary, nutrientFindings, foodFindings, ingredientFindings, pairFindings } = insights;
+  // A second, guarded window (#21): only medium/high findings that the 24 h
+  // sections do not already show. See analyzeSlowerPatterns.
+  const slower = analyzeSlowerPatterns(entries, insights);
+  const hasSlowerPatterns =
+    slower.ingredientFindings.length > 0 || slower.pairFindings.length > 0 || slower.foodFindings.length > 0;
   // Lazy-init so Date.now() is read once per mount, not on every render pass
   // (the render function itself must stay pure/idempotent).
   const [now] = useState(() => Date.now());
@@ -223,6 +251,7 @@ export default function InsightsScreen() {
     foodFindings.length > 0 ||
     ingredientFindings.length > 0 ||
     pairFindings.length > 0 ||
+    hasSlowerPatterns ||
     medicationAnalysis.findings.length > 0;
 
   return (
@@ -304,12 +333,14 @@ export default function InsightsScreen() {
           <View style={styles.section}>
             <ThemedText type="subtitle">Ingredients linked to rough outcomes</ThemedText>
             {ingredientFindings.map((finding) => {
-              const caveat = caveatFor(findingInstances(entries, 'tag', finding.key));
+              const instances = findingInstances(entries, 'tag', finding.key);
+              const caveat = caveatFor(instances);
               return (
                 <Card
                   key={finding.key}
                   title={finding.label}
                   body={outcomeSentence(finding)}
+                  latency={latencyFor(instances)}
                   confidence={finding.confidence}
                   n={finding.occurrences}
                   onPress={() =>
@@ -329,9 +360,16 @@ export default function InsightsScreen() {
           <View style={styles.section}>
             <ThemedText type="subtitle">Combinations</ThemedText>
             {pairFindings.map((finding) => {
-              const caveat = caveatFor(pairInstances(entries, finding.key));
+              const instances = pairInstances(entries, finding.key);
+              const caveat = caveatFor(instances);
               return (
-                <Card key={finding.key} title={finding.label} body={outcomeSentence(finding)} confidence={finding.confidence} n={finding.occurrences}>
+                <Card
+                  key={finding.key}
+                  title={finding.label}
+                  body={outcomeSentence(finding)}
+                  latency={latencyFor(instances)}
+                  confidence={finding.confidence}
+                  n={finding.occurrences}>
                   <BarMeter label={finding.label} rate={finding.hitRate} baseRate={finding.baseRate} />
                   {caveat ? <CaveatLine text={caveat} /> : null}
                 </Card>
@@ -344,12 +382,14 @@ export default function InsightsScreen() {
           <View style={styles.section}>
             <ThemedText type="subtitle">Foods linked to rough outcomes</ThemedText>
             {foodFindings.map((finding) => {
-              const caveat = caveatFor(findingInstances(entries, 'food', finding.label));
+              const instances = findingInstances(entries, 'food', finding.label);
+              const caveat = caveatFor(instances);
               return (
                 <Card
                   key={finding.key}
                   title={finding.label}
                   body={outcomeSentence(finding)}
+                  latency={latencyFor(instances)}
                   confidence={finding.confidence}
                   n={finding.occurrences}
                   onPress={() =>
@@ -361,6 +401,62 @@ export default function InsightsScreen() {
                 </Card>
               );
             })}
+          </View>
+        ) : null}
+
+        {hasSlowerPatterns ? (
+          <View style={styles.section}>
+            <ThemedText type="subtitle">Slower patterns (within 48 h)</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              {SLOWER_INTRO}
+            </ThemedText>
+            {slower.ingredientFindings.map((finding) => (
+              <Card
+                key={`ingredient-${finding.key}`}
+                title={finding.label}
+                body={outcomeSentence(finding, 48)}
+                latency={latencyFor(findingInstances(entries, 'tag', finding.key, SLOW_WINDOW_MS))}
+                confidence={finding.confidence}
+                n={finding.occurrences}
+                onPress={() =>
+                  router.push({
+                    pathname: '/insight/detail',
+                    params: { kind: 'tag', value: finding.label, window: '48' },
+                  })
+                }
+                pressLabel={`See all logs: ${finding.label}`}>
+                <BarMeter label={finding.label} rate={finding.hitRate} baseRate={finding.baseRate} />
+              </Card>
+            ))}
+            {slower.pairFindings.map((finding) => (
+              <Card
+                key={`pair-${finding.key}`}
+                title={finding.label}
+                body={outcomeSentence(finding, 48)}
+                latency={latencyFor(pairInstances(entries, finding.key, SLOW_WINDOW_MS))}
+                confidence={finding.confidence}
+                n={finding.occurrences}>
+                <BarMeter label={finding.label} rate={finding.hitRate} baseRate={finding.baseRate} />
+              </Card>
+            ))}
+            {slower.foodFindings.map((finding) => (
+              <Card
+                key={`food-${finding.key}`}
+                title={finding.label}
+                body={outcomeSentence(finding, 48)}
+                latency={latencyFor(findingInstances(entries, 'food', finding.label, SLOW_WINDOW_MS))}
+                confidence={finding.confidence}
+                n={finding.occurrences}
+                onPress={() =>
+                  router.push({
+                    pathname: '/insight/detail',
+                    params: { kind: 'food', value: finding.label, window: '48' },
+                  })
+                }
+                pressLabel={`See all logs: ${finding.label}`}>
+                <BarMeter label={finding.label} rate={finding.hitRate} baseRate={finding.baseRate} />
+              </Card>
+            ))}
           </View>
         ) : null}
 
