@@ -1,4 +1,4 @@
-// Writes a backup v5 JSON holding an elimination experiment that is READY for
+// Writes a backup v6 JSON holding an elimination experiment that is READY for
 // its verdict today (GitHub #19, Cycle B) — for device checks: import it via
 // Settings -> Import data, then Home shows "Lactose experiment · Verdict
 // ready" and the experiment screen reads "Likely a trigger".
@@ -170,9 +170,33 @@ export function buildExperimentFixture(todayKey = keyOf(new Date())) {
   }
   const baselineStartedAt = at(baselineStart, 6);
 
+  // #23 day details: stress 5 on the rough baseline days, stress 2 on the
+  // calm ones and every elimination day — a "high-stress days" finding and a
+  // stress caveat on the lactose finding (its rough baseline meals all fall on
+  // high-stress days).
+  const dayFactors = [];
+  const factorRow = (day, stress) => ({
+    id: `fixture-factor-${day}`,
+    date: day,
+    sleep: null,
+    stress,
+    alcohol: null,
+    caffeine: null,
+    period: null,
+    createdAt: at(day, 21),
+    updatedAt: at(day, 21),
+  });
+  for (let i = 0; i < PROTOCOL.baselineDays; i++) {
+    const day = addDays(startDate, -PROTOCOL.baselineDays + i);
+    dayFactors.push(factorRow(day, i < BASELINE_BAD_DAYS ? 5 : 2));
+  }
+  for (let i = 0; i < PROTOCOL.eliminationDays; i++) {
+    dayFactors.push(factorRow(addDays(startDate, i), 2));
+  }
+
   const startedAt = at(startDate, 8);
   return {
-    version: 5,
+    version: 6,
     entries,
     mealComponents: [],
     medications: [
@@ -193,6 +217,7 @@ export function buildExperimentFixture(todayKey = keyOf(new Date())) {
     medicationEvents,
     medicationDoses,
     dayCheckIns: [],
+    dayFactors,
     experiments: [
       {
         id: 'fixture-experiment-lactose',

@@ -5,7 +5,7 @@
 > Written 2026-09-27 at the end of a long Opus session (2026-09-26 → 27) so the
 > next session can continue without the transcript. `docs/HANDOFF.md` is a
 > *different* file: the execute-session spec for Sonnet — it currently holds the
-> finished dose-response (GH #22) spec and gets overwritten by the next plan.
+> finished daily-confounders (GH #23) spec and gets overwritten by the next plan.
 > **Updated 2026-09-27 (later session):** GH #13–#18 shipped — see §1/§2.
 
 ## 1. Where things stand
@@ -46,7 +46,8 @@
   **GH #21** too — plan `69d65a0`, Sonnet `1c03d5a..e8c1c58` (second run; the
   first died on a network error with nothing written), fixture/flow/docs.
   **GH #22** too — plan `26db65a`, Sonnet `aed9d12`, `62a92bc`, review fix +
-  docs.
+  docs. **GH #23** too — plan `844293c`, Sonnet `2b4fa4d..fa98866`, fixture +
+  flows + docs (migration 0012).
 - **Typed routes:** `.expo/types/router.d.ts` (gitignored) only regenerates
   under `npx expo start`; a new route won't typecheck on a machine that
   hasn't run Metro since. Sonnet hand-added `/outcome/[id]` locally; the next
@@ -67,11 +68,10 @@
 
 The ranked backlog is `docs/PROGRESS.md` → "📌 Pinned — next up" (#1–7) and
 "Ranked backlog — continued" (#8–19). Each item names its GitHub issue.
-**#1–#11 (GH #12–#22) are done** in code (#13–#21 owe device checks; #22
-is Jest-only; #19–#22 are on the unmerged worktree branch until the owner's
-device run). Next: **#12 — Confounder tracking (GH #23)** — sleep/stress/
-cycle/alcohol/caffeine; likely an additive migration (ask the owner).
-Plan session first.
+**#1–#12 (GH #12–#23) are done** in code (#13–#23 owe device checks; #22
+is Jest-only; #19–#23 are on the unmerged worktree branch — two migrations,
+0011 and 0012 — until the owner's device run). Next: **#13 — "By chance"
+indicator on findings (GH #24)**. Plan session first.
 - **Full Jest re-baselined 2026-09-27: 113 suites / 1,168 tests green**
   (`docs/RESULTS.md` addendum).
 

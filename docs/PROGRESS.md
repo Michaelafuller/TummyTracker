@@ -90,7 +90,9 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   reminders + tap-to-open; the PDF's Elimination experiments table.
   JS + migration 0011, no build. The same fixture covers **#20**: `zb-`
   also checks "Medications linked to rough days" (ibuprofen 7 of 7 days) and
-  the lactose card's confounder caveat, and **#21**'s latency line on it.
+  the lactose card's confounder caveat, and **#21**'s latency line on it,
+  and **#23**'s high-stress finding + stress caveat. `zc-day-details` checks
+  the Home day-details chips and the Track-period switch. Migration 0012.
 - **Owed device checks:** iOS pass (the #2 keyboard items below + carried: iOS
   app icon, time-picker Done feel), light-mode walkthrough, camera scan loop,
   and the manual items in `docs/E2E.md`. **Owner sequencing from the
@@ -152,6 +154,12 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   Review fix: the suspect must have been eaten in the baseline, otherwise a
   "drop" while avoiding it proves nothing (new inconclusive rule + preview
   warning); the watchlist store now refreshes after a start.
+- **Daily confounders (GitHub #23):** sleep, stress, alcohol, caffeine and an
+  opt-in period flag as one-tap "Add details" chips in the Home check-in card;
+  new `day_factor` table (0012), backup v6; "Daily factors linked to rough
+  days" in Insights + factor caveats on food cards, comparing flagged days
+  with days the factor was logged unflagged. No review bugs; added the
+  stress pattern to the device fixture and a flow.
 - **Dose-response (GitHub #22):** spike confirmed findings ignored portion
   size; ingredient/food cards now show "More than 1 serving: 4 of 5 (80%) ·
   1 or less: 1 of 6 (17%)" when larger amounts are clearly worse, and the
@@ -253,7 +261,7 @@ analysis.
 | 9 | ~~**Medications in the correlation engine** (GH #20)~~ — *✅ 2026-09-28 (device check owed; on the #19 branch)* | NSAIDs, antibiotics and PPIs strongly affect digestion; today a bad antibiotic week is blamed on food. Treat meds as confounders and candidate exposures. | M–L | Plan first. The #11 helpers already make the data analysis-ready; the engine deliberately doesn't read it yet. |
 | 10 | ~~**Reaction latency + multiple windows** (GH #21)~~ — *✅ 2026-09-30 (device check owed; on the #19 branch)* | Every outcome counts "within 24 h", but reactions range from hours (lactose) to 1–3 days (some FODMAP/gluten). Show when outcomes tend to follow each trigger; compare windows. | M | Also makes findings more explainable. |
 | 11 | ~~**Dose-response** (GH #22)~~ — *✅ 2026-09-30 (on the #19 branch)* | Servings are stored, but the engine appears to treat an ingredient as present/absent — "a splash of milk is fine, a latte isn't" is exactly what the app should find. | S spike → M | First confirm in `temporal.ts` whether servings are ignored (not verified in review). |
-| 12 | **Confounder tracking** (GH #23) | Sleep, stress, menstrual cycle, alcohol and caffeine drive gut symptoms and currently land on food. Even one daily "stress 1–5" helps. | M | Could fold into #2's daily check-in. Additive migration. |
+| 12 | ~~**Confounder tracking** (GH #23)~~ — *✅ 2026-09-30 (device check owed; on the #19 branch)* | Sleep, stress, menstrual cycle, alcohol and caffeine drive gut symptoms and currently land on food. Even one daily "stress 1–5" helps. | M | Could fold into #2's daily check-in. Additive migration. |
 | 13 | **"By chance" indicator on findings** (GH #24) | Many ingredients × few logs = some spurious correlations. Show how many findings like this you'd expect by chance. | S–M | Complements the existing confidence tiers. |
 | 14 | **Saved recipes / "my meals" with ingredients** (GH #25) | Homemade and restaurant food has a name but no ingredients, blinding the ingredient engine where it matters most. | M | Re-used like Recent meals. |
 | 15 | **Faster logging** (GH #26) | Favourites ("usual breakfast"), log straight from the reminder notification (subsumes the reminder deep-link), one-tap "took my regular meds". Adherence and data quality die when logging is tedious. | M | |

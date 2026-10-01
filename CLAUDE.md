@@ -185,6 +185,17 @@
   sides need ≥ 4 meals. Cards show a line only when larger is ≥ 20 points
   worse; the finding detail shows the split numbers whenever there's enough
   data. Not in the PDF; no existing number changes.
+- **Daily confounders (owner-decided 2026-09-30, GitHub #23).** Table
+  `day_factor` (0012, one row per local day, every factor nullable — the
+  check-in's NOT NULL status couldn't be relaxed additively); backups v6.
+  Sleep/stress/alcohol/caffeine, plus period **only when Settings → Track
+  period is on** (hidden everywhere otherwise, rows kept). Entry: "Add
+  details" chips in the Home check-in card; tapping a selected chip clears
+  it to unknown. Flagged days: stress 4–5, poor sleep, any alcohol (that day
+  and the next), "more" caffeine, period. Findings compare flagged days with
+  days the factor was **logged and not flagged** (never "all other days");
+  rough = `isOutcome` only. Caveats on food cards like #20's. A factor-only
+  day counts as covered (#13 line, #20 pools).
 - **Real-SQLite repository tests (2026-09-27, GitHub #18).** `jest/expo-sqlite-node.ts`
   is a Jest-only fake `expo-sqlite` backed by Node's built-in `node:sqlite`
   (**Node ≥ 22.13 to run the tests**; no dependency). A DB test file starts

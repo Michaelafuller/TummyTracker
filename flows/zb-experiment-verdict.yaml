@@ -10,6 +10,8 @@ appId: com.tummytracker.app.dev
 #   - #20 (same fixture): Insights shows "Medications linked to rough days"
 #     with the ibuprofen finding, and the lactose ingredient card carries the
 #     confounder caveat
+#   - #23 (same fixture): "Daily factors linked to rough days" with the
+#     high-stress finding, and a stress caveat on the lactose card
 #   - #21 (same fixture): the lactose card shows its latency line
 #     ("Usually about 3 h later": meals at 12:00, bad BMs at 15:00)
 ---
@@ -77,3 +79,19 @@ appId: com.tummytracker.app.dev
     direction: DOWN
     centerElement: true
 - assertVisible: "High confidence · 7 days"
+
+# --- #23: daily factors (the fixture logs stress 5 on the 10 rough baseline days) ---
+- scrollUntilVisible:
+    element:
+      text: "Daily factors linked to rough days"
+    direction: DOWN
+- scrollUntilVisible:
+    element:
+      text: "Rough on 10 of 10 high-stress days \(100%\) vs 0 of 18 other days you logged stress \(0%\)\."
+    direction: DOWN
+    centerElement: true
+- scrollUntilVisible:
+    element:
+      text: "10 of the 12 meals followed by a rough outcome were on high-stress days\."
+    direction: UP
+    centerElement: true

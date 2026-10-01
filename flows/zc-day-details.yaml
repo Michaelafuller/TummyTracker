@@ -1,0 +1,56 @@
+appId: com.tummytracker.app.dev
+# ZC — Day details on the Home check-in card (GitHub #23, 2026-09-30).
+#   - "Add details" opens one-tap chips for today; Sleep: Poor + Stress: 4
+#   - Collapsed, the row summarizes them: "Stress 4 · Poor sleep"
+#   - Tapping a selected chip clears it (back to unknown)
+#   - Persists across a relaunch
+#   - Period chips appear only after Settings → "Track period" is switched on
+# The analysis side (factor finding + caveat) is checked by zb-experiment-
+# verdict.yaml on the shared fixture, which logs stress on 28 days.
+---
+- launchApp:
+    clearState: true
+- runFlow: _helpers/reconnect-dev-client.yaml
+
+- assertVisible: "How was today?"
+- tapOn: "Add details for today"
+- waitForAnimationToEnd
+- assertNotVisible: "Period: Yes"
+- tapOn: "Sleep: Poor"
+- tapOn: "Stress: 4"
+- tapOn: "Hide details for today"
+- waitForAnimationToEnd
+- assertVisible: "Stress 4 · Poor sleep"
+
+# Clearing a chip: Stress back to unknown.
+- tapOn: "Add details for today"
+- waitForAnimationToEnd
+- tapOn: "Stress: 4"
+- tapOn: "Hide details for today"
+- waitForAnimationToEnd
+- assertVisible: "Poor sleep"
+- assertNotVisible: "Stress 4 · Poor sleep"
+
+# Persists across a relaunch.
+- stopApp
+- launchApp
+- runFlow: _helpers/reconnect-dev-client.yaml
+- assertVisible: "Poor sleep"
+
+# Period chips only once tracking is on.
+- tapOn:
+    id: "open-settings"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "Track period"
+    direction: DOWN
+    centerElement: true
+- tapOn:
+    id: "track-period-switch"
+- waitForAnimationToEnd
+- back
+- waitForAnimationToEnd
+- tapOn: "Add details for today"
+- waitForAnimationToEnd
+- assertVisible: "Period: Yes"

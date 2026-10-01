@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path';
 
 import { parseBackupJson } from '@/lib/backup';
 import { findingInstances } from '@/features/analysis/drilldown';
+import { analyzeFactorDays, factorCaveat, factorDays, factorSentence } from '@/features/analysis/factors';
 import { latencyLine, latencySummary } from '@/features/analysis/latency';
 import { analyzeMedicationDays, confounderCaveat, medicationExposureDays } from '@/features/analysis/medications';
 import { currentPhase, evaluateExperiment, experimentSchedule } from '../engine';
@@ -34,13 +35,13 @@ function generate(todayKey: string, name = `backup-${todayKey}.json`) {
 
 describe('scripts/make-experiment-fixture.mjs', () => {
   it.each(['2026-09-28', '2026-11-15', '2027-03-20'])(
-    'writes a backup v5 that parses and evaluates to a likely-trigger verdict today (%s)',
+    'writes a backup v6 that parses and evaluates to a likely-trigger verdict today (%s)',
     (todayKey) => {
       const { text } = generate(todayKey);
 
       const parsed = parseBackupJson(text);
       if (!parsed.ok) throw new Error(parsed.error);
-      expect(JSON.parse(text).version).toBe(5);
+      expect(JSON.parse(text).version).toBe(6);
       expect(parsed.experiments).toHaveLength(1);
 
       const exp = parsed.experiments[0];
@@ -98,6 +99,26 @@ describe('scripts/make-experiment-fixture.mjs', () => {
     const summary = latencySummary(delays);
     expect(summary).not.toBeNull();
     expect(latencyLine(summary!)).toBe('Usually about 3 h later');
+  });
+
+  it('also yields the #23 checks: a high-stress finding and a stress caveat on lactose, ibuprofen unchanged', () => {
+    const parsed = parseBackupJson(generate('2026-09-28').text);
+    if (!parsed.ok) throw new Error(parsed.error);
+    const opts = { trackPeriod: false };
+    const { findings } = analyzeFactorDays(parsed.entries, parsed.dayCheckIns, parsed.dayFactors, opts);
+    expect(findings).toHaveLength(1);
+    expect(factorSentence(findings[0])).toBe(
+      'Rough on 10 of 10 high-stress days (100%) vs 0 of 18 other days you logged stress (0%).',
+    );
+    const caveat = factorCaveat(findingInstances(parsed.entries, 'tag', 'lactose'), factorDays(parsed.dayFactors, opts));
+    expect(caveat).toMatchObject({ key: 'stress', overlapping: 10, hits: 12 });
+
+    // Factor rows sit on days the fixture already covers, so #20 is unchanged.
+    const meds = analyzeMedicationDays(
+      parsed.entries, parsed.dayCheckIns, parsed.medications, parsed.medicationEvents, parsed.medicationDoses,
+      parsed.dayFactors,
+    );
+    expect(meds.findings[0]).toMatchObject({ name: 'Ibuprofen', exposedDays: 7, exposedRough: 7 });
   });
 
   it('gives every entry and the experiment a stable, unique fixture- id', () => {

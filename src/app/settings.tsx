@@ -525,7 +525,7 @@ export default function SettingsScreen() {
                 device.
               </ThemedText>
             </View>
-            <Switch value={trackPeriod} onValueChange={setTrackPeriod} accessibilityLabel="Track period" />
+            <Switch value={trackPeriod} onValueChange={setTrackPeriod} accessibilityLabel="Track period" testID="track-period-switch" />
           </View>
         </View>
 
