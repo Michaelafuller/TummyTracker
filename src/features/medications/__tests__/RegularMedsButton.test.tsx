@@ -4,6 +4,21 @@ import { Alert } from 'react-native';
 import type { Medication } from '@/db/schema';
 import { RegularMedsButton } from '../RegularMedsButton';
 
+// The Meds tab stays mounted while you switch tabs, so "leaving the screen"
+// is a blur, not an unmount: capture the focus effect's cleanup to fire it.
+let mockBlur: (() => void) | undefined;
+jest.mock('expo-router', () => {
+  const { useEffect } = jest.requireActual('react');
+  return {
+    useFocusEffect: (effect: () => void | (() => void)) => {
+      useEffect(() => {
+        const cleanup = effect();
+        mockBlur = typeof cleanup === 'function' ? cleanup : undefined;
+      }, [effect]);
+    },
+  };
+});
+
 let mockMedications: Medication[] = [];
 jest.mock('../useMedicationData', () => ({
   useMedications: () => mockMedications,
@@ -102,6 +117,23 @@ describe('RegularMedsButton', () => {
 
     expect(await findByTestId('regular-meds-undo')).toBeTruthy();
     expect(mockCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaving the screen ends the Undo offer and brings the button back, deleting nothing (review 2026-10-01)', async () => {
+    mockMedications = [med('a', 'Levothyroxine')];
+    const { findByTestId, queryByTestId } = await render(<RegularMedsButton />);
+
+    await fireEvent.press(await findByTestId('regular-meds-log'));
+    expect(await findByTestId('regular-meds-undo')).toBeTruthy();
+
+    // Switch tabs (the screen stays mounted), come back tomorrow: no stale Undo.
+    await act(async () => {
+      mockBlur?.();
+    });
+
+    expect(await findByTestId('regular-meds-log')).toBeTruthy();
+    expect(queryByTestId('regular-meds-undo')).toBeNull();
+    expect(mockDelete).not.toHaveBeenCalled();
   });
 
   it('Undo deletes that one event id and brings the button back', async () => {

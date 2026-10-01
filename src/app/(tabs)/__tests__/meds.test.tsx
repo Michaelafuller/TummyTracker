@@ -1,3 +1,4 @@
+import { useEffect as mockUseEffect } from 'react';
 import { fireEvent, render } from '@testing-library/react-native';
 import { SafeAreaProvider, type Metrics } from 'react-native-safe-area-context';
 
@@ -14,8 +15,11 @@ function renderScreen(ui: import('react').ReactElement) {
 }
 
 const mockPush = jest.fn();
+// RegularMedsButton (#26) ends its Undo offer on blur via useFocusEffect; with
+// no NavigationContainer here, approximate it as "run on mount".
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush }),
+  useFocusEffect: (effect: () => void | (() => void)) => mockUseEffect(effect, []),
 }));
 
 let mockMedications: Medication[] = [];

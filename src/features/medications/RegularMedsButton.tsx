@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/primary-button';
@@ -21,6 +22,9 @@ interface LoggedState {
  * unit — only ever on an explicit tap (invariant, HANDOFF.md §0). After a
  * successful log the button is replaced by "Logged at … · Undo", so a second
  * tap can't log twice; Undo deletes that one event and brings the button back.
+ * The Undo offer ends when the screen loses focus: the Meds tab stays mounted
+ * across tab switches, so without this it would still offer to undo
+ * yesterday's dose the next morning (review 2026-10-01).
  * Renders nothing when no medication is regular (and active, with a dose).
  */
 export function RegularMedsButton() {
@@ -30,6 +34,15 @@ export function RegularMedsButton() {
   // A ref (not state) so a fast second tap, before React re-renders, is
   // rejected synchronously.
   const inFlight = useRef(false);
+
+  useFocusEffect(
+    useCallback(
+      () => () => {
+        setLogged(null);
+      },
+      [],
+    ),
+  );
 
   const doses = useMemo(() => regularDoses(medications), [medications]);
   const summary = useMemo(() => {
