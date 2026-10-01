@@ -12,9 +12,11 @@ import { parseTagsJson } from '@/lib/ingredients';
 import { wilsonLowerBound, type ConfidenceTier } from '@/lib/stats';
 import {
   analyzeOutcomeRates,
+  DEFAULT_WINDOW_MS,
   isOutcome,
   MEDIUM_CONFIDENCE_MIN_MEALS,
   mealsFollowedByOutcome,
+  SLOW_WINDOW_MS,
   tagHitRates,
   type OutcomeFinding,
   type OutcomeKey,
@@ -67,9 +69,14 @@ function isFood(entry: LogEntry): boolean {
  * (ingredient-to-outcome timing) analysis — there is no separate "timing"
  * finding set; ingredient outcomes ARE the timing analysis.
  */
-export function analyzeIngredientOutcomes(entries: readonly LogEntry[]): OutcomeFinding[] {
-  return analyzeOutcomeRates(entries, (meal) =>
-    parseTagsJson(meal.tagsJson).map((tag) => ({ key: tag, label: tag })),
+export function analyzeIngredientOutcomes(
+  entries: readonly LogEntry[],
+  windowMs: number = DEFAULT_WINDOW_MS,
+): OutcomeFinding[] {
+  return analyzeOutcomeRates(
+    entries,
+    (meal) => parseTagsJson(meal.tagsJson).map((tag) => ({ key: tag, label: tag })),
+    { windowMs },
   );
 }
 
@@ -78,14 +85,17 @@ export function analyzeIngredientOutcomes(entries: readonly LogEntry[]): Outcome
  * is kept as the label) whose meals are followed by a rough outcome more
  * often than the overall baseline.
  */
-export function analyzeFoodOutcomes(entries: readonly LogEntry[]): OutcomeFinding[] {
+export function analyzeFoodOutcomes(
+  entries: readonly LogEntry[],
+  windowMs: number = DEFAULT_WINDOW_MS,
+): OutcomeFinding[] {
   return analyzeOutcomeRates(
     entries,
     (meal) => {
       const name = meal.name.trim();
       return name.length > 0 ? [{ key: name.toLowerCase(), label: name }] : [];
     },
-    { minOccurrences: MIN_FOOD_OCCURRENCES },
+    { minOccurrences: MIN_FOOD_OCCURRENCES, windowMs },
   );
 }
 
@@ -99,8 +109,12 @@ export function analyzeFoodOutcomes(entries: readonly LogEntry[]): OutcomeFindin
  * when its hit rate beats BOTH constituent tags' raw hit rates (via
  * `tagHitRates`; a tag absent from that map — never seen alone — counts as
  * rate 0) by at least PAIR_RATE_MARGIN, then is capped at MAX_PAIR_FINDINGS.
+ * `windowMs` (default 24 h) applies to the pair rates and the tag rates alike.
  */
-export function analyzePairOutcomes(entries: readonly LogEntry[]): OutcomeFinding[] {
+export function analyzePairOutcomes(
+  entries: readonly LogEntry[],
+  windowMs: number = DEFAULT_WINDOW_MS,
+): OutcomeFinding[] {
   const foodEntries = entries.filter(isFood);
 
   const tagCounts = new Map<string, number>();
@@ -130,10 +144,10 @@ export function analyzePairOutcomes(entries: readonly LogEntry[]): OutcomeFindin
       }
       return keys;
     },
-    { minOccurrences: MIN_PAIR_OCCURRENCES },
+    { minOccurrences: MIN_PAIR_OCCURRENCES, windowMs },
   );
 
-  const rates = tagHitRates(entries);
+  const rates = tagHitRates(entries, windowMs);
   return findings
     .filter((f) => {
       const [a, b] = f.key.split(' + ');
@@ -237,6 +251,43 @@ export interface Insights {
   foodFindings: OutcomeFinding[];
   ingredientFindings: OutcomeFinding[];
   pairFindings: OutcomeFinding[];
+}
+
+export interface SlowerPatterns {
+  ingredientFindings: OutcomeFinding[];
+  foodFindings: OutcomeFinding[];
+  pairFindings: OutcomeFinding[];
+}
+
+/**
+ * "Slower patterns (within 48 h)" (#21): ingredient / food / combination
+ * findings that reach MEDIUM or HIGH confidence when outcomes are counted up
+ * to SLOW_WINDOW_MS after eating AND that do not appear in the 24 h results
+ * (`twentyFourHour`, any tier — a slower pattern never duplicates a 24 h one).
+ *
+ * Guard rails, deliberately narrow: with daily meals and scattered rough days
+ * a long window pushes the baseline toward 100 %, and trying several windows
+ * per food finds spurious "triggers" by chance. So exactly ONE extra window is
+ * tried, low-confidence results are never shown, and the per-finding timing
+ * profile (outcomeRateForKey) is context only — it never creates findings.
+ * Nutrient findings are not part of this (they stay at 24 h).
+ */
+export function analyzeSlowerPatterns(
+  entries: readonly LogEntry[],
+  twentyFourHour: Insights,
+): SlowerPatterns {
+  const novel = (found: OutcomeFinding[], shown: readonly OutcomeFinding[]): OutcomeFinding[] => {
+    const shownKeys = new Set(shown.map((f) => f.key));
+    return found.filter((f) => f.confidence !== 'low' && !shownKeys.has(f.key));
+  };
+  return {
+    ingredientFindings: novel(
+      analyzeIngredientOutcomes(entries, SLOW_WINDOW_MS),
+      twentyFourHour.ingredientFindings,
+    ),
+    foodFindings: novel(analyzeFoodOutcomes(entries, SLOW_WINDOW_MS), twentyFourHour.foodFindings),
+    pairFindings: novel(analyzePairOutcomes(entries, SLOW_WINDOW_MS), twentyFourHour.pairFindings),
+  };
 }
 
 export function computeInsights(entries: readonly LogEntry[]): Insights {
