@@ -71,6 +71,7 @@ const DEFAULT_TEST_PREFS: AppPrefs = {
   dayCheckInEnabled: false,
   dayCheckInHour: 21,
   dayCheckInMinute: 0,
+  trackPeriod: false,
   autoBackupDirUri: null,
   autoBackupDirName: null,
   lastBackupAt: null,

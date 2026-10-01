@@ -2,12 +2,16 @@
 // No filesystem or sharing imports here — kept pure so the logic can be unit-tested.
 
 import {
+  ALCOHOL_LEVELS,
+  CAFFEINE_LEVELS,
   DAY_STATUSES,
   EXPERIMENT_STATUSES,
   LOG_ENTRY_TYPES,
   FOOD_TYPES,
   MEAL_SLOTS,
+  SLEEP_LEVELS,
   type DayCheckIn,
+  type DayFactor,
   type Experiment,
   type LogEntry,
   type MealComponent,
@@ -29,14 +33,16 @@ export interface BackupFile {
   dayCheckIns?: DayCheckIn[];
   /** Absent before v5 (pre elimination-experiments, GitHub #19) and treated as [] on import. */
   experiments?: Experiment[];
+  /** Absent before v6 (pre daily-factors, GitHub #23) and treated as [] on import. */
+  dayFactors?: DayFactor[];
 }
 
 /**
  * Serializes entries + their mealComponent rows, the medication inventory and
  * history, the day check-in answers, and the elimination experiments (GitHub
- * #19 backup v5). Version bumps to 5 but `parseBackupJson` still reads
- * v1–v4 files (missing keys) by defaulting every new array to empty — old
- * backups remain importable.
+ * #19 backup v5), and the daily factors (GitHub #23 backup v6). Version bumps
+ * to 6 but `parseBackupJson` still reads v1–v5 files (missing keys) by
+ * defaulting every new array to empty — old backups remain importable.
  */
 export function entriesToJson(
   entries: LogEntry[],
@@ -46,9 +52,10 @@ export function entriesToJson(
   medicationDoses: MedicationDose[] = [],
   dayCheckIns: DayCheckIn[] = [],
   experiments: Experiment[] = [],
+  dayFactors: DayFactor[] = [],
 ): string {
   const payload: BackupFile = {
-    version: 5,
+    version: 6,
     entries,
     mealComponents,
     medications,
@@ -56,6 +63,7 @@ export function entriesToJson(
     medicationDoses,
     dayCheckIns,
     experiments,
+    dayFactors,
   };
   return JSON.stringify(payload, null, 2);
 }
@@ -124,6 +132,7 @@ export type ParseResult =
       medicationDoses: MedicationDose[];
       dayCheckIns: DayCheckIn[];
       experiments: Experiment[];
+      dayFactors: DayFactor[];
     }
   | { ok: false; error: string };
 
@@ -263,6 +272,43 @@ function normaliseDayCheckIn(v: Record<string, unknown>): DayCheckIn {
   };
 }
 
+function isNullableEnum(v: unknown, levels: readonly string[]): boolean {
+  return v === null || v === undefined || (typeof v === 'string' && levels.includes(v));
+}
+
+function isValidDayFactor(v: unknown): v is DayFactor {
+  if (!v || typeof v !== 'object') return false;
+  const r = v as Record<string, unknown>;
+  if (!isString(r.id) || r.id.length === 0) return false;
+  if (!isString(r.date) || !DATE_KEY_RE.test(r.date)) return false;
+  if (!isNullableEnum(r.sleep, SLEEP_LEVELS)) return false;
+  if (!isNullableEnum(r.alcohol, ALCOHOL_LEVELS)) return false;
+  if (!isNullableEnum(r.caffeine, CAFFEINE_LEVELS)) return false;
+  if (r.stress !== null && r.stress !== undefined) {
+    if (typeof r.stress !== 'number' || !Number.isInteger(r.stress) || r.stress < 1 || r.stress > 5) return false;
+  }
+  if (r.period !== null && r.period !== undefined && typeof r.period !== 'boolean') return false;
+  if (typeof r.createdAt !== 'number') return false;
+  if (typeof r.updatedAt !== 'number') return false;
+  return true;
+}
+
+/** Normalises a dayFactor from the backup so absent factor fields become null. */
+function normaliseDayFactor(v: Record<string, unknown>): DayFactor {
+  const nullable = <T>(key: string): T | null => (v[key] !== undefined ? v[key] : null) as T | null;
+  return {
+    id: v.id as string,
+    date: v.date as string,
+    sleep: nullable<DayFactor['sleep']>('sleep'),
+    stress: nullable<number>('stress'),
+    alcohol: nullable<DayFactor['alcohol']>('alcohol'),
+    caffeine: nullable<DayFactor['caffeine']>('caffeine'),
+    period: nullable<boolean>('period'),
+    createdAt: v.createdAt as number,
+    updatedAt: v.updatedAt as number,
+  };
+}
+
 function isValidExperiment(v: unknown): v is Experiment {
   if (!v || typeof v !== 'object') return false;
   const r = v as Record<string, unknown>;
@@ -302,7 +348,7 @@ function normaliseExperiment(v: Record<string, unknown>): Experiment {
 
 /**
  * Parses a backup file, accepting both the legacy v1 shape (no mealComponents
- * key — imports with an empty component list) and the v2/v3/v4 shapes
+ * key — imports with an empty component list) and the v2–v6 shapes
  * produced by entriesToJson. Also accepts a bare entries array for maximum
  * backward compat.
  */
@@ -401,7 +447,27 @@ export function parseBackupJson(text: string): ParseResult {
     experiments.push(normaliseExperiment(rawExperiments[i] as Record<string, unknown>));
   }
 
-  return { ok: true, entries, mealComponents, medications, medicationEvents, medicationDoses, dayCheckIns, experiments };
+  // Absent before v6 — default to [] so v1–v5 backups remain importable.
+  const rawDayFactors: unknown[] = Array.isArray(root.dayFactors) ? (root.dayFactors as unknown[]) : [];
+  const dayFactors: DayFactor[] = [];
+  for (let i = 0; i < rawDayFactors.length; i++) {
+    if (!isValidDayFactor(rawDayFactors[i])) {
+      return { ok: false, error: `Day factor at index ${i} has an invalid shape.` };
+    }
+    dayFactors.push(normaliseDayFactor(rawDayFactors[i] as Record<string, unknown>));
+  }
+
+  return {
+    ok: true,
+    entries,
+    mealComponents,
+    medications,
+    medicationEvents,
+    medicationDoses,
+    dayCheckIns,
+    experiments,
+    dayFactors,
+  };
 }
 
 // Re-export so callers only need one import.

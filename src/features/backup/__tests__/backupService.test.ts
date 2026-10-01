@@ -17,6 +17,7 @@ import { Platform } from 'react-native';
 import {
   hasAnyLogEntry,
   listAllDayCheckIns,
+  listAllDayFactors,
   listAllExperiments,
   listAllMealComponents,
   listAllMedicationDoses,
@@ -43,6 +44,7 @@ jest.mock('expo-sharing', () => ({
 jest.mock('@/db/repository', () => ({
   hasAnyLogEntry: jest.fn(),
   listAllDayCheckIns: jest.fn(),
+  listAllDayFactors: jest.fn(),
   listAllExperiments: jest.fn(),
   listAllMealComponents: jest.fn(),
   listAllMedicationDoses: jest.fn(),
@@ -66,6 +68,7 @@ const BASE_PREFS: AppPrefs = {
   dayCheckInEnabled: false,
   dayCheckInHour: 21,
   dayCheckInMinute: 0,
+  trackPeriod: false,
   autoBackupDirUri: null,
   autoBackupDirName: null,
   lastBackupAt: null,
@@ -103,6 +106,7 @@ beforeEach(() => {
   (listAllMedicationEvents as jest.Mock).mockResolvedValue([]);
   (listAllMedicationDoses as jest.Mock).mockResolvedValue([]);
   (listAllDayCheckIns as jest.Mock).mockResolvedValue([]);
+  (listAllDayFactors as jest.Mock).mockResolvedValue([]);
   (listAllExperiments as jest.Mock).mockResolvedValue([]);
   (hasAnyLogEntry as jest.Mock).mockResolvedValue(true);
   (Sharing.isAvailableAsync as jest.Mock).mockResolvedValue(true);
@@ -115,16 +119,18 @@ afterEach(() => {
 });
 
 describe('buildBackupJson', () => {
-  it('gathers every table into the existing v5 JSON shape', async () => {
+  it('gathers every table into the existing v6 JSON shape', async () => {
     (listLogEntries as jest.Mock).mockResolvedValue([{ id: 'e1' }]);
     const json = await buildBackupJson();
     const parsed = JSON.parse(json);
-    expect(parsed.version).toBe(5);
+    expect(parsed.version).toBe(6);
     expect(parsed.entries).toEqual([{ id: 'e1' }]);
     expect(parsed).toHaveProperty('mealComponents');
     expect(parsed).toHaveProperty('medications');
     expect(parsed).toHaveProperty('dayCheckIns');
     expect(parsed).toHaveProperty('experiments');
+    expect(parsed).toHaveProperty('dayFactors');
+    expect(listAllDayFactors).toHaveBeenCalled();
     expect(listAllExperiments).toHaveBeenCalled();
   });
 });
@@ -165,7 +171,7 @@ describe('backUpToFolderNow', () => {
     expect(files).toHaveLength(1);
     expect(files[0].name).toMatch(/^tummytracker-auto-\d{4}-\d{2}-\d{2}-\d{6}\.json$/);
     const written = JSON.parse(await files[0].text());
-    expect(written.version).toBe(5);
+    expect(written.version).toBe(6);
     expect(usePrefsStore.getState().lastBackupAt).not.toBeNull();
     expect(usePrefsStore.getState().lastAutoBackupAt).toBe(usePrefsStore.getState().lastBackupAt);
     expect(usePrefsStore.getState().autoBackupError).toBeNull();

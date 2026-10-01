@@ -1,5 +1,6 @@
 import type {
   DayCheckIn,
+  DayFactor,
   Experiment,
   LogEntry,
   MealComponent,
@@ -99,6 +100,18 @@ const BASE_DAY_CHECK_IN: DayCheckIn = {
   updatedAt: 8,
 };
 
+const BASE_DAY_FACTOR: DayFactor = {
+  id: 'df1',
+  date: '2026-06-15',
+  sleep: 'poor',
+  stress: 4,
+  alcohol: 'a_lot',
+  caffeine: 'usual',
+  period: true,
+  createdAt: 11,
+  updatedAt: 12,
+};
+
 const BASE_EXPERIMENT: Experiment = {
   id: 'exp1',
   term: 'lactose',
@@ -165,9 +178,9 @@ describe('entriesToJson / parseBackupJson roundtrip', () => {
       [BASE_MEDICATION_EVENT],
       [BASE_MEDICATION_DOSE],
     );
-    // entriesToJson always writes the current version (5) — parseBackupJson
-    // separately still reads older v1/v2/v3/v4 files (tested below).
-    expect(JSON.parse(json).version).toBe(5);
+    // entriesToJson always writes the current version (6) — parseBackupJson
+    // separately still reads older v1-v5 files (tested below).
+    expect(JSON.parse(json).version).toBe(6);
 
     const result = parseBackupJson(json);
     expect(result.ok).toBe(true);
@@ -195,7 +208,7 @@ describe('entriesToJson / parseBackupJson roundtrip', () => {
     expect(result.experiments).toEqual([]);
   });
 
-  it('roundtrips entries with elimination experiments intact (v5)', () => {
+  it('roundtrips entries with elimination experiments intact (v5 data, now in a v6 file)', () => {
     const json = entriesToJson(
       [BASE_ENTRY],
       [BASE_COMPONENT],
@@ -205,7 +218,7 @@ describe('entriesToJson / parseBackupJson roundtrip', () => {
       [BASE_DAY_CHECK_IN],
       [BASE_EXPERIMENT],
     );
-    expect(JSON.parse(json).version).toBe(5);
+    expect(JSON.parse(json).version).toBe(6);
 
     const result = parseBackupJson(json);
     expect(result.ok).toBe(true);
@@ -339,6 +352,80 @@ describe('legacy v3 backup import (no dayCheckIns key)', () => {
     if (!result.ok) return;
     expect(result.medications).toEqual([BASE_MEDICATION]);
     expect(result.dayCheckIns).toEqual([]);
+  });
+});
+
+describe('daily factors (GitHub #23, backup v6)', () => {
+  it('roundtrips daily factors intact in a v6 file', () => {
+    const json = entriesToJson([BASE_ENTRY], [], [], [], [], [], [], [BASE_DAY_FACTOR]);
+    expect(JSON.parse(json).version).toBe(6);
+
+    const result = parseBackupJson(json);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.dayFactors).toEqual([BASE_DAY_FACTOR]);
+  });
+
+  it('defaults dayFactors to [] for a v5 file (no key)', () => {
+    const result = parseBackupJson(JSON.stringify({ version: 5, entries: [BASE_ENTRY], experiments: [BASE_EXPERIMENT] }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.dayFactors).toEqual([]);
+    expect(result.experiments).toEqual([BASE_EXPERIMENT]);
+  });
+
+  it('defaults dayFactors to [] for a v1 file', () => {
+    const result = parseBackupJson(JSON.stringify({ version: 1, entries: [BASE_ENTRY] }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.dayFactors).toEqual([]);
+  });
+
+  it('accepts a row with only one factor, treating absent fields as null', () => {
+    const minimal = { id: 'df2', date: '2026-06-16', stress: 2, createdAt: 1, updatedAt: 2 };
+    const result = parseBackupJson(JSON.stringify({ version: 6, entries: [BASE_ENTRY], dayFactors: [minimal] }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.dayFactors[0]).toEqual({
+      id: 'df2',
+      date: '2026-06-16',
+      sleep: null,
+      stress: 2,
+      alcohol: null,
+      caffeine: null,
+      period: null,
+      createdAt: 1,
+      updatedAt: 2,
+    });
+  });
+
+  it.each([
+    ['a missing id', { id: '' }],
+    ['a malformed date', { date: '06/15/2026' }],
+    ['an unknown sleep level', { sleep: 'great' }],
+    ['an unknown alcohol level', { alcohol: 'lots' }],
+    ['an unknown caffeine level', { caffeine: 'decaf' }],
+    ['stress 0', { stress: 0 }],
+    ['stress 6', { stress: 6 }],
+    ['a fractional stress', { stress: 2.5 }],
+    ['a string stress', { stress: '3' }],
+    ['a non-boolean period', { period: 1 }],
+    ['a missing createdAt', { createdAt: undefined }],
+    ['a missing updatedAt', { updatedAt: undefined }],
+  ])('rejects a day factor with %s', (_label, override) => {
+    const bad = { ...BASE_DAY_FACTOR, ...override };
+    const result = parseBackupJson(JSON.stringify({ version: 6, entries: [BASE_ENTRY], dayFactors: [bad] }));
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBe('Day factor at index 0 has an invalid shape.');
+  });
+
+  it('accepts null in every factor field (a row whose chips were all cleared)', () => {
+    const cleared = { ...BASE_DAY_FACTOR, sleep: null, stress: null, alcohol: null, caffeine: null, period: null };
+    const result = parseBackupJson(JSON.stringify({ version: 6, entries: [BASE_ENTRY], dayFactors: [cleared] }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.dayFactors).toEqual([cleared]);
   });
 });
 

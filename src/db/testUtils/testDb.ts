@@ -23,6 +23,7 @@ import { db, sqlite } from '../client';
 import migrations from '../migrations/migrations';
 import {
   dayCheckIn,
+  dayFactor,
   experiment,
   goal,
   logEntry,
@@ -51,6 +52,7 @@ const APP_TABLES = [
   medicationEvent,
   medicationDose,
   dayCheckIn,
+  dayFactor,
   experiment,
 ];
 

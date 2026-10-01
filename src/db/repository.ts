@@ -20,7 +20,10 @@ import type { NutritionField } from '@/lib/validation';
 import { normalizeWatchTerm } from '@/lib/watchlist';
 import { db } from './client';
 import {
+  ALCOHOL_LEVELS,
+  CAFFEINE_LEVELS,
   dayCheckIn,
+  dayFactor,
   experiment,
   FOOD_TYPES,
   goal,
@@ -29,8 +32,10 @@ import {
   medication,
   medicationDose,
   medicationEvent,
+  SLEEP_LEVELS,
   watchlistItem,
   type DayCheckIn,
+  type DayFactor,
   type DayStatus,
   type Experiment,
   type Goal,
@@ -774,6 +779,118 @@ export async function insertDayCheckInsPreservingIds(
   const toInsert = deduped.filter((row) => !existingIds.has(row.id) && !existingDates.has(row.date));
   for (const insertBatch of chunk(toInsert, RESTORE_CHUNK_SIZE)) {
     await db.insert(dayCheckIn).values(insertBatch);
+  }
+  return { inserted: toInsert.length, skipped: rows.length - toInsert.length };
+}
+
+/** The factor columns a caller may patch — id/date/timestamps are managed here. */
+export type DayFactorPatch = Partial<
+  Pick<DayFactor, 'sleep' | 'stress' | 'alcohol' | 'caffeine' | 'period'>
+>;
+
+const DAY_FACTOR_KEYS = ['sleep', 'stress', 'alcohol', 'caffeine', 'period'] as const;
+
+/** Throws on any patched value outside its range (null is always allowed: it clears the field). */
+function validateDayFactorPatch(patch: DayFactorPatch): void {
+  const enumOk = (value: unknown, levels: readonly string[]) =>
+    value === null || (typeof value === 'string' && levels.includes(value));
+  if (patch.sleep !== undefined && !enumOk(patch.sleep, SLEEP_LEVELS)) {
+    throw new Error(`setDayFactors: invalid sleep "${String(patch.sleep)}".`);
+  }
+  if (patch.alcohol !== undefined && !enumOk(patch.alcohol, ALCOHOL_LEVELS)) {
+    throw new Error(`setDayFactors: invalid alcohol "${String(patch.alcohol)}".`);
+  }
+  if (patch.caffeine !== undefined && !enumOk(patch.caffeine, CAFFEINE_LEVELS)) {
+    throw new Error(`setDayFactors: invalid caffeine "${String(patch.caffeine)}".`);
+  }
+  if (
+    patch.stress !== undefined &&
+    patch.stress !== null &&
+    !(Number.isInteger(patch.stress) && patch.stress >= 1 && patch.stress <= 5)
+  ) {
+    throw new Error(`setDayFactors: invalid stress "${String(patch.stress)}" — expected an integer 1-5.`);
+  }
+  if (patch.period !== undefined && patch.period !== null && typeof patch.period !== 'boolean') {
+    throw new Error(`setDayFactors: invalid period "${String(patch.period)}".`);
+  }
+}
+
+/** This day's logged factors, or undefined when nothing has been logged for it yet. */
+export async function getDayFactors(date: string): Promise<DayFactor | undefined> {
+  const rows = await db.select().from(dayFactor).where(eq(dayFactor.date, date)).limit(1);
+  return rows[0];
+}
+
+/**
+ * Sets (or clears) daily factors for one local day (GitHub #23). Only the
+ * fields present in `patch` are written — the others keep their values; a
+ * `null` value clears that field back to "not logged". One row per `date`
+ * (unique): the first write inserts, later writes update in place, all in a
+ * single statement. Every value is validated BEFORE anything is written, so
+ * an invalid patch writes nothing. An empty patch is a no-op (no row is
+ * created).
+ */
+export async function setDayFactors(date: string, patch: DayFactorPatch): Promise<void> {
+  if (!DATE_KEY_RE.test(date)) {
+    throw new Error(`setDayFactors: invalid date "${date}" — expected YYYY-MM-DD.`);
+  }
+  validateDayFactorPatch(patch);
+  const changes: DayFactorPatch = {};
+  for (const key of DAY_FACTOR_KEYS) {
+    if (patch[key] !== undefined) Object.assign(changes, { [key]: patch[key] });
+  }
+  if (Object.keys(changes).length === 0) return;
+
+  const now = Date.now();
+  await db
+    .insert(dayFactor)
+    .values({ id: createId(), date, createdAt: now, updatedAt: now, ...changes })
+    .onConflictDoUpdate({ target: dayFactor.date, set: { ...changes, updatedAt: now } });
+}
+
+/** All day_factor rows, newest date first — used by the backup export and the analysis screens. */
+export async function listAllDayFactors(): Promise<DayFactor[]> {
+  return db.select().from(dayFactor).orderBy(desc(dayFactor.date));
+}
+
+/**
+ * Inserts pre-built day_factor rows PRESERVING their ids — mirrors
+ * {@link insertDayCheckInsPreservingIds}: a row is skipped if its `date`
+ * already exists on the device *or* its `id` does (the device's own row for
+ * a day wins, whole — rows are never field-merged), and duplicate dates
+ * inside `rows` are de-duplicated first (first wins) so a malformed backup
+ * can't violate the `date` unique index mid-restore.
+ */
+export async function insertDayFactorsPreservingIds(
+  rows: DayFactor[],
+): Promise<{ inserted: number; skipped: number }> {
+  if (rows.length === 0) return { inserted: 0, skipped: 0 };
+
+  const seenDates = new Set<string>();
+  const deduped: DayFactor[] = [];
+  for (const row of rows) {
+    if (seenDates.has(row.date)) continue;
+    seenDates.add(row.date);
+    deduped.push(row);
+  }
+
+  const existingIds = new Set<string>();
+  const existingDates = new Set<string>();
+  for (const idBatch of chunk(deduped.map((row) => row.id), RESTORE_CHUNK_SIZE)) {
+    const existing = await db.select({ id: dayFactor.id }).from(dayFactor).where(inArray(dayFactor.id, idBatch));
+    for (const row of existing) existingIds.add(row.id);
+  }
+  for (const dateBatch of chunk(deduped.map((row) => row.date), RESTORE_CHUNK_SIZE)) {
+    const existing = await db
+      .select({ date: dayFactor.date })
+      .from(dayFactor)
+      .where(inArray(dayFactor.date, dateBatch));
+    for (const row of existing) existingDates.add(row.date);
+  }
+
+  const toInsert = deduped.filter((row) => !existingIds.has(row.id) && !existingDates.has(row.date));
+  for (const insertBatch of chunk(toInsert, RESTORE_CHUNK_SIZE)) {
+    await db.insert(dayFactor).values(insertBatch);
   }
   return { inserted: toInsert.length, skipped: rows.length - toInsert.length };
 }

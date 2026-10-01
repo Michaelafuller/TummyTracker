@@ -13,6 +13,7 @@ const BASE: AppPrefs = {
   dayCheckInEnabled: false,
   dayCheckInHour: 21,
   dayCheckInMinute: 0,
+  trackPeriod: false,
   autoBackupDirUri: null,
   autoBackupDirName: null,
   lastBackupAt: null,
@@ -28,6 +29,11 @@ describe('loadPrefs', () => {
 });
 
 describe('savePrefs + loadPrefs round-trip', () => {
+  it('persists trackPeriod: true and defaults to false for an older pref file (GitHub #23)', async () => {
+    await savePrefs({ ...BASE, trackPeriod: true });
+    expect((await loadPrefs()).trackPeriod).toBe(true);
+  });
+
   it('persists offlineMode: true', async () => {
     await savePrefs({ ...BASE, offlineMode: true });
     const prefs = await loadPrefs();

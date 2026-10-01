@@ -13,6 +13,7 @@ import {
   createLogEntry,
   getLogEntry,
   insertDayCheckInsPreservingIds,
+  insertDayFactorsPreservingIds,
   insertExperimentsPreservingIds,
   insertMealComponents,
   insertMedicationDosesPreservingIds,
@@ -240,6 +241,14 @@ export default function SettingsScreen() {
           ? ` Imported ${dayCheckInResult.inserted} ${dayCheckInResult.inserted === 1 ? 'day check-in' : 'day check-ins'} (${dayCheckInResult.skipped} already existed).`
           : '';
 
+      // Daily factors (GitHub #23): the device's own row for a day wins,
+      // whole (insertDayFactorsPreservingIds skips on date OR id match).
+      const dayFactorResult = await insertDayFactorsPreservingIds(parsed.dayFactors);
+      const dayFactorSummary =
+        parsed.dayFactors.length > 0
+          ? ` Imported ${dayFactorResult.inserted} ${dayFactorResult.inserted === 1 ? 'day of factors' : 'days of factors'} (${dayFactorResult.skipped} already existed).`
+          : '';
+
       // Experiments (GitHub #19): ids preserved like medications; a restored
       // 'active' row is demoted to 'abandoned' rather than dropped when the
       // device already has (or this file already restored) an active one.
@@ -254,7 +263,7 @@ export default function SettingsScreen() {
 
       Alert.alert(
         'Import complete',
-        `Imported ${imported} ${imported === 1 ? 'entry' : 'entries'} (${skipped} already existed).${medSummary}${dayCheckInSummary}${experimentSummary}`,
+        `Imported ${imported} ${imported === 1 ? 'entry' : 'entries'} (${skipped} already existed).${medSummary}${dayCheckInSummary}${dayFactorSummary}${experimentSummary}`,
       );
     } catch (e) {
       Alert.alert('Import failed', e instanceof Error ? e.message : String(e));

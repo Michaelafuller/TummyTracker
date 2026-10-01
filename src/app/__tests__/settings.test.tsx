@@ -5,8 +5,10 @@ import { SafeAreaProvider, type Metrics } from 'react-native-safe-area-context';
 
 import {
   insertDayCheckInsPreservingIds,
+  insertDayFactorsPreservingIds,
   insertExperimentsPreservingIds,
   listAllDayCheckIns,
+  listAllDayFactors,
   listAllExperiments,
   listAllMedicationDoses,
   listAllMedicationEvents,
@@ -23,7 +25,7 @@ import SettingsScreen from '../settings';
 // The gathering/export path (exportBackupViaShare/buildBackupJson) is kept
 // REAL here — it runs against the expo-file-system/expo-sharing/repository
 // mocks below, exactly as the pre-service handleExport used to, so the
-// existing export-content tests keep exercising the real v4 JSON shape. Only
+// existing export-content tests keep exercising the real v6 JSON shape. Only
 // the folder-picker actions (which need a real SAF folder to do anything
 // meaningful) are replaced with jest.fn()s for the new Automatic backup tests.
 const mockChooseBackupFolder = jest.fn();
@@ -75,6 +77,8 @@ jest.mock('@/db/repository', () => ({
   insertMedicationDosesPreservingIds: jest.fn(),
   listAllDayCheckIns: jest.fn(),
   insertDayCheckInsPreservingIds: jest.fn(),
+  listAllDayFactors: jest.fn(),
+  insertDayFactorsPreservingIds: jest.fn(),
   listAllExperiments: jest.fn(),
   insertExperimentsPreservingIds: jest.fn(),
 }));
@@ -119,6 +123,7 @@ beforeEach(() => {
     dayCheckInEnabled: false,
     dayCheckInHour: 21,
     dayCheckInMinute: 0,
+    trackPeriod: false,
     autoBackupDirUri: null,
     autoBackupDirName: null,
     lastBackupAt: null,
@@ -133,6 +138,8 @@ beforeEach(() => {
   (listAllMedicationDoses as jest.Mock).mockResolvedValue([]);
   (listAllDayCheckIns as jest.Mock).mockResolvedValue([]);
   (insertDayCheckInsPreservingIds as jest.Mock).mockResolvedValue({ inserted: 0, skipped: 0 });
+  (listAllDayFactors as jest.Mock).mockResolvedValue([]);
+  (insertDayFactorsPreservingIds as jest.Mock).mockResolvedValue({ inserted: 0, skipped: 0 });
   (listAllExperiments as jest.Mock).mockResolvedValue([]);
   (insertExperimentsPreservingIds as jest.Mock).mockResolvedValue({ inserted: 0, skipped: 0 });
   (ensureNotificationPermission as jest.Mock).mockResolvedValue(true);
@@ -285,7 +292,7 @@ describe('SettingsScreen — Data section (day check-ins, GitHub #13)', () => {
     const [uri] = mockShareAsync.mock.calls[0];
     const { File } = jest.requireActual('expo-file-system');
     const written = JSON.parse(await new File(uri).text());
-    expect(written.version).toBe(5);
+    expect(written.version).toBe(6);
     expect(written.dayCheckIns).toEqual([
       { id: 'ci1', date: '2026-06-15', status: 'fine', createdAt: 1, updatedAt: 1 },
     ]);
@@ -408,6 +415,87 @@ describe('SettingsScreen — Data section (elimination experiments, GitHub #19)'
     expect(insertExperimentsPreservingIds).toHaveBeenCalledWith(backup.experiments);
     // A restored active experiment needs its phase reminders armed.
     expect(requestExperimentNotificationRefresh).toHaveBeenCalled();
+    (Alert.alert as jest.Mock).mockRestore();
+  });
+});
+
+describe('SettingsScreen — Data section (daily factors, GitHub #23)', () => {
+  it('export includes the daily factors in the shared backup JSON', async () => {
+    const row = {
+      id: 'f1',
+      date: '2026-06-15',
+      sleep: 'poor',
+      stress: 4,
+      alcohol: null,
+      caffeine: null,
+      period: null,
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    (listAllDayFactors as jest.Mock).mockResolvedValue([row]);
+
+    const { findByLabelText } = await renderScreen(<SettingsScreen />);
+    await fireEvent.press(await findByLabelText('Export data'));
+
+    await waitFor(() => expect(mockShareAsync).toHaveBeenCalled());
+    const [uri] = mockShareAsync.mock.calls[0];
+    const { File } = jest.requireActual('expo-file-system');
+    const written = JSON.parse(await new File(uri).text());
+    expect(written.version).toBe(6);
+    expect(written.dayFactors).toEqual([row]);
+  });
+
+  it('import summary reports the imported daily-factor count', async () => {
+    const backup = {
+      version: 6,
+      entries: [],
+      dayFactors: [
+        {
+          id: 'f1',
+          date: '2026-06-10',
+          sleep: 'good',
+          stress: null,
+          alcohol: 'some',
+          caffeine: null,
+          period: null,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+    };
+    mockPickFileAsync.mockResolvedValue({
+      canceled: false,
+      result: { text: async () => JSON.stringify(backup) },
+    });
+    (insertDayFactorsPreservingIds as jest.Mock).mockResolvedValue({ inserted: 1, skipped: 0 });
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+
+    const { findByLabelText } = await renderScreen(<SettingsScreen />);
+    await fireEvent.press(await findByLabelText('Import data'));
+
+    await waitFor(() =>
+      expect(Alert.alert).toHaveBeenCalledWith(
+        'Import complete',
+        'Imported 0 entries (0 already existed). Imported 1 day of factors (0 already existed).',
+      ),
+    );
+    expect(insertDayFactorsPreservingIds).toHaveBeenCalledWith(backup.dayFactors);
+    (Alert.alert as jest.Mock).mockRestore();
+  });
+
+  it('import summary omits the factors sentence for a v5 file without any', async () => {
+    mockPickFileAsync.mockResolvedValue({
+      canceled: false,
+      result: { text: async () => JSON.stringify({ version: 5, entries: [] }) },
+    });
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+
+    const { findByLabelText } = await renderScreen(<SettingsScreen />);
+    await fireEvent.press(await findByLabelText('Import data'));
+
+    await waitFor(() =>
+      expect(Alert.alert).toHaveBeenCalledWith('Import complete', 'Imported 0 entries (0 already existed).'),
+    );
     (Alert.alert as jest.Mock).mockRestore();
   });
 });

@@ -23,6 +23,10 @@ export type AppPrefs = {
   dayCheckInHour: number;
   /** Local minute (0-59) the day check-in fires at. */
   dayCheckInMinute: number;
+  /** Whether the optional period chip is offered in the day details (GitHub
+   * #23). Off by default; turning it off hides stored period data from every
+   * screen and analysis without deleting it. */
+  trackPeriod: boolean;
   /** SAF tree URI of the user's automatic-backup folder (Android), or null = off. */
   autoBackupDirUri: string | null;
   /** Folder display name for Settings ("Documents"), captured when picked. */
@@ -45,6 +49,7 @@ const DEFAULT_PREFS: AppPrefs = {
   dayCheckInEnabled: false,
   dayCheckInHour: 21,
   dayCheckInMinute: 0,
+  trackPeriod: false,
   autoBackupDirUri: null,
   autoBackupDirName: null,
   lastBackupAt: null,
