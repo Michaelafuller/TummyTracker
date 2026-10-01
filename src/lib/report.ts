@@ -12,11 +12,14 @@ import type { Experiment, LogEntry, Medication, MedicationDose, MedicationEvent 
 import { isBristolValue } from '@/features/bm/bristol';
 import { isSentimentValue, sentimentLabel } from '@/features/sentiment/scale';
 import { isSeverityValue } from '@/features/symptoms/severity';
+import { findingInstances, type DrilldownInstance } from '@/features/analysis/drilldown';
 import {
   computeInsights,
   type NutrientOutcomeFinding,
   type OutcomeFinding,
 } from '@/features/analysis/insights';
+import { latencyLine, latencySummary } from '@/features/analysis/latency';
+import { pairInstances } from '@/features/analysis/medications';
 import {
   formatDayRange,
   phaseStatusLine,
@@ -69,13 +72,26 @@ function tierLabel(confidence: ConfidenceTier): string {
   return confidence === 'high' ? 'High' : confidence === 'medium' ? 'Medium' : 'Low';
 }
 
-/** Shared sentence for an ingredient/combination/food outcome finding. */
-function outcomeSentence(f: OutcomeFinding): string {
+/** "Usually about 5 h later (3–8 h)" from a finding's 24 h instances, or null with fewer than 3 hits (#21). */
+function latencyOf(instances: readonly DrilldownInstance[]): string | null {
+  const summary = latencySummary(
+    instances.flatMap((instance) => (instance.outcomeDelayMs == null ? [] : [instance.outcomeDelayMs])),
+  );
+  return summary ? latencyLine(summary) : null;
+}
+
+/**
+ * Shared sentence for an ingredient/combination/food outcome finding, plus
+ * the typical-latency sentence when there is one (#21). The report stays at
+ * 24 h — slower patterns are not part of it.
+ */
+function outcomeSentence(f: OutcomeFinding, latency: string | null): string {
   const pct = Math.round(f.hitRate * 100);
   const basePct = Math.round(f.baseRate * 100);
   return (
     `${escapeHtml(f.label)}: ${f.hits} of ${f.occurrences} meals were followed by a rough outcome ` +
-    `within 24h (${pct}% vs ${basePct}% baseline) (${tierLabel(f.confidence)} confidence, n=${f.occurrences}).`
+    `within 24h (${pct}% vs ${basePct}% baseline) (${tierLabel(f.confidence)} confidence, n=${f.occurrences}).` +
+    (latency ? ` ${latency}.` : '')
   );
 }
 
@@ -266,9 +282,22 @@ export function buildReportHtml(
     (medicationDoseCount > 0 ? ` · ${medicationDoseCount} medication doses` : '');
 
   const sections: { title: string; items: string[] }[] = [
-    { title: 'Ingredients', items: insights.ingredientFindings.map(outcomeSentence) },
-    { title: 'Combinations', items: insights.pairFindings.map(outcomeSentence) },
-    { title: 'Foods', items: insights.foodFindings.map(outcomeSentence) },
+    {
+      title: 'Ingredients',
+      items: insights.ingredientFindings.map((f) =>
+        outcomeSentence(f, latencyOf(findingInstances(ranged, 'tag', f.key))),
+      ),
+    },
+    {
+      title: 'Combinations',
+      items: insights.pairFindings.map((f) => outcomeSentence(f, latencyOf(pairInstances(ranged, f.key)))),
+    },
+    {
+      title: 'Foods',
+      items: insights.foodFindings.map((f) =>
+        outcomeSentence(f, latencyOf(findingInstances(ranged, 'food', f.label))),
+      ),
+    },
     { title: 'Nutrients', items: insights.nutrientFindings.map(nutrientSentence) },
   ].filter((section) => section.items.length > 0);
 

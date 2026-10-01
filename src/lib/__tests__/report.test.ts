@@ -502,3 +502,51 @@ describe('buildReportHtml — experiments (GitHub #19)', () => {
     expect(html).not.toContain('<img src=x');
   });
 });
+
+describe('buildReportHtml — reaction latency (#21)', () => {
+  const BASE = NOW - 400 * HOUR;
+
+  /** Lactose meals 48 h apart followed by a symptom after each delay, plus 3 quiet rice meals. */
+  function lactoseEntries(delaysH: number[]): LogEntry[] {
+    const entries: LogEntry[] = [];
+    delaysH.forEach((delay, i) => {
+      const t = BASE + i * 48 * HOUR;
+      entries.push(makeEntry({ type: 'meal', name: 'Latte', tagsJson: '["lactose"]', loggedAt: t }));
+      entries.push(makeEntry({ type: 'symptom', severity: 4, loggedAt: t + delay * HOUR }));
+    });
+    for (let i = 0; i < 3; i++) {
+      entries.push(makeEntry({ type: 'meal', name: 'Rice', tagsJson: '["rice"]', loggedAt: BASE + (300 + i * 30) * HOUR }));
+    }
+    return entries;
+  }
+
+  it('appends the typical latency to a finding sentence with 3 or more hits', () => {
+    const html = buildReportHtml(lactoseEntries([3, 5, 8]), NOW, 30);
+    expect(html).toContain('lactose: 3 of 3 meals');
+    expect(html).toContain('(Low confidence, n=3). Usually about 5 h later (3–8 h).');
+  });
+
+  it('says "within an hour" when the median is under an hour', () => {
+    const html = buildReportHtml(lactoseEntries([0.2, 0.4, 0.6]), NOW, 30);
+    expect(html).toContain('(Low confidence, n=3). Usually within an hour.');
+  });
+
+  it('adds no latency sentence when fewer than 3 meals were followed', () => {
+    // 4 lactose meals, only 2 followed -> still a finding, but no latency.
+    const entries = lactoseEntries([3, 5]);
+    for (let i = 0; i < 2; i++) {
+      entries.push(makeEntry({ type: 'meal', name: 'Latte', tagsJson: '["lactose"]', loggedAt: BASE + (120 + i * 48) * HOUR }));
+    }
+    const html = buildReportHtml(entries, NOW, 30);
+    expect(html).toContain('lactose: 2 of 4 meals');
+    expect(html).not.toContain('Usually');
+  });
+
+  it('leaves the PDF at 24 h: a slow-only pattern does not appear and no slower-patterns section is added', () => {
+    const html = buildReportHtml(lactoseEntries([30, 30, 30, 30, 30, 30]), NOW, 30);
+    expect(html).not.toContain('lactose: ');
+    expect(html).not.toContain('Slower');
+    expect(html).not.toContain('Usually');
+    expect(html).toContain('No patterns stand out yet.');
+  });
+});
