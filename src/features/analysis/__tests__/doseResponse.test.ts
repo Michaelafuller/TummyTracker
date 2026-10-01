@@ -182,10 +182,10 @@ describe('doseSplit', () => {
     expect(split!.clearIncrease).toBe(true);
   });
 
-  it('uses the mean of the two middle amounts for an even count', () => {
+  it('snaps an even-count median (1.5 here) to an amount actually eaten (1), same split', () => {
     const pairs = [...times(4, [1, false]), ...times(4, [2, true])];
     const split = doseSplit(instancesOf(pairs), amountOf);
-    expect(split!.threshold).toBe(1.5);
+    expect(split!.threshold).toBe(1);
     expect(split!.smaller.meals).toBe(4);
     expect(split!.larger.meals).toBe(4);
   });

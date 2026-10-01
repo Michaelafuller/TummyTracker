@@ -711,7 +711,7 @@ describe('dose-response line on food and ingredient cards (GitHub #22)', () => {
 
     expect(getByText('Foods linked to rough outcomes')).toBeTruthy();
     expect(getByText('4 of 8 meals were followed by a rough outcome within 24 h (50% vs 25% baseline).')).toBeTruthy();
-    expect(getByText('More than 1.5 servings: 4 of 4 (100%) · 1.5 or less: 0 of 4 (0%)')).toBeTruthy();
+    expect(getByText('More than 1 serving: 4 of 4 (100%) · 1 or less: 0 of 4 (0%)')).toBeTruthy();
   });
 
   it('adds "of foods with it" wording on an ingredient card', async () => {
@@ -720,9 +720,9 @@ describe('dose-response line on food and ingredient cards (GitHub #22)', () => {
     const { getByText, getAllByText } = await renderScreen(<InsightsScreen />);
 
     expect(getByText('Ingredients linked to rough outcomes')).toBeTruthy();
-    expect(getByText('More than 1.5 servings of foods with it: 4 of 4 (100%) · 1.5 or less: 0 of 4 (0%)')).toBeTruthy();
+    expect(getByText('More than 1 serving of foods with it: 4 of 4 (100%) · 1 or less: 0 of 4 (0%)')).toBeTruthy();
     // ... and the same meals' food card uses the food wording.
-    expect(getAllByText('More than 1.5 servings: 4 of 4 (100%) · 1.5 or less: 0 of 4 (0%)')).toHaveLength(1);
+    expect(getAllByText('More than 1 serving: 4 of 4 (100%) · 1 or less: 0 of 4 (0%)')).toHaveLength(1);
   });
 
   it('shows no dose line when every meal is one serving', async () => {
@@ -787,7 +787,7 @@ describe('dose-response line on food and ingredient cards (GitHub #22)', () => {
     expect(queryByText('Foods linked to rough outcomes')).toBeNull();
     expect(getByText('Slower patterns (within 48 h)')).toBeTruthy();
     // ingredient card + food card, both from the 48 h instances.
-    expect(getAllByText(/^More than 1\.5 servings/)).toHaveLength(2);
-    expect(getByText('More than 1.5 servings: 4 of 4 (100%) · 1.5 or less: 2 of 4 (50%)')).toBeTruthy();
+    expect(getAllByText(/^More than 1 serving/)).toHaveLength(2);
+    expect(getByText('More than 1 serving: 4 of 4 (100%) · 1 or less: 2 of 4 (50%)')).toBeTruthy();
   });
 });

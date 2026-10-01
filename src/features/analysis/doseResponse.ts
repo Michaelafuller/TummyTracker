@@ -94,7 +94,12 @@ export function doseSplit(
   const sorted = measured.map((m) => m.amount).sort((a, b) => a - b);
   const max = sorted[sorted.length - 1];
 
-  let threshold = median(sorted);
+  // Snap the median to an amount someone actually ate (the largest one at or
+  // below it): with 1- and 2-serving meals the median is 1.5, but "1.5 or
+  // less" reads oddly when nobody ate 1.5. The split is identical — no amount
+  // lies strictly between the two middle values.
+  const rawMedian = median(sorted);
+  let threshold = sorted.filter((amount) => amount <= rawMedian).pop() ?? sorted[0];
   if (threshold >= max) {
     const below = sorted.filter((amount) => amount < max);
     if (below.length === 0) return null;
