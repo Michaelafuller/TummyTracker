@@ -1,269 +1,243 @@
-# HANDOFF.md — Execute session: "By chance" indicator on findings, GitHub #24
+# HANDOFF.md — Execute session: Saved meals ("My meals") with ingredients, GitHub #25
 
-> **Read first:** this file only. `CLAUDE.md` is auto-loaded. **You are on
-> the burn-down branch (`worktree-agent-a93006f35a36fc943`) in its
-> worktree** — #19–#23 are reviewed but unmerged; this cycle stacks on them.
+> **Read first:** this file only. `CLAUDE.md` is auto-loaded (§0: synchronous
+> transactions, the #13/#23 restore rules — this cycle mirrors them). **You
+> are on the burn-down branch (`worktree-agent-a93006f35a36fc943`) in its
+> worktree** — #19–#24 are reviewed but unmerged; this cycle stacks on them.
 > Never touch the main checkout.
 >
-> **Pure JS/TS** — no dependency, no schema change, no permission, no native
-> change, no EAS build.
+> **JS/TS + one additive migration (owner-approved 2026-09-30)** — no
+> dependency, no permission, no native change, no EAS build.
 
 **Planned 2026-09-30 (Opus plan session, owner-reviewed) — GitHub
-Michaelafuller/TummyTracker#24.** Done-when (issue): "findings show a chance
-comparison alongside the existing confidence tiers." Owner decisions
-(2026-09-30):
+Michaelafuller/TummyTracker#25.** Done-when (issue): "I can create, edit and
+re-log a saved meal with an ingredient list." Owner decisions (2026-09-30):
 
-1. **Method = "slide my journal".** Re-run the same analysis with the rough
-   outcomes slid against everything else by whole days, many times, and
-   average how many findings appear. This keeps the user's eating habits and
-   their rough-day streaks (which a textbook binomial formula ignores — it
-   would *understate* chance) but breaks any real food → outcome link.
-   Deterministic: same data → same number, every render.
-2. **Placement = one line on each finding card**, matched to that card's
-   confidence tier.
-3. **Scope = every finding section:** ingredients, foods, combinations,
-   slower patterns (all three kinds), medications, daily factors, nutrients.
-4. **Never hide, re-tier or reorder.** Add the line, plus "could easily be
-   chance" wording when luck explains as many findings as were found.
+1. **Two new tables** — `saved_meal` + `saved_meal_component` (mirrors
+   `meal_component`), additive migration **0013**, backups **v7**. A
+   template never is, or links to, a log entry.
+2. **Created from meal review** ("Save as my meal"), **listed on Home** above
+   Recent ("My meals"), **edited/deleted from that list**.
+3. **Tapping a saved meal opens the prefilled review** (time = now) — exactly
+   like tapping a Recent row. Editing a template never changes past meals.
+4. **Opt-in backfill, per meal:** after saving a template that has
+   ingredient tags, offer to add them to past meals with the same name that
+   have none. Explicit choice only; additive tags only.
 
 Plan-session judgments (flag them in your summary; owner may override):
-- **"This strong" = this card's tier or better** (a Medium card compares
-  against chance findings at Medium or High).
-- **Slide distances:** whole days, at least `MIN_SLIDE_DAYS = 3` away from
-  zero in both directions (clears the 48 h window); at most `MAX_SLIDES = 30`
-  evenly spaced; fewer than `MIN_SLIDES = 10` possible → no estimate (the
-  card says the check needs more history). So a journal needs ≥ 15 days.
-- **"Could easily be chance" when `round(expected) >= found`** — i.e. when the
-  number the user *reads* is at least the number of findings at that tier or
-  better. "fewer than 1" (expected < 0.5) is never flagged.
-- **Insights screen only.** The PDF report and the finding detail screen are
-  unchanged this cycle.
+- **Names are unique, case-insensitively** (`nameKey` = trimmed lowercase).
+  "Save as my meal" with a name that exists asks **Replace** / Cancel.
+- **Backfill target** = food entries (meal/snack) whose trimmed lowercase
+  name equals the template's `nameKey` **and** whose own `tagsJson` parses
+  empty. Their `tagsJson` becomes the template's tag union, and their
+  `ingredientsText` is set from the template **only if it is null/empty**.
+  Components of those past entries are never touched. Tags already present
+  anywhere → the entry is not a target (never merged into).
+- **Per-item edit on the review screen** (tap an item's name → the existing
+  item form, prefilled; "Save item" replaces it). Needed to edit a template's
+  ingredients; logging a meal gets it too.
+- **Restore:** a backup's saved meal is skipped when its id **or** its
+  `nameKey` already exists on the device (device wins, like check-ins).
+- My meals sort **A–Z** (no usage tracking — there is no link to entries).
 
 ---
 
 ## 0. Invariants — read twice
 
-- **No existing number, tier, order or visibility changes.** Every existing
-  exported analysis function returns exactly what it returns today; every
-  existing test passes **unmodified** (if one needs changing, stop and
-  report). The chance check is additive, display-only.
-- **Deterministic.** No `Math.random`, no `Date.now()` inside the analysis.
-  Test fixtures that need noise use a seeded PRNG written in the test.
-- **Wording never claims causation or safety.** "Luck alone" and "could
-  easily be chance" — never "this is a coincidence" or "this is real".
-- Pure logic in `src/features/analysis/`; no React there.
+- **No existing number changes on its own.** Saving, editing, deleting or
+  re-logging a template never touches log entries. The **only** path that
+  changes history is the backfill, and only after the user taps "Add" in
+  its confirmation.
+- **Copy, never link.** Re-log copies the template's items into the builder
+  (like Recent); the saved meal row and the new entry share nothing.
+- **Synchronous repository transactions** (CLAUDE.md §0): template
+  create/replace/delete and the backfill each run in ONE `db.transaction`
+  with only `.run()/.all()/.get()` inside; ids and timestamps computed first.
+- Tags are derived exactly as today (`unionComponentTags`, the item form's
+  `extractTags`); never invent a new parser.
+- Every interactive element gets an `accessibilityLabel`; give rows a
+  `testID` (Maestro will drive them).
 - Stage by path; LF; no `@ts-ignore` / lint disables / bare `any`.
 
-## 1. Faster meal → outcome join (behavior-identical) — `temporal.ts`
-
-The chance check re-runs the engine ~30× per family, so the hot join must be
-cheap. Rewrite `mealsFollowedByOutcome` (today `O(meals × outcomes)` via
-`outcomes.some`) to sort outcome `loggedAt` values once and binary-search,
-per meal, the first outcome strictly after `meal.loggedAt`; a hit when it
-exists and is `<= meal.loggedAt + windowMs`. **Same semantics exactly**
-(strictly after, boundary inclusive, an outcome at the same ms as the meal
-doesn't count). Leave its signature and doc comment's rule alone.
-
-Test: an equivalence test against a naive reference implementation (written
-in the test) over seeded random journals, plus explicit boundary cases
-(outcome at exactly `+windowMs`, at `+windowMs + 1`, at the same ms, several
-outcomes, none).
-
-Commit: `perf(analysis): binary-search the meal-to-outcome join`.
-
-## 2. Candidate lists for every finding family (refactor, no behavior change)
-
-The chance check must count findings the same way on the real journal and on
-every slide, **without** the display rules (low-only fallback, caps,
-sorting). Add, for each family, an exported function returning
-`{ checked: number; candidates: <Finding>[] }` where `checked` = how many
-keys/meds/factors/nutrients were actually compared (passed the minimum-count
-gates) and `candidates` = **every** excess-risk result with its tier (low
-included), unsorted and uncapped:
-
-| Family | New function (suggested name) | `checked` = | Notes |
-|---|---|---|---|
-| ingredients / foods (any window) | `outcomeRateCandidates(entries, keysOf, options)` in `temporal.ts` | keys with `>= minOccurrences` meals | `analyzeOutcomeRates` becomes "candidates → sort → fallback". |
-| combinations | `pairCandidates(entries, windowMs)` in `insights.ts` | pairs (top-tag) with `>= MIN_PAIR_OCCURRENCES` | Candidates that pass the `PAIR_RATE_MARGIN` interaction filter, uncapped. Leave `analyzePairOutcomes`'s own pipeline exactly as is (it filters the fallback-applied list — don't "fix" that); share the key builder. |
-| nutrients | `nutrientCandidates(entries)` in `insights.ts` | nutrients passing the sample + group-size gates | Includes the `low` tier that `analyzeNutrientOutcomes` suppresses. |
-| medications | core `compareMedicationDays(covered, rough, meds, exposure)` in `medications.ts` | meds that were compared (not turned into notes) | `analyzeMedicationDays` calls the core; notes unchanged. |
-| daily factors | core `compareFactorDays(covered, rough, days)` in `factors.ts` | factors that were compared | `analyzeFactorDays` calls the core; notes unchanged. |
-
-For meds/factors the core takes the `covered` / `rough` day sets as
-arguments so the chance check can pass a slid `rough` set (§3).
-
-Tests: for each family, on existing fixtures, the public function's output
-equals "candidates → the display rules" (and the existing tests for the
-public functions still pass unmodified). `checked` counts on a fixture with
-keys below the gate.
-
-Commit: `refactor(analysis): candidate lists for every finding family`.
-
-## 3. The chance check — new `src/features/analysis/chance.ts`
+## 1. Schema + migration 0013 — `src/db/schema.ts`
 
 ```ts
-export const MIN_SLIDE_DAYS = 3;
-export const MIN_SLIDES = 10;
-export const MAX_SLIDES = 30;
+export const savedMeal = sqliteTable('saved_meal', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  /** Trimmed, lowercased name — unique; the backfill and Replace match on it. */
+  nameKey: text('name_key').notNull().unique(),
+  type: text('type', { enum: FOOD_TYPES }).notNull(),   // match how logEntry.type is declared
+  mealSlot: text('meal_slot', { enum: MEAL_SLOTS }),    // nullable
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
 
-/** Slide distances (days) for a journal spanning `spanDays` days: every d in
- * [MIN_SLIDE_DAYS, spanDays - MIN_SLIDE_DAYS]; when more than MAX_SLIDES,
- * MAX_SLIDES of them evenly spaced (deterministic, ascending, unique); [] when
- * fewer than MIN_SLIDES. */
-export function slideOffsets(spanDays: number): number[];
-
-/** Meal-level slide: a copy of `entries` where every `isOutcome` entry's
- * loggedAt moves `days` × 24 h later, wrapped circularly inside the journal
- * span [start, start + spanDays × 24 h) where start = local midnight of the
- * earliest entry. Non-outcome entries are the SAME objects (untouched). */
-export function slideOutcomes(entries: readonly LogEntry[], days: number): LogEntry[];
-
-/** The span used above: whole local days from the earliest to the latest entry, inclusive. */
-export function journalSpanDays(entries: readonly LogEntry[]): number;
-
-/** Day-level slide: covered days sorted ascending; each covered day's rough
- * flag moves `positions` places later, wrapping. Same number of rough days. */
-export function rotateRoughDays(covered: ReadonlySet<string>, rough: ReadonlySet<string>, positions: number): Set<string>;
-
-export interface ChanceCheck {
-  /** Things compared on the real journal (e.g. 42 ingredients). */
-  checked: number;
-  /** Real-journal candidates at each tier OR BETTER. */
-  found: Record<ConfidenceTier, number>;
-  /** Mean over slides of candidates at each tier OR BETTER. */
-  expected: Record<ConfidenceTier, number>;
-  slides: number;
-}
-
-export type ChanceFamily =
-  | 'ingredients' | 'foods' | 'pairs'
-  | 'slowerIngredients' | 'slowerFoods' | 'slowerPairs'
-  | 'medications' | 'factors' | 'nutrients';
-
-/** One ChanceCheck per family that is asked for; null for a family when the
- * journal is too short (no slides). */
-export function chanceChecks(input: {
-  entries: readonly LogEntry[];
-  checkIns: readonly { date: string }[];
-  meds: readonly Medication[];
-  events: readonly MedicationEvent[];
-  doses: readonly MedicationDose[];
-  factorRows: readonly FactorRow[]; // already visibleFactorRows-filtered
-  trackPeriod: boolean;
-  families: ReadonlySet<ChanceFamily>; // only compute what is on screen
-}): Partial<Record<ChanceFamily, ChanceCheck | null>>;
+export const savedMealComponent = sqliteTable(
+  'saved_meal_component',
+  {
+    id: text('id').primaryKey(),
+    savedMealId: text('saved_meal_id').notNull(),
+    // ...every other column of meal_component, same names/types/defaults
+    // (name, barcode, servings, servingG, the nutrition reals, ingredientsText,
+    // tagsJson, sortOrder, createdAt)
+  },
+  (table) => [index('saved_meal_component_saved_meal_id_idx').on(table.savedMealId)],
+);
 ```
 
-Rules per family (each slide counts with the **same** function used for the
-real journal):
+Match how `logEntry`/`mealComponent` declare enums and defaults (read them
+first). `npm run db:generate` → `0013_*.sql` + meta + `migrations.js`; paste
+the SQL in your summary. It must be CREATE TABLE / CREATE INDEX only.
+Migration harness test like the previous ones (`src/db/__tests__/`).
 
-- **Meal-level families** (ingredients, foods, pairs, nutrients and the three
-  slower ones): slide distances from `slideOffsets(journalSpanDays(entries))`;
-  each slide analyses `slideOutcomes(entries, d)`.
-  - ingredients / foods / pairs / nutrients: candidates at 24 h.
-  - slower kinds: 48 h candidates at **medium or better** whose key is NOT in
-    that same journal's (real or slid) **shown** 24 h findings of that kind
-    (any tier — i.e. the public `analyze*Outcomes` output), mirroring
-    `analyzeSlowerPatterns`. `found.low`/`expected.low` for a slower family
-    equal the medium values (slower cards are never low).
-- **Day-level families** (medications, factors): covered/rough from
-  `coveredAndRoughDays(entries, checkIns, factorRows)` once; distances from
-  `slideOffsets(covered.size)`; each slide uses
-  `rotateRoughDays(covered, rough, d)` with the real `covered` and the real
-  exposure / factor days.
-- `found[t]` / `expected[t]` count candidates whose tier is `t` or better
-  (`low` counts all candidates).
+Commit: `feat(db): saved_meal tables + additive migration 0013`.
 
-Copy helper (pure, in `chance.ts`):
+## 2. Pure helpers — `src/lib/savedMeals.ts`
 
-```ts
-export function chanceSentence(
-  check: ChanceCheck | null,
-  tier: ConfidenceTier,
-  noun: { one: string; many: string }, // e.g. ingredient / ingredients
-): string;
-```
+- `savedMealNameKey(name: string): string` — trim + lowercase.
+- `savedMealToDrafts(components: SavedMealComponent[]): MealComponentDraft[]`
+  — sorted by `sortOrder`, dropping `id`/`savedMealId`/`createdAt`.
+- `backfillTargets(entries: LogEntry[], nameKey: string): LogEntry[]` — the
+  rule above (food types only; name match by `savedMealNameKey(entry.name)`;
+  `parseTagsJson(entry.tagsJson).length === 0`).
+- `validateSavedMealName(name)` → error string or null (required, ≤ the same
+  max length the meal name uses, if any).
 
-- `null` → `"Chance check: needs a couple of weeks of logs first."`
-- `E = check.expected[tier]`; `shown = E < 0.5 ? 'fewer than 1' : \`about ${Math.round(E)}\``.
-- `"Chance check: of ${checked} ${checked === 1 ? one : many} checked, luck alone would make ${shown} look this strong."`
-- When `E >= 0.5 && Math.round(E) >= check.found[tier]`, append
-  `" That's as many as you have, so this could easily be chance."`
+Unit tests for each (case/whitespace matching, snacks included, BMs/symptoms
+excluded, an entry with any tag excluded, empty template tags → no targets
+needed — the UI never offers).
 
-Nouns: ingredient(s), food(s), combination(s), medication(s), daily
-factor(s), nutrient(s). Slower cards use their kind's noun.
+## 3. Repository — `src/db/repository.ts`
 
-**Performance gate.** Add `src/features/analysis/__tests__/chance.perf.test.ts`:
-a seeded synthetic 365-day journal (3 meals/day, 3–5 tags each from a pool of
-40, outcomes on ~30 % of days, 3 meds with doses on some days, daily factor
-rows) → `chanceChecks` with **all** families. Log the elapsed ms; assert
-`< 3000` (generous, CI-safe). **If the measured time is over 300 ms on this
-machine**, profile and optimise behavior-identically (e.g. parse each
-entry's tags once per analysis call instead of per `keysOf` call — allowed;
-a module-level global cache is not). If still over 300 ms, stop and report
-the numbers before wiring the screen.
+- `listSavedMeals(): Promise<{ meal: SavedMeal; components: SavedMealComponent[] }[]>` — A–Z by name.
+- `findSavedMealByNameKey(nameKey)`.
+- `saveSavedMeal(input: { id?: string; name; type; mealSlot; components: MealComponentDraft[] }): Promise<SavedMeal>`
+  — create when no `id`; with `id`, replace that template's fields and ALL
+  its components (delete + insert) in one transaction. If another template
+  already holds the `nameKey`, the caller must have asked to Replace: in that
+  case pass `replaceId` (that template's id) and the function overwrites it
+  instead (same transaction). Never two rows with one `nameKey`.
+- `deleteSavedMeal(id)` — the meal and its components, one transaction.
+- `backfillSavedMealTags(nameKey, tags: string[], ingredientsText: string | null): Promise<number>`
+  — reads the targets (`backfillTargets` over the food entries), then in ONE
+  transaction sets `tagsJson` (+ `ingredientsText` when the entry's is
+  null/empty) and `updatedAt` on each; returns the count. Recomputes targets
+  inside the call, never trusts a stale count from the UI.
+- A live hook `useSavedMeals()` in the style of the existing live hooks
+  (`useDayFactors` etc.).
 
-Tests (`chance.test.ts`):
-- `slideOffsets`: short span → `[]`; exactly `MIN_SLIDES` → all; long span
-  → 30 ascending unique, first `>= 3`, last `<= span - 3`.
-- `slideOutcomes`: only outcomes move; count preserved; wrap past the end
-  lands near the start; time of day preserved; non-outcomes are the same
-  objects; input not mutated.
-- `rotateRoughDays`: count preserved, wrap, `positions` = 0 → same set.
-- **Planted signal:** one tag always followed within hours by an outcome on
-  a ~40-day journal, other tags noise → its family has `found.high >= 1` and
-  `expected.high < found.high`; the sentence for that card has no
-  "could easily be chance".
-- **Pure noise:** seeded random tags + outcomes unrelated to them → for the
-  tier the noise reached, `chanceSentence` contains "could easily be chance".
-- Day-level: a medication whose exposure days coincide with rough days →
-  found high, low expected; and a too-short journal → `null`.
-- Determinism: two calls on the same input are deep-equal.
-- `chanceSentence`: null copy, singular noun, "fewer than 1", rounding,
-  flag on/off at the boundary (`E = 0.5`, `found = 1` → flagged;
-  `E = 0.49` → not).
+Real-SQLite repository tests (`src/db/__tests__/`, see CLAUDE.md §0): create,
+replace by id, replace by name clash, delete removes components, backfill
+updates only targets and leaves tagged/other-name/non-food rows byte-identical,
+backfill count, and an atomicity test like `repository.atomicity.test.ts`
+(force a failure mid-transaction → nothing written).
 
-Commit: `feat(analysis): chance check by sliding outcomes against the journal`.
+## 4. Backup v7 — `src/lib/backup.ts` + export/import call sites
 
-## 4. Insights screen — `src/app/(tabs)/insights.tsx`
+- `BackupFile.savedMeals?` and `savedMealComponents?` ("Absent before v7");
+  `entriesToJson` gains both params (defaults `[]`), version 7.
+- `parseBackupJson` normalises them like the other arrays; v1–v6 files
+  import with none.
+- Restore: skip a saved meal whose `id` or `nameKey` exists on the device
+  (and skip its components); insert the rest with their components. Mirror
+  the day-factor restore's batching.
+- Tests: v7 round trip, v6 file imports with zero saved meals, a clash by
+  name keeps the device's row and its components.
 
-- One `useMemo` computing `chanceChecks` (deps: entries, checkIns, meds,
-  medEvents, medDoses, visibleFactors, trackPeriod), passing in `families`
-  only the sections that actually have findings on screen. Do **not** move
-  the existing `computeInsights` / slower calls (out of scope).
-- `Card` gets an optional `chance?: string | null` prop rendered as a
-  `small` / `textSecondary` line **directly under the confidence chip**
-  (before `children`), with `testID="chance-line"`.
-- Every finding card in every section passes
-  `chance={chanceSentence(checks.<family> ?? null, finding.confidence, NOUN)}`.
-  A family missing from the map (not requested) can't happen for a rendered
-  card — but fall back to no line rather than crash.
-- Nothing else on the screen changes.
+Commit: `feat(meals): saved-meal repository, live hook, backup v7`.
 
-Tests (`src/app/(tabs)/__tests__/insights.test.tsx`, run via
-`npx jest --runTestsByPath`): a journal long enough for slides shows a
-"Chance check: of N … checked" line on an ingredient card and on a medication
-or factor card; a short journal shows the "needs a couple of weeks" line;
-existing assertions untouched.
+## 5. Screens
 
-Commit: `feat(insights): chance-check line on every finding card`.
+### 5a. Builder mode — `src/features/logging/mealBuilderStore.ts`
 
-## 5. Definition of done
+Add `editingSavedMealId: string | null` (default null). `load(...)` and
+`clear()` reset it to null; a new `loadSavedMealForEdit(id, components,
+prefill)` sets components + prefill + the id. Every existing caller keeps
+today's behaviour.
+
+### 5b. Review screen — `src/app/meal/review.tsx`
+
+- **Logging mode** (`editingSavedMealId === null`, today's screen) gains a
+  secondary **"Save as my meal"** button above "Save meal"
+  (`accessibilityLabel="Save as my meal"`, `testID="review-save-as-my-meal"`),
+  enabled when there's ≥ 1 item and the name validates. It saves the items
+  (with their current servings), name, type and slot — **not** date/time or
+  notes — and stays on the screen (a brief confirmation, e.g. the button
+  label turns to "Saved to My meals"). Name clash → `Alert` "Replace
+  '<name>' in My meals?" [Cancel] [Replace]. Then the backfill offer (5d).
+- **Template mode** (`editingSavedMealId` set): title/heading "Edit my
+  meal"; hide date/time, notes, the goal-cap notice; the primary button is
+  **"Save changes"** (`testID="review-save-changes"`) → `saveSavedMeal({ id, … })`
+  (rename into another template's name → the same Replace alert), then the
+  backfill offer, then `clearBuilder()` + `router.back()`. A **"Delete my
+  meal"** button (`testID="review-delete-my-meal"`, danger) with a confirm
+  Alert → `deleteSavedMeal` → clear → back. The watched-ingredient notice
+  stays (useful context).
+- **Per-item edit (both modes):** each item row's name becomes a Pressable
+  (`accessibilityLabel="Edit <name>"`, `testID="component-<i>-edit"`) →
+  `router.push({ pathname: '/meal/component', params: { edit: String(i) } })`.
+  Servings stepper and Remove unchanged.
+
+### 5c. Item form — `src/app/meal/component.tsx`
+
+With an `edit` param: `ComponentForm initial` = that draft (map draft →
+form state the same way the existing saved-component edit screen does —
+reuse its mapper, don't write a second one), `submitLabel="Save item"`, no
+secondary; submit → `updateComponent(index, draft)` (keep its `sortOrder`)
+→ `router.back()`. Without the param, today's behaviour exactly.
+
+### 5d. Backfill offer (after any template save that has ≥ 1 tag)
+
+Count `backfillTargets` (from the live entries); if > 0, `Alert`:
+title "Add ingredients to past meals?", body "Add these ingredients to N
+past '<name>' meals that don't have any? This updates your Insights."
+[Not now] [Add]. Add → `backfillSavedMealTags` → a short confirmation.
+No offer when the count is 0 or the template has no tags.
+
+### 5e. Home — `src/app/(tabs)/index.tsx`
+
+A **"My meals"** section above Recent, only when ≥ 1 saved meal: one row per
+meal (A–Z) — the name (+ "N items"), the whole row a Pressable
+(`accessibilityLabel="Log <name>"`, `testID="my-meal-<slug>"`) that behaves
+like `handleRecentTap` (same in-flight guard; `load(savedMealToDrafts(...),
+{ name, type, mealSlot })` → `/meal/review`, time defaults to now), and an
+**"Edit"** link (`accessibilityLabel="Edit <name>"`, `testID="my-meal-<slug>-edit"`)
+→ `loadSavedMealForEdit` → `/meal/review`. Keep it compact; if the list is
+long it must not push Recent off-screen — cap the visible rows (e.g. 5) with
+the rest reachable by scrolling inside the section, your call, say what you
+chose.
+
+Tests (component, `--runTestsByPath` for `(tabs)` paths): Home section
+hidden with none / listed A–Z / tap loads the builder and navigates / Edit
+loads template mode; review: Save as my meal (new, clash → Replace,
+Cancel), template mode hides date/notes and Save changes / Delete work,
+per-item edit replaces the item, backfill Alert appears only with targets
+and only Add writes; component screen edit mode.
+
+Commit: `feat(meals): My meals on Home, save/edit/delete from review, per-item edit, backfill offer`.
+
+## 6. Definition of done
 
 - `npm run typecheck`, `npm run lint` (0 warnings), `npm run bundle:check`.
-- **Targeted Jest only (never the full suite):** all of
-  `src/features/analysis/__tests__/*`, `src/lib/__tests__/report*`,
-  Insights (`npx jest --runTestsByPath "src/app/(tabs)/__tests__/insights.test.tsx"`),
-  `src/app/insight/__tests__/*` if it exists, plus any file you touched.
-- No deps, no schema, no `@ts-ignore` / lint disables / bare `any`. Don't run
-  Maestro / EAS / `expo start` / `adb`; don't edit `flows/`, `CLAUDE.md`,
-  `docs/`; don't push or merge.
-- Commits as listed (stage by path), each as soon as its tests pass, each
-  ending `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`.
-- **Execute summary:** files per commit + hashes; rung results; targeted Jest
-  counts; the perf test's measured ms (before and after any optimisation);
-  a worked example pasted from a test (planted-signal journal → its
-  `ChanceCheck` → the card sentence; pure-noise journal → its sentence);
-  confirmation that no existing test was modified (or which and why — that
-  should have been a stop); deviations; review pointers (where the real and
-  slid counts could diverge in definition).
+- **Targeted Jest only (never the full suite):** files you created/touched,
+  all `src/db/__tests__/*`, `src/lib/__tests__/{backup,savedMeals,mealAggregate}*`,
+  `src/features/logging/__tests__/*`, `src/app/meal/__tests__/*`, Home
+  (`npx jest --runTestsByPath "src/app/(tabs)/__tests__/index.test.tsx"`),
+  settings (`--runTestsByPath` for `settings.test.tsx`) if export/import
+  call sites changed there, plus `src/features/analysis/__tests__/*`
+  (must pass unmodified — nothing there should change).
+- No `@ts-ignore`, no lint disables, no `any` without `// reason:`, no deps,
+  no schema change beyond §1. Don't run Maestro/EAS/`expo start`/adb; don't
+  edit `flows/`, `CLAUDE.md`, `docs/`; don't push or merge.
+- Commits (stage by path), each as soon as its tests pass:
+  `feat(db): saved_meal tables + additive migration 0013` ·
+  `feat(meals): saved-meal repository, live hook, backup v7` ·
+  `feat(meals): My meals on Home, save/edit/delete from review, per-item edit, backfill offer`
+  (split the last if it gets large — e.g. per-item edit first) — each ending
+  `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`.
+- **Execute summary:** files per commit + hashes; the generated SQL
+  verbatim; rung results; targeted Jest counts; a worked backfill example
+  pasted from a test (entries before → targets → after); every existing test
+  touched and why; deviations; review pointers (template mode vs logging
+  mode leaks, the Replace path, the backfill target rule).
