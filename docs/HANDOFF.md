@@ -1,141 +1,130 @@
-# HANDOFF.md — Execute session: Reaction latency + a second window, GitHub #21
+# HANDOFF.md — Execute session: Dose-response on findings, GitHub #22
 
 > **Read first:** this file only. `CLAUDE.md` is auto-loaded. **You are on the
 > experiments branch (`worktree-agent-a93006f35a36fc943`) in its worktree** —
-> #19/#20 are reviewed but unmerged; this cycle stacks on them. Commit here;
+> #19–#21 are reviewed but unmerged; this cycle stacks on them. Commit here;
 > never touch the main checkout.
 >
 > **Pure JS/TS** — no dependency, no schema change, no permission, no native
 > change, no EAS build.
 
-**Planned 2026-09-28 (Opus plan session, owner-reviewed) — GitHub
-Michaelafuller/TummyTracker#21.** Done-when (issue): "findings show typical
-latency and the engine compares more than one window." Owner decisions:
+**Planned 2026-09-30 (Opus plan session, owner-reviewed) — GitHub
+Michaelafuller/TummyTracker#22.** Done-when (issue): "findings can show
+whether larger amounts raise the outcome rate."
 
-1. **Main findings stay at 24 h.** Add a **"Slower patterns (within 48 h)"**
-   section: ingredient/food/combination findings that reach **medium or high**
-   confidence at 48 h **and do not appear at 24 h** (any tier). Never low.
-2. Each finding's **detail screen** gets a **timing profile** at 6 / 24 / 48 /
-   72 h — context only, never creates findings.
-3. **Latency** ("Usually about 5 h later (3–8 h)") on Insights cards, the
-   detail screen (plus per-meal "rough outcome 5 h later"), **and the PDF**.
-4. **Everything else stays at 24 h**: "What came before", medication caveats
-   and findings, experiments, the watchlist, and the PDF's findings list (the
-   PDF gains only the latency text, not slower patterns).
+**Spike result (plan session):** ingredient, food and combination findings
+are **amount-blind** — the engine reads only `logEntry.name` and the entry's
+union `tagsJson`; servings live on `mealComponent` rows, which the engine
+never reads. Nutrient findings already scale with amount (entry nutrition is
+Σ value × servings). So the gap is per-food / per-ingredient amount.
 
-Why the guard rails (keep them in code comments): with daily meals and
-scattered rough days, long windows push the baseline toward 100 %, and trying
-several windows per food finds spurious "triggers" by chance. So: one extra
-window, medium/high only, and profiles that never create findings.
+Owner decisions (2026-09-30):
+
+1. **Amount = servings** (the stepper multiplier). Missing → 1.
+2. **Foods and ingredients** get a comparison (not combinations, not
+   nutrients). Ingredient wording says "servings of foods with it", since
+   servings of different foods aren't the same dose.
+3. **Cards show a line only for a clear increase**; the detail screen shows
+   the split numbers whenever there's enough data (no verdict text there).
+4. **Insights cards + finding detail only** (not the PDF).
 
 ---
 
 ## 0. Invariants — read twice
 
-- **Every existing 24 h number is unchanged.** Default parameters keep
-  `DEFAULT_WINDOW_MS`; existing tests pass untouched (only additive fields may
-  force a `toEqual` update — say which and why).
-- A slower pattern **never duplicates** a 24 h finding (same key, any tier).
-- Latency is **descriptive**: median and 25th–75th percentile of hours from
-  each hit meal to its **first** rough outcome strictly after it, within that
-  finding's window; shown only with ≥ 3 hits.
-- Wording: "within 48 h", "usually about N h later"; never "causes".
+- **No existing number changes.** Findings, confidence, ordering, latency,
+  slower patterns, caveats — all as before. Dose-response is a new pure
+  module the screens compose.
+- **Never infer an amount.** A meal's amount comes from its stored component
+  `servings` (missing/null → 1); a flat entry with no component rows counts
+  as 1. Never from grams, calories or the meal name.
+- **Same instances as the card.** The split is over exactly the meals behind
+  the finding (`findingInstances` with the finding's window — 24 h or 48 h for
+  slower patterns), using their existing `followedByOutcome` flags.
+- **Wording never claims causation or safety.** No "a little is fine" — show
+  the numbers.
 - LF line endings; stage by path.
 
-## 1. Engine (pure)
+## 1. Data — live meal components
 
-- `src/features/analysis/temporal.ts`:
-  - `mealsFollowedByOutcome` is unchanged. Add
-    `firstOutcomeDelayMs(entries, meal, windowMs = DEFAULT_WINDOW_MS): number | null`
-    (strictly after, ≤ window — same join rule).
-  - Export `SLOW_WINDOW_MS = 48 h`, `PROFILE_WINDOWS_H = [6, 24, 48, 72]`.
-  - `outcomeRateForKey(entries, keysOf, key, windowMs)` →
-    `{ occurrences, hits, hitRate, baseRate } | null` — the same eligible-meal
-    set and baseline as `analyzeOutcomeRates`, but for one key with **no**
-    gating (for the profile).
-- `src/features/analysis/insights.ts`: `analyzeIngredientOutcomes`,
-  `analyzeFoodOutcomes`, `analyzePairOutcomes` gain an optional
-  `windowMs = DEFAULT_WINDOW_MS` (pairs: pass it through to `tagHitRates` too).
-  Add `analyzeSlowerPatterns(entries, twentyFourHour: Insights)` →
-  `{ ingredientFindings, foodFindings, pairFindings }` per §0 rule 1.
-  `computeInsights` itself is unchanged.
-- New `src/features/analysis/latency.ts`:
-  ```ts
-  export interface LatencySummary { medianH: number; lowH: number; highH: number; n: number }
-  export function latencySummary(delaysMs: readonly number[]): LatencySummary | null   // n ≥ 3, hours rounded to whole
-  export function latencyLine(s: LatencySummary): string
-  // "Usually about 5 h later (3–8 h)"; median < 1 h → "Usually within an hour"; low === high → "Usually about 5 h later"
-  ```
-  Percentiles: nearest-rank on the sorted delays (document it).
-- `src/features/analysis/drilldown.ts`: `DrilldownInstance` gains
-  `outcomeDelayMs: number | null` (null when not followed); `findingInstances`
-  and `flagFollowedByOutcome` take an optional `windowMs` (default 24 h).
-  `pairInstances` (medications.ts) passes it through.
+`useAllMealComponents()` live hook (Drizzle `useLiveQuery` over
+`mealComponent`) next to `useAllEntries` in
+`src/features/logging/useEntries.ts`. Screens group components by `entryId`
+once (memoized).
 
-## 2. Insights screen
+## 2. Pure module — `src/features/analysis/doseResponse.ts`
 
-- Each ingredient / combination / food card: a `textSecondary` latency line
-  under the sentence when its instances give a `latencySummary`.
-- **"Slower patterns (within 48 h)"** section after "Foods linked to rough
-  outcomes" (before Medications), when non-empty. One intro line: "These only
-  show up when counting outcomes up to 48 hours after eating — slower
-  reactions." Cards like the others, sentence says "within 48 h", latency
-  from the 48 h instances. Tapping opens the detail screen with `window=48`.
-- Medication cards: no latency (day-level).
+```ts
+/** Food finding: total servings of the meal's components (no components → 1).
+ *  Ingredient finding: Σ servings of the components whose own tags include `tag`
+ *  (exact tag, as tag findings match); if the entry has no components but its
+ *  tags include it → 1; if components exist but none carries the tag
+ *  (legacy/edited rows) → 1. */
+export function mealAmount(entry: LogEntry, components: readonly MealComponent[],
+  kind: 'food' | 'tag', value: string): number
 
-## 3. Detail screen — `src/app/insight/detail.tsx`
+export interface DoseSplit {
+  threshold: number;                       // the median amount; smaller = ≤ threshold, larger = > threshold
+  smaller: { meals: number; hits: number; rate: number };
+  larger:  { meals: number; hits: number; rate: number };
+  clearIncrease: boolean;                  // larger.rate − smaller.rate ≥ DOSE_RATE_MARGIN
+}
+/** null when every meal has the same amount, or either side has < MIN_DOSE_GROUP meals. */
+export function doseSplit(instances: readonly { entry: LogEntry; followedByOutcome: boolean }[],
+  amountOf: (entry: LogEntry) => number): DoseSplit | null
 
-- Accept `window` param (`'24' | '48'`, default 24); pass it to
-  `findingInstances`; summary line says "within 48 h" accordingly.
-- Latency summary line under the summary.
-- Each meal row: "rough outcome 5 h later" / "rough outcome within the hour"
-  when followed.
-- **Timing profile** block: "How the pattern changes with time" + 4 rows
-  "Within 6 h: 1 of 5 meals (20%) · baseline 10%" … "Within 72 h: …" from
-  `outcomeRateForKey`, with a `textSecondary` note: "Longer windows catch
-  slower reactions but also more unrelated rough days."
-  Needs the finding's kind/key → keysOf: food = lowercased trimmed name; tag
-  = the tag. (Combination findings don't open a detail screen today — leave
-  that as is.)
+export const DOSE_RATE_MARGIN = 0.2;
+export const MIN_DOSE_GROUP = 4;   // reuse MIN_GROUP_SIZE from insights.ts if it's the same value — import it, don't duplicate
 
-## 4. PDF — `src/lib/report.ts`
+/** Card line (only call when clearIncrease):
+ *  food:       "More than 1 serving: 4 of 5 (80%) · 1 or less: 1 of 6 (17%)"
+ *  ingredient: "More than 1 serving of foods with it: 4 of 5 (80%) · 1 or less: 1 of 6 (17%)"
+ *  threshold formatted with formatDoseNumber (1.5 → "1.5 servings", 1 → "1 serving"). */
+export function doseLine(split: DoseSplit, kind: 'food' | 'tag'): string
+```
 
-`outcomeSentence` gains the latency line when available: "… (Medium
-confidence, n=6). Usually about 5 h later (3–8 h)." Nutrient findings: no
-latency. No slower-patterns section.
+Median: of the amounts (even count → mean of the two middle values); if that
+median equals the maximum amount, step the threshold down to the largest
+amount below it so "larger" isn't empty — and if none exists → null.
 
-## 5. Tests (same change)
+## 3. Screens
 
-- `latency`: n < 3 → null; median/percentiles (odd/even n, nearest-rank);
-  rounding; each copy variant.
-- `temporal`: `firstOutcomeDelayMs` (strictly after, boundary included,
-  first of several, none); `outcomeRateForKey` equals the corresponding
-  `analyzeOutcomeRates` finding's numbers when that finding exists.
-- `insights` (analysis): default-window results identical to before (assert
-  against the existing fixtures); a slow-only trigger (outcome ~30 h after
-  each meal) → absent at 24 h, present in slower patterns at medium/high; a
-  24 h finding never duplicated; low-at-48h excluded; baseline-saturation
-  fixture (rough every day) → no slower patterns.
-- `drilldown`: `outcomeDelayMs` values; 48 h window param.
-- Screens: card latency line present/absent; slower section; detail screen
-  with `window=48`, per-meal delays, profile rows; PDF latency text.
+- **Insights cards** (`src/app/(tabs)/insights.tsx`): for each ingredient and
+  food card — in the 24 h sections **and** the slower-patterns section (with
+  its 48 h instances) — a `textSecondary` line from `doseLine` when
+  `doseSplit(...)?.clearIncrease`. Combination and medication cards: none.
+- **Finding detail** (`src/app/insight/detail.tsx`): when `doseSplit` is
+  non-null, a block "By amount" with two rows — "More than 1 serving: 4 of 5
+  meals followed by a rough outcome (80%)" / "1 serving or less: 1 of 6
+  (17%)" — no verdict sentence. Each meal row shows its amount ("1.5
+  servings") alongside its existing outcome text.
 
-## 6. Definition of done
+## 4. Tests (same change)
+
+- `doseResponse`: `mealAmount` for both kinds (components with/without the
+  tag, no components, null servings → 1, fractional servings); `doseSplit`
+  (all equal → null; small side < 4 → null; median rules incl. even count and
+  median = max step-down; rates; `clearIncrease` at exactly the margin);
+  `doseLine` wording for both kinds and singular/plural/decimal thresholds.
+- Insights screen: a food card gains the dose line with a clear-increase
+  fixture; absent when amounts are all 1; absent when not clear; a slower-
+  pattern card uses its 48 h instances; existing numbers unchanged.
+- Detail screen: "By amount" block present/absent; per-meal amounts.
+
+## 5. Definition of done
 
 - `npm run typecheck`, `npm run lint` (0 warnings), `npm run bundle:check`.
 - **Targeted Jest only (never the full suite):** files you created/touched +
-  `src/features/analysis/__tests__/*`, `report`, `watchlist`,
-  `experiments/__tests__/*`, the Insights screen and `insight/detail` tests
-  (`--runTestsByPath` for `(tabs)`).
+  `src/features/analysis/__tests__/*`, the Insights screen and
+  `insight/detail` tests (`--runTestsByPath` for `(tabs)`), `useEntries` if it
+  has a test, `report` (must be unchanged).
 - No `@ts-ignore`, no lint disables, no `any` without `// reason:`, no deps,
   no schema change. Don't run Maestro/EAS/expo start/adb; don't edit
   `flows/`, `CLAUDE.md`, `docs/`; don't push or merge.
-- Commits (stage by path): `feat(analysis): outcome delays, latency summaries and window params` ·
-  `feat(analysis): slower patterns at 48 h and per-key timing profile` ·
-  `feat(insights): latency lines, slower patterns section, detail timing profile` ·
-  `feat(report): latency in PDF finding sentences` — each ending
-  `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`.
+- Commits (stage by path): `feat(analysis): per-meal amounts and dose split for findings` ·
+  `feat(insights): dose-response line on cards and By amount on finding detail` —
+  each ending `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`.
+  Commit each as soon as its tests pass.
 - Execute summary: files per commit, hashes, rung results, targeted Jest
-  counts, a worked slow-trigger example (fixture → absent at 24 h → slower
-  pattern + latency line) pasted from a test, any existing test you had to
-  touch and why, deviations, review pointers.
+  counts, a worked example (fixture → split → card line) pasted from a test,
+  deviations, review pointers.
