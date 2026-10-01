@@ -17,7 +17,7 @@
   - **Branch `worktree-agent-a93006f35a36fc943`** in the git worktree
     `C:\Users\E146796\projects\TummyTracker\.claude\worktrees\agent-a93006f35a36fc943`
     (its `node_modules` is a junction to the main checkout's) =
-    **#19 (A + B), #20, #21, #22, #23**, all reviewed, unmerged, unpushed.
+    **#19 (A + B), #20, #21, #22, #23, #24**, all reviewed, unmerged, unpushed.
     Migrations 0011 + 0012; backups v6. **This is where the burn-down
     continues** — and where the newest `docs/` live (main's copies are
     stale; `docs/RESUME_HERE.md` on `main` points here).
@@ -31,8 +31,8 @@
 ## 2. What's next
 
 Backlog: `docs/PROGRESS.md` → "Ranked backlog — continued" (GitHub #24–#30).
-Done so far this burn-down: #13–#23. **Next: #13 — "By chance" indicator on
-findings (GH #24)**, then #14 saved recipes (GH #25), #15 faster logging
+Done so far this burn-down: #13–#24. **Next: #14 — saved recipes / "my
+meals" with ingredients (GH #25)**, then #15 faster logging
 (GH #26), #16 optional app lock (GH #27 — ⚠ likely a new dependency,
 `expo-local-authentication`: owner approval + CVE check), #17 medication
 adherence view (GH #28), #18 medication reminders (GH #29), #19 iOS pass
@@ -119,6 +119,10 @@ prompt with "a previous attempt died; start fresh at <hash>".
   multiline fields one character per `inputText`; `centerElement: true` when
   scrolling to a field label; give a control a `testID` when its label text
   repeats (e.g. a switch and its caption).
+  **Regex escapes inside double-quoted YAML need a double backslash**
+  (`"Protein \\(g\\)"`); a single one (`\.`, `\(`, `\?`) is an invalid YAML
+  escape and the whole flow fails to load. Check a new flow with
+  `node -e "require('js-yaml').loadAll(require('fs').readFileSync('<flow>','utf8'))"`.
 - **Scratch `.qa-shots/`** (gitignored). ⚠ Never re-run
   `post_backlog_issues.py --post` — issues #12–#30 already exist.
 

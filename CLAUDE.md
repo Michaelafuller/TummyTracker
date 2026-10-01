@@ -196,6 +196,21 @@
   days the factor was **logged and not flagged** (never "all other days");
   rough = `isOutcome` only. Caveats on food cards like #20's. A factor-only
   day counts as covered (#13 line, #20 pools).
+- **"By chance" check on findings (owner-decided 2026-09-30, GitHub #24).**
+  `src/features/analysis/chance.ts`. Every Insights finding card gets one
+  line: how many findings at that card's tier **or better** luck alone
+  would produce in its section, plus "could easily be chance" when
+  `round(expected) >= found`. Expected = the mean over up to 30 slides
+  (≥ 3 positions from zero; < 10 possible slides → "needs a couple of
+  weeks of logs") of the SAME analysis re-run with outcomes slid by whole
+  days: meal-level families move outcome entries among **logged days**
+  (never the calendar — a gap or a stray backdated entry would push slides
+  into empty time and understate chance; review 2026-09-30), keeping the
+  time of day; medications/factors rotate the rough flags among covered
+  days. Counts use each family's uncapped `*Candidates` / `compare*Days`
+  lists (no low-only fallback, no cap) on the real journal and on every
+  slide alike. Display-only: no number, tier, order or visibility changes;
+  Insights only (not the PDF or the detail screen). Deterministic.
 - **Real-SQLite repository tests (2026-09-27, GitHub #18).** `jest/expo-sqlite-node.ts`
   is a Jest-only fake `expo-sqlite` backed by Node's built-in `node:sqlite`
   (**Node ≥ 22.13 to run the tests**; no dependency). A DB test file starts

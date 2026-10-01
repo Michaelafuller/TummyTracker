@@ -96,7 +96,8 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   JS + migration 0011, no build. The same fixture covers **#20**: `zb-`
   also checks "Medications linked to rough days" (ibuprofen 7 of 7 days) and
   the lactose card's confounder caveat, and **#21**'s latency line on it,
-  and **#23**'s high-stress finding + stress caveat. `zc-day-details` checks
+  and **#23**'s high-stress finding + stress caveat, and **#24**'s chance
+  lines on the lactose / ibuprofen / stress cards. `zc-day-details` checks
   the Home day-details chips and the Track-period switch. Migration 0012.
 - **Owed device checks:** iOS pass (the #2 keyboard items below + carried: iOS
   app icon, time-picker Done feel), light-mode walkthrough, camera scan loop,
@@ -159,6 +160,20 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   Review fix: the suspect must have been eaten in the baseline, otherwise a
   "drop" while avoiding it proves nothing (new inconclusive rule + preview
   warning); the watchlist store now refreshes after a start.
+- **"By chance" indicator (GitHub #24):** every Insights finding card now
+  says how many findings this strong luck alone would produce: "Chance
+  check: of 42 ingredients checked, luck alone would make about 1 look this
+  strong", plus "could easily be chance" when that's at least as many as
+  were found. Computed by sliding the rough outcomes against the journal by
+  whole days (up to 30 times) and re-running the same analysis, so streaks
+  and eating habits are kept (a textbook formula would understate chance).
+  The meal-to-outcome join became a binary search so this stays fast
+  (~200–350 ms for a synthetic year in Node). Review fixes: the slide ran
+  along the calendar, so one stray backdated entry or a logging break made
+  noise look trustworthy (now slides among logged days); two experiment
+  flows had YAML escapes a strict parser rejects. Honest side effect: the
+  fixture's lactose card says "could easily be chance" — one lactose block
+  lining up with one rough streak is exactly what correlation can't separate.
 - **Daily confounders (GitHub #23):** sleep, stress, alcohol, caffeine and an
   opt-in period flag as one-tap "Add details" chips in the Home check-in card;
   new `day_factor` table (0012), backup v6; "Daily factors linked to rough
@@ -267,7 +282,7 @@ analysis.
 | 10 | ~~**Reaction latency + multiple windows** (GH #21)~~ — *✅ 2026-09-30 (device check owed; on the #19 branch)* | Every outcome counts "within 24 h", but reactions range from hours (lactose) to 1–3 days (some FODMAP/gluten). Show when outcomes tend to follow each trigger; compare windows. | M | Also makes findings more explainable. |
 | 11 | ~~**Dose-response** (GH #22)~~ — *✅ 2026-09-30 (on the #19 branch)* | Servings are stored, but the engine appears to treat an ingredient as present/absent — "a splash of milk is fine, a latte isn't" is exactly what the app should find. | S spike → M | First confirm in `temporal.ts` whether servings are ignored (not verified in review). |
 | 12 | ~~**Confounder tracking** (GH #23)~~ — *✅ 2026-09-30 (device check owed; on the #19 branch)* | Sleep, stress, menstrual cycle, alcohol and caffeine drive gut symptoms and currently land on food. Even one daily "stress 1–5" helps. | M | Could fold into #2's daily check-in. Additive migration. |
-| 13 | **"By chance" indicator on findings** (GH #24) | Many ingredients × few logs = some spurious correlations. Show how many findings like this you'd expect by chance. | S–M | Complements the existing confidence tiers. |
+| 13 | ~~**"By chance" indicator on findings** (GH #24)~~ — *✅ 2026-09-30 (device check owed; on the #19 branch)* | Many ingredients × few logs = some spurious correlations. Show how many findings like this you'd expect by chance. | S–M | Complements the existing confidence tiers. |
 | 14 | **Saved recipes / "my meals" with ingredients** (GH #25) | Homemade and restaurant food has a name but no ingredients, blinding the ingredient engine where it matters most. | M | Re-used like Recent meals. |
 | 15 | **Faster logging** (GH #26) | Favourites ("usual breakfast"), log straight from the reminder notification (subsumes the reminder deep-link), one-tap "took my regular meds". Adherence and data quality die when logging is tedious. | M | |
 | 16 | **Optional app lock** (GH #27) | Sensitive health data (BMs, symptoms, medications) with no lock. | S–M | ⚠ likely `expo-local-authentication` — owner approval + CVE check. |

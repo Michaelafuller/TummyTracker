@@ -15,11 +15,11 @@ Status at a glance (2026-09-30):
   `f6e6593`), but it can't conflict: RESUME_HERE.md is a new file — delete it
   in the merge.
 - Branch `worktree-agent-a93006f35a36fc943` (worktree
-  `.claude/worktrees/agent-a93006f35a36fc943`) = #19–#23 on top of
+  `.claude/worktrees/agent-a93006f35a36fc943`) = #19–#24 on top of
   `39224e7`, reviewed, **unmerged, unpushed**; adds migrations **0011**
   (`experiment`) and **0012** (`day_factor`) and backups **v5 → v6**.
 - Device: Pixel 5, dev client = the 2026-08-29 EAS development build. All
-  #13–#23 work is JS + migrations — **no new build needed**.
+  #13–#24 work is JS + migrations — **no new build needed**.
 - Last device baseline: 34/34 Maestro on 2026-09-27. Last full Jest: 113 /
   1,168 on `main` (2026-09-27). The branch has only had targeted Jest since.
 
@@ -66,12 +66,12 @@ Then tell the orchestrator → it merges the branch into `main` (§2).
       `bundle:check` on `main`; record in `docs/RESULTS.md`.
 - [ ] Owner: **push** when happy.
 
-## 3. On the merged `main` — #19–#23
+## 3. On the merged `main` — #19–#24
 
 Flows:
 
 ```
-maestro test flows/z-experiment-start.yaml flows/zc-day-details.yaml --format junit --output flows/results-19-23.xml
+maestro test flows/z-experiment-start.yaml flows/zc-day-details.yaml --format junit --output flows/results-19-24.xml
 ```
 
 Verdict path (backdated fixture — covers #19, #20, #21 and #23 in one import):
@@ -80,7 +80,9 @@ Verdict path (backdated fixture — covers #19, #20, #21 and #23 in one import):
 node scripts/make-experiment-fixture.mjs
 ```
 
-then run the `adb push` command it prints, then:
+then run the `adb push` command it prints, then (`zb-` also checks the #24
+chance lines — the lactose card should say "could easily be chance"; that
+is the intended, honest result for this fixture):
 
 ```
 maestro test flows/za-experiment-fixture-import.yaml flows/zb-experiment-verdict.yaml
@@ -99,6 +101,11 @@ Manual:
       phase boundary falls, or temporarily set the device clock.)
 - [ ] **#19 PDF:** "Elimination experiments" table (term, dates, status,
       frozen verdict).
+- [ ] **#24 chance line, by eye:** on your real journal, every finding card
+      has a "Chance check: …" line under its confidence chip, and Insights
+      doesn't feel slower to open (the check re-runs the analysis ~30× per
+      section; Node measured ~200–350 ms for a synthetic year — the Pixel 5
+      may be a few times slower). If it lags, tell the orchestrator.
 - [ ] **#22 dose line:** Jest-only (the fixture logs 1 serving everywhere) —
       optional by hand: log one food 4× at 1 serving and 4× at 2 servings with
       outcomes after the larger ones → card line "More than 1 serving: …".
@@ -131,3 +138,8 @@ Manual:
   the next), "more" caffeine, period.
 - Slower patterns (#21): a key that was only a hidden low-confidence 24 h
   signal can appear as a 48 h slower pattern.
+- Chance check (#24): "this strong" = the card's tier or better; slides
+  start 3 days from zero (a long rough streak overlapping a food eaten in
+  a block still lines up at small slides, so the estimate errs high — the
+  safe direction); needs ≥ 15 logged days; flag when the rounded expected
+  count ≥ found; Insights only (not the PDF or the detail screen).
