@@ -4,6 +4,7 @@ import {
   flattenDoseRecords,
   formatDoseSummary,
   groupDoseRecordsByMedication,
+  regularDoses,
   summarizeMedicationUse,
   validateMedication,
   wasTakenOn,
@@ -332,6 +333,56 @@ function makeMedication(overrides: Partial<Medication> = {}): Medication {
     ...overrides,
   };
 }
+
+describe('validateMedication — regular (GitHub #26)', () => {
+  it('requires a default dose when regular', () => {
+    const result = validateMedication(baseInput({ isRegular: true }));
+    expect(result.valid).toBe(false);
+    expect(result.errors.defaultDose).toBe('A regular medication needs a default dose and unit.');
+  });
+
+  it('requires a unit when regular with a dose', () => {
+    const result = validateMedication(baseInput({ isRegular: true, defaultDose: 5 }));
+    expect(result.valid).toBe(false);
+    expect(result.errors.doseUnit).toBeTruthy();
+  });
+
+  it('is valid when regular with a dose and unit, and not-regular needs neither', () => {
+    expect(validateMedication(baseInput({ isRegular: true, defaultDose: 5, doseUnit: 'mg' })).valid).toBe(true);
+    expect(validateMedication(baseInput({ isRegular: false })).valid).toBe(true);
+  });
+});
+
+describe('regularDoses', () => {
+  const reg = (id: string, overrides: Partial<Medication> = {}) =>
+    makeMedication({ id, name: id, isRegular: true, defaultDose: 10, doseUnit: 'mg', ...overrides });
+
+  it('returns only active, regular medications with a dose and unit, as dose inputs', () => {
+    const doses = regularDoses([reg('a'), reg('b', { defaultDose: 0.5, doseUnit: 'tablet' })]);
+    expect(doses).toEqual([
+      { medicationId: 'a', dose: 10, doseUnit: 'mg' },
+      { medicationId: 'b', dose: 0.5, doseUnit: 'tablet' },
+    ]);
+  });
+
+  it('skips inactive, not-regular, and dose/unit-less medications', () => {
+    const doses = regularDoses([
+      reg('inactive', { isActive: false }),
+      reg('notRegular', { isRegular: false }),
+      reg('noDose', { defaultDose: null }),
+      reg('zeroDose', { defaultDose: 0 }),
+      reg('noUnit', { doseUnit: null }),
+      reg('blankUnit', { doseUnit: '  ' }),
+      reg('ok'),
+    ]);
+    expect(doses.map((d) => d.medicationId)).toEqual(['ok']);
+  });
+
+  it('preserves the input order and returns [] for none', () => {
+    expect(regularDoses([reg('z'), reg('a'), reg('m')]).map((d) => d.medicationId)).toEqual(['z', 'a', 'm']);
+    expect(regularDoses([])).toEqual([]);
+  });
+});
 
 describe('summarizeMedicationUse', () => {
   it('counts only dose rows within the half-open range', () => {

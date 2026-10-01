@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Switch, View } from 'react-native';
 
 import { DateTimeField } from '@/components/date-time-field';
 import { FormField, ThemedTextInput } from '@/components/form-fields';
 import { PrimaryButton } from '@/components/primary-button';
 import { SegmentedControl, type SegmentOption } from '@/components/segmented-control';
+import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { MAX_OTHER_UNIT_LENGTH } from '@/lib/medications';
 import { MAX_NOTES_LENGTH } from '@/lib/validation';
@@ -32,6 +33,7 @@ function defaultState(initial?: Partial<MedicationFormState>): MedicationFormSta
     startDateInput: '',
     endDateInput: '',
     notes: '',
+    isRegular: false,
     ...initial,
   };
 }
@@ -112,6 +114,21 @@ export function MedicationForm({
         </FormField>
       ) : null}
 
+      <View style={styles.regularRow}>
+        <View style={styles.regularLabel}>
+          <ThemedText type="smallBold">Regular — I take this every day</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            Powers the one-tap &quot;Took my regular meds&quot; button. Needs a default dose and unit.
+          </ThemedText>
+        </View>
+        <Switch
+          value={state.isRegular}
+          onValueChange={(value) => set('isRegular', value)}
+          accessibilityLabel="Regular medication"
+          testID="medication-regular"
+        />
+      </View>
+
       <FormField label="Frequency (optional)">
         <ThemedTextInput
           value={state.frequency}
@@ -170,5 +187,15 @@ export function MedicationForm({
 const styles = StyleSheet.create({
   form: {
     gap: Spacing.four,
+  },
+  regularRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.three,
+  },
+  regularLabel: {
+    flex: 1,
+    gap: Spacing.half,
   },
 });

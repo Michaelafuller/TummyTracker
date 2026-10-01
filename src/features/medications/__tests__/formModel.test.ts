@@ -11,6 +11,7 @@ function baseState(overrides: Partial<MedicationFormState> = {}): MedicationForm
     startDateInput: '',
     endDateInput: '',
     notes: '',
+    isRegular: false,
     ...overrides,
   };
 }
@@ -27,6 +28,7 @@ describe('buildMedication', () => {
       startDate: null,
       endDate: null,
       notes: null,
+      isRegular: false,
     });
   });
 
@@ -166,6 +168,29 @@ describe('medicationToFormState', () => {
       startDate: null,
       endDate: null,
       notes: 'with food',
+      isRegular: false,
     });
+  });
+
+  it('carries isRegular through build and the edit-form seed (GitHub #26)', () => {
+    const built = buildMedication(baseState({ defaultDose: '50', unitChoice: 'mcg', isRegular: true }));
+    expect(built.valid).toBe(true);
+    expect(built.medication?.isRegular).toBe(true);
+
+    const seeded = medicationToFormState(baseMedication({ defaultDose: 50, doseUnit: 'mcg', isRegular: true }));
+    expect(seeded.isRegular).toBe(true);
+    expect(medicationToFormState(baseMedication()).isRegular).toBe(false);
+  });
+
+  it('rejects a regular medication with no default dose, on the dose field', () => {
+    const result = buildMedication(baseState({ isRegular: true }));
+    expect(result.valid).toBe(false);
+    expect(result.errors.defaultDose).toBe('A regular medication needs a default dose and unit.');
+  });
+
+  it('rejects a regular medication with a dose but no unit, on the unit field', () => {
+    const result = buildMedication(baseState({ isRegular: true, defaultDose: '5' }));
+    expect(result.valid).toBe(false);
+    expect(result.errors.doseUnit).toBeTruthy();
   });
 });

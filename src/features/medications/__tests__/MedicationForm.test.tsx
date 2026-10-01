@@ -35,6 +35,7 @@ describe('MedicationForm', () => {
       startDate: null,
       endDate: null,
       notes: null,
+      isRegular: false,
     });
   });
 
@@ -122,6 +123,42 @@ describe('MedicationForm', () => {
 
     expect(await findByText('End date must be on or after the start date.')).toBeTruthy();
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('the Regular switch is saved with the medication, and a regular one without a dose is rejected (GitHub #26)', async () => {
+    const onSubmit = jest.fn();
+    const { getByLabelText, findByLabelText, findByText } = await render(<MedicationForm onSubmit={onSubmit} />);
+
+    await fireEvent.changeText(getByLabelText('Medication name'), 'Levothyroxine');
+    await fireEvent(await findByLabelText('Regular medication'), 'valueChange', true);
+    await fireEvent.press(await findByLabelText('Save'));
+
+    expect(await findByText('A regular medication needs a default dose and unit.')).toBeTruthy();
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    await fireEvent.changeText(getByLabelText('Default dose'), '50');
+    await fireEvent.press(await findByLabelText('mcg'));
+    await fireEvent.press(await findByLabelText('Save'));
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    const built = onSubmit.mock.calls[0][0] as BuiltMedication;
+    expect(built).toMatchObject({ defaultDose: 50, doseUnit: 'mcg', isRegular: true });
+  });
+
+  it('seeds the Regular switch from `initial` and can switch it off', async () => {
+    const onSubmit = jest.fn();
+    const { findByLabelText } = await render(
+      <MedicationForm
+        onSubmit={onSubmit}
+        initial={{ name: 'X', defaultDose: '1', unitChoice: 'mg', isRegular: true }}
+      />,
+    );
+    await fireEvent.press(await findByLabelText('Save'));
+    expect((onSubmit.mock.calls[0][0] as BuiltMedication).isRegular).toBe(true);
+
+    await fireEvent(await findByLabelText('Regular medication'), 'valueChange', false);
+    await fireEvent.press(await findByLabelText('Save'));
+    expect((onSubmit.mock.calls[1][0] as BuiltMedication).isRegular).toBe(false);
   });
 
   it('pre-fills from `initial` (edit mode) and keeps the "Other" unit text visible', async () => {

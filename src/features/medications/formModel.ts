@@ -25,6 +25,8 @@ export interface MedicationFormState {
   startDateInput: string;
   endDateInput: string;
   notes: string;
+  /** Taken every day — powers "Took my regular meds" (GitHub #26). */
+  isRegular: boolean;
 }
 
 export type MedicationFormErrors = MedicationValidationErrors;
@@ -37,6 +39,7 @@ export interface BuiltMedication {
   startDate: number | null;
   endDate: number | null;
   notes: string | null;
+  isRegular: boolean;
 }
 
 export interface MedicationBuildResult {
@@ -74,6 +77,7 @@ export function buildMedication(state: MedicationFormState): MedicationBuildResu
     startDate: parsedDateOnly(state.startDateInput),
     endDate: parsedDateOnly(state.endDateInput),
     notes: state.notes,
+    isRegular: state.isRegular,
   });
 
   if (!result.valid) {
@@ -92,6 +96,7 @@ export function buildMedication(state: MedicationFormState): MedicationBuildResu
       startDate: parsedDateOnly(state.startDateInput),
       endDate: parsedDateOnly(state.endDateInput),
       notes: trimmedNotes.length > 0 ? trimmedNotes : null,
+      isRegular: state.isRegular,
     },
   };
 }
@@ -111,5 +116,6 @@ export function medicationToFormState(med: Medication): MedicationFormState {
     startDateInput: med.startDate != null ? formatDateInput(med.startDate) : '',
     endDateInput: med.endDate != null ? formatDateInput(med.endDate) : '',
     notes: med.notes ?? '',
+    isRegular: med.isRegular,
   };
 }

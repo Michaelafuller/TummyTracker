@@ -4,12 +4,14 @@
 // (invariant, HANDOFF.md §0): they only ever summarize rows a caller already
 // has (Cycle B writes those rows; the UI and any future insights consume them).
 
+import type { MedicationDoseInput } from '@/db/repository';
 import { DOSE_UNITS, type Medication, type MedicationDose, type MedicationEvent } from '@/db/schema';
 import { dayBounds, formatDateInput } from '@/lib/datetime';
 import { validateNotes } from '@/lib/validation';
 
 export const MAX_MEDICATION_NAME_LENGTH = 100;
 export const MAX_OTHER_UNIT_LENGTH = 20;
+export const REGULAR_NEEDS_DOSE_ERROR = 'A regular medication needs a default dose and unit.';
 
 export interface MedicationInput {
   name: string;
@@ -19,6 +21,8 @@ export interface MedicationInput {
   startDate?: number | null;
   endDate?: number | null;
   notes?: string | null;
+  /** Taken every day (GitHub #26) — requires a default dose and unit. */
+  isRegular?: boolean;
 }
 
 export interface MedicationValidationErrors {
@@ -41,7 +45,9 @@ export interface MedicationValidationResult {
  * DOSE_UNITS chip or the "Other" free-text field, both stored in the same
  * `doseUnit` string — the "Other" text is capped at 20 chars); `endDate` must
  * be on or after `startDate` when both are set; notes reuse the existing 500-
- * char rule.
+ * char rule. A regular medication (GitHub #26) must have a default dose, and
+ * therefore a unit — the dose-field error "A regular medication needs a
+ * default dose and unit." is shown when the dose is missing.
  */
 export function validateMedication(input: MedicationInput): MedicationValidationResult {
   const errors: MedicationValidationErrors = {};
@@ -51,6 +57,10 @@ export function validateMedication(input: MedicationInput): MedicationValidation
     errors.name = 'Name is required.';
   } else if (trimmedName.length > MAX_MEDICATION_NAME_LENGTH) {
     errors.name = `Name must be ${MAX_MEDICATION_NAME_LENGTH} characters or fewer.`;
+  }
+
+  if (input.isRegular && input.defaultDose == null) {
+    errors.defaultDose = REGULAR_NEEDS_DOSE_ERROR;
   }
 
   if (input.defaultDose != null) {
@@ -103,6 +113,24 @@ export function formatDoseSummary(med: DoseSummarySource): string {
   if (dose) return dose;
   if (frequency) return frequency;
   return '';
+}
+
+/**
+ * The doses "Took my regular meds" logs (GitHub #26): every medication that is
+ * active AND regular AND has a default dose > 0 and a non-empty unit, in the
+ * order given (the Meds tab's order). Each dose is a snapshot of the
+ * medication's current default dose/unit; nothing is inferred from `frequency`
+ * (invariant, HANDOFF.md §0).
+ */
+export function regularDoses(meds: readonly Medication[]): MedicationDoseInput[] {
+  const doses: MedicationDoseInput[] = [];
+  for (const med of meds) {
+    if (!med.isActive || !med.isRegular) continue;
+    const unit = med.doseUnit?.trim() ?? '';
+    if (med.defaultDose == null || !(med.defaultDose > 0) || unit.length === 0) continue;
+    doses.push({ medicationId: med.id, dose: med.defaultDose, doseUnit: unit });
+  }
+  return doses;
 }
 
 // Re-exported so callers only need one import for the fixed unit list.
