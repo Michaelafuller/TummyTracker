@@ -17,6 +17,7 @@ import { flattenDoseRecords } from '@/lib/medications';
 import { wilsonLowerBound, type ConfidenceTier } from '@/lib/stats';
 import { flagFollowedByOutcome, type DrilldownInstance } from './drilldown';
 import {
+  DEFAULT_WINDOW_MS,
   MAX_LOW_CONFIDENCE_FINDINGS,
   MEDIUM_CONFIDENCE_MIN_MEALS,
   MEDIUM_HIT_RATE_MARGIN,
@@ -261,7 +262,11 @@ export function confounderCaveat(
  * entries whose tags contain both, flagged with the same "followed by an
  * outcome" join as `findingInstances`.
  */
-export function pairInstances(entries: readonly LogEntry[], pairKey: string): DrilldownInstance[] {
+export function pairInstances(
+  entries: readonly LogEntry[],
+  pairKey: string,
+  windowMs: number = DEFAULT_WINDOW_MS,
+): DrilldownInstance[] {
   const tags = pairKey.split(' + ');
   if (tags.length !== 2) return [];
   const [a, b] = tags;
@@ -270,5 +275,5 @@ export function pairInstances(entries: readonly LogEntry[], pairKey: string): Dr
     const entryTags = parseTagsJson(entry.tagsJson);
     return entryTags.includes(a) && entryTags.includes(b);
   });
-  return flagFollowedByOutcome(matching, entries);
+  return flagFollowedByOutcome(matching, entries, windowMs);
 }

@@ -541,7 +541,7 @@ describe('confounderCaveat', () => {
   }
 
   function inst(offset: number, followedByOutcome: boolean) {
-    return { entry: meal(offset), followedByOutcome };
+    return { entry: meal(offset), followedByOutcome, outcomeDelayMs: followedByOutcome ? 60 * 60 * 1000 : null };
   }
 
   it('is null with fewer than 2 overlapping hits', () => {

@@ -13,6 +13,8 @@ export type DrilldownKind = 'food' | 'tag';
 export interface DrilldownInstance {
   entry: LogEntry;
   followedByOutcome: boolean;
+  /** Ms from this entry to its FIRST rough outcome within the window; null when none followed. */
+  outcomeDelayMs: number | null;
 }
 
 const FOOD_TYPES_SET = new Set(FOOD_TYPES as readonly string[]);
@@ -37,39 +39,42 @@ function matchesFinding(entry: LogEntry, kind: DrilldownKind, value: string): bo
 /**
  * Every log instance behind a food/tag finding, newest first. Each instance
  * is flagged with whether some OTHER entry counts as a rough outcome
- * (temporal's `isOutcome`) within `DEFAULT_WINDOW_MS` strictly after it — an
- * outcome at the exact same instant does not count, and an instance never
+ * (temporal's `isOutcome`) within `windowMs` (default 24 h) strictly after it —
+ * an outcome at the exact same instant does not count, and an instance never
  * counts as its own outcome.
  */
 export function findingInstances(
   entries: readonly LogEntry[],
   kind: DrilldownKind,
   value: string,
+  windowMs: number = DEFAULT_WINDOW_MS,
 ): DrilldownInstance[] {
   const matching = entries.filter((entry) => matchesFinding(entry, kind, value));
-  return flagFollowedByOutcome(matching, entries);
+  return flagFollowedByOutcome(matching, entries, windowMs);
 }
 
 /**
  * Flags each of `matching` with whether some OTHER entry in `entries` counts
- * as a rough outcome within `DEFAULT_WINDOW_MS` strictly after it, newest
- * first. The one "followed by an outcome" join, shared by `findingInstances`
+ * as a rough outcome within `windowMs` (default 24 h) strictly after it,
+ * newest first, plus the delay to the first such outcome. The one "followed by an outcome" join, shared by `findingInstances`
  * and the medication caveat's `pairInstances`.
  */
 export function flagFollowedByOutcome(
   matching: readonly LogEntry[],
   entries: readonly LogEntry[],
+  windowMs: number = DEFAULT_WINDOW_MS,
 ): DrilldownInstance[] {
   const outcomes = entries.filter(isOutcome);
 
-  const instances: DrilldownInstance[] = matching.map((entry) => ({
-    entry,
-    followedByOutcome: outcomes.some((outcome) => {
-      if (outcome.id === entry.id) return false;
+  const instances: DrilldownInstance[] = matching.map((entry) => {
+    let first: number | null = null;
+    for (const outcome of outcomes) {
+      if (outcome.id === entry.id) continue;
       const delta = outcome.loggedAt - entry.loggedAt;
-      return delta > 0 && delta <= DEFAULT_WINDOW_MS;
-    }),
-  }));
+      if (delta > 0 && delta <= windowMs && (first === null || delta < first)) first = delta;
+    }
+    return { entry, followedByOutcome: first !== null, outcomeDelayMs: first };
+  });
 
   return instances.sort((a, b) => b.entry.loggedAt - a.entry.loggedAt);
 }

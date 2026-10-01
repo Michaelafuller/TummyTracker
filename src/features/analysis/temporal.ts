@@ -11,6 +11,15 @@ import { parseTagsJson } from '@/lib/ingredients';
 import { wilsonLowerBound, type ConfidenceTier } from '@/lib/stats';
 
 export const DEFAULT_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
+/**
+ * The one extra window the "Slower patterns" section looks at (#21). Kept to a
+ * single window on purpose: with daily meals and scattered rough days, long
+ * windows push the baseline toward 100 %, and trying several windows per food
+ * finds spurious "triggers" by chance.
+ */
+export const SLOW_WINDOW_MS = 48 * 60 * 60 * 1000; // 48 hours
+/** Windows (hours) shown in a finding's timing profile — context only, never creates findings. */
+export const PROFILE_WINDOWS_H = [6, 24, 48, 72] as const;
 export const DEFAULT_MIN_MEALS = 3;
 /** Meals needed before a raw-hit-rate finding can qualify as medium confidence. */
 export const MEDIUM_CONFIDENCE_MIN_MEALS = 5;
@@ -60,6 +69,25 @@ export function mealsFollowedByOutcome(
     );
   }
   return new Map(meals.map((m) => [m.id, hasFollowingOutcome(m)]));
+}
+
+/**
+ * Milliseconds from `meal` to the FIRST outcome strictly after it and within
+ * `windowMs` (boundary included) — the same join rule as
+ * `mealsFollowedByOutcome` — or null when no outcome follows in the window.
+ */
+export function firstOutcomeDelayMs(
+  entries: readonly LogEntry[],
+  meal: LogEntry,
+  windowMs: number = DEFAULT_WINDOW_MS,
+): number | null {
+  let first: number | null = null;
+  for (const entry of entries) {
+    if (!isOutcome(entry)) continue;
+    const delta = entry.loggedAt - meal.loggedAt;
+    if (delta > 0 && delta <= windowMs && (first === null || delta < first)) first = delta;
+  }
+  return first;
 }
 
 /** A grouping key + its display label, as produced by an `analyzeOutcomeRates` caller. */
@@ -218,3 +246,43 @@ export function tagHitRates(
   return rates;
 }
 
+
+export interface OutcomeRate {
+  occurrences: number;
+  hits: number;
+  /** hits / occurrences, rounded to 2 dp exactly like `OutcomeFinding.hitRate`. */
+  hitRate: number;
+  /** Baseline over all eligible meals, rounded to 2 dp like `OutcomeFinding.baseRate`. */
+  baseRate: number;
+}
+
+/**
+ * The hit rate and baseline for ONE grouping key at `windowMs`, with NO gating
+ * (no minimum occurrences, no excess-over-baseline test, no confidence) — used
+ * for a finding's timing profile. Same eligible-meal set and baseline as
+ * `analyzeOutcomeRates`, so at the default window it equals the corresponding
+ * finding's numbers. Null when the key never occurs or no meal is eligible.
+ */
+export function outcomeRateForKey(
+  entries: readonly LogEntry[],
+  keysOf: (meal: LogEntry) => OutcomeKey[],
+  key: string,
+  windowMs: number = DEFAULT_WINDOW_MS,
+): OutcomeRate | null {
+  const eligibleMeals = entries.filter((e) => FOOD_TYPES_SET.has(e.type) && keysOf(e).length > 0);
+  if (eligibleMeals.length === 0) return null;
+
+  const outcomeMap = mealsFollowedByOutcome(entries, eligibleMeals, windowMs);
+  const baseHits = eligibleMeals.filter((m) => outcomeMap.get(m.id)).length;
+  const baseRate = baseHits / eligibleMeals.length;
+
+  const group = eligibleMeals.filter((m) => keysOf(m).some((k) => k.key === key));
+  if (group.length === 0) return null;
+  const hits = group.filter((m) => outcomeMap.get(m.id)).length;
+  return {
+    occurrences: group.length,
+    hits,
+    hitRate: Math.round((hits / group.length) * 100) / 100,
+    baseRate: Math.round(baseRate * 100) / 100,
+  };
+}
