@@ -16,8 +16,10 @@ export interface MyMealsSectionProps {
   items: SavedMealWithComponents[];
   /** Tap on the row: log this meal (prefilled review, time = now). */
   onLog: (item: SavedMealWithComponents) => void;
-  /** Tap on "Edit": open the template for editing. */
-  onEdit: (item: SavedMealWithComponents) => void;
+  /** Tap on "Edit": open the template for editing. Omit to hide the Edit link (quick-log, GitHub #26). */
+  onEdit?: (item: SavedMealWithComponents) => void;
+  /** Row testID prefix: `<prefix>-<slug>` (and `-edit`). Home keeps the default. */
+  testIDPrefix?: string;
 }
 
 /**
@@ -26,7 +28,7 @@ export interface MyMealsSectionProps {
  * template, never a log entry — tapping it copies its items into the meal
  * builder exactly like a Recent row does.
  */
-export function MyMealsSection({ items, onLog, onEdit }: MyMealsSectionProps) {
+export function MyMealsSection({ items, onLog, onEdit, testIDPrefix = 'my-meal' }: MyMealsSectionProps) {
   const theme = useTheme();
   if (items.length === 0) return null;
 
@@ -48,11 +50,11 @@ export function MyMealsSection({ items, onLog, onEdit }: MyMealsSectionProps) {
               key={item.meal.id}
               style={[styles.row, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
               <Pressable
-                testID={`my-meal-${slug}`}
+                testID={`${testIDPrefix}-${slug}`}
                 accessibilityRole="button"
                 accessibilityLabel={`Log ${item.meal.name}`}
                 onPress={() => onLog(item)}
-                style={styles.rowMain}>
+                style={onEdit ? styles.rowMain : [styles.rowMain, styles.rowMainNoEdit]}>
                 <ThemedText type="small" numberOfLines={1} style={styles.rowName}>
                   {item.meal.name}
                 </ThemedText>
@@ -60,15 +62,17 @@ export function MyMealsSection({ items, onLog, onEdit }: MyMealsSectionProps) {
                   {`${count} ${count === 1 ? 'item' : 'items'}`}
                 </ThemedText>
               </Pressable>
-              <Pressable
-                testID={`my-meal-${slug}-edit`}
-                accessibilityRole="button"
-                accessibilityLabel={`Edit ${item.meal.name}`}
-                onPress={() => onEdit(item)}
-                hitSlop={Spacing.two}
-                style={styles.editLink}>
-                <ThemedText type="link">Edit</ThemedText>
-              </Pressable>
+              {onEdit ? (
+                <Pressable
+                  testID={`${testIDPrefix}-${slug}-edit`}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Edit ${item.meal.name}`}
+                  onPress={() => onEdit(item)}
+                  hitSlop={Spacing.two}
+                  style={styles.editLink}>
+                  <ThemedText type="link">Edit</ThemedText>
+                </Pressable>
+              ) : null}
             </View>
           );
         })}
@@ -102,6 +106,9 @@ const styles = StyleSheet.create({
     paddingLeft: Spacing.three,
     paddingVertical: Spacing.two,
     minHeight: ROW_HEIGHT,
+  },
+  rowMainNoEdit: {
+    paddingRight: Spacing.three,
   },
   rowName: {
     flexShrink: 1,

@@ -60,3 +60,25 @@ export function remindersFromScheduled(scheduled: readonly ScheduledLike[]): Rem
 
   return state;
 }
+
+/** `actionIdentifier` of a plain tap on a notification body (expo-notifications' `DEFAULT_ACTION_IDENTIFIER`). */
+export const DEFAULT_TAP_ACTION = 'expo.modules.notifications.actions.DEFAULT';
+
+/** The minimal response shape we read (a subset of expo-notifications' `NotificationResponse`). */
+export interface MealReminderResponseLike {
+  actionIdentifier: string;
+  notification: { request: { identifier: string; content: { data?: Record<string, unknown> | null } } };
+}
+
+/**
+ * The slot a plain tap on one of our meal reminders refers to (GitHub #26), or
+ * null for anything else: another notification's slot (day check-in,
+ * experiments), a non-default action, or missing/malformed data. Only
+ * navigation follows from it — a notification is never a record.
+ */
+export function parseMealReminderResponse(r: MealReminderResponseLike): { slot: ReminderSlot } | null {
+  if (r.actionIdentifier !== DEFAULT_TAP_ACTION) return null;
+  const slot = r.notification.request.content.data?.slot;
+  if (!isReminderSlot(slot)) return null;
+  return { slot };
+}

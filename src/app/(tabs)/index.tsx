@@ -19,6 +19,7 @@ import { MyMealsSection } from '@/features/logging/MyMealsSection';
 import { RecentFoodPicker } from '@/features/logging/RecentFoodPicker';
 import { useBuilderLaunchers } from '@/features/logging/useBuilderLaunchers';
 import { useSavedMeals } from '@/features/logging/useSavedMeals';
+import { useMealReminderResponses } from '@/features/notifications/useMealReminderResponses';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDateInput } from '@/lib/datetime';
 import { orderSavedMealsForSlot, slotForHour } from '@/lib/savedMeals';
@@ -48,6 +49,7 @@ export default function HomeScreen() {
   // can't race the migrations (GitHub #13).
   useDayCheckInResponses();
   useExperimentNotificationResponses();
+  useMealReminderResponses();
 
   useFocusEffect(
     useCallback(() => {

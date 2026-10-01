@@ -67,6 +67,11 @@ const mockUseExperimentNotificationResponses = jest.fn();
 jest.mock('@/features/experiments/useExperimentNotificationResponses', () => ({
   useExperimentNotificationResponses: () => mockUseExperimentNotificationResponses(),
 }));
+// And the meal-reminder tap hook (GitHub #26).
+const mockUseMealReminderResponses = jest.fn();
+jest.mock('@/features/notifications/useMealReminderResponses', () => ({
+  useMealReminderResponses: () => mockUseMealReminderResponses(),
+}));
 jest.mock('@/features/checkin/DayCheckInCard', () => ({
   DayCheckInCard: ({ date }: { date: string }) => {
     const { Text } = jest.requireActual('react-native');
@@ -167,6 +172,12 @@ describe('HomeScreen', () => {
     expect(mockUseDayCheckInResponses).toHaveBeenCalled();
     expect(mockUseExperimentNotificationResponses).toHaveBeenCalled();
     expect(getByTestId('day-check-in-card').props.children).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('mounts the meal-reminder tap hook (GitHub #26)', async () => {
+    (listRecentFoodEntries as jest.Mock).mockResolvedValue([]);
+    await render(<HomeScreen />);
+    expect(mockUseMealReminderResponses).toHaveBeenCalled();
   });
 
   it('fetches hasAnyLogEntry on focus (drives the backup nudge, GitHub #14)', async () => {
