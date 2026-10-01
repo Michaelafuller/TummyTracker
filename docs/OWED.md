@@ -15,12 +15,13 @@ Status at a glance (2026-09-30):
   `f6e6593`), but it can't conflict: RESUME_HERE.md is a new file — delete it
   in the merge.
 - Branch `worktree-agent-a93006f35a36fc943` (worktree
-  `.claude/worktrees/agent-a93006f35a36fc943`) = #19–#25 on top of
+  `.claude/worktrees/agent-a93006f35a36fc943`) = #19–#26 on top of
   `39224e7`, reviewed, **unmerged, unpushed**; adds migrations **0011**
   (`experiment`), **0012** (`day_factor`) and **0013** (`saved_meal`,
-  `saved_meal_component`) and backups **v5 → v7**.
+  `saved_meal_component`), **0014** (`medication.is_regular`) and backups
+  **v5 → v8**.
 - Device: Pixel 5, dev client = the 2026-08-29 EAS development build. All
-  #13–#25 work is JS + migrations — **no new build needed**.
+  #13–#26 work is JS + migrations — **no new build needed**.
 - Last device baseline: 34/34 Maestro on 2026-09-27. Last full Jest: 113 /
   1,168 on `main` (2026-09-27). The branch has only had targeted Jest since.
 
@@ -67,12 +68,12 @@ Then tell the orchestrator → it merges the branch into `main` (§2).
       `bundle:check` on `main`; record in `docs/RESULTS.md`.
 - [ ] Owner: **push** when happy.
 
-## 3. On the merged `main` — #19–#25
+## 3. On the merged `main` — #19–#26
 
 Flows:
 
 ```
-maestro test flows/z-experiment-start.yaml flows/zc-day-details.yaml flows/zd-my-meals.yaml --format junit --output flows/results-19-25.xml
+maestro test flows/z-experiment-start.yaml flows/zc-day-details.yaml flows/zd-my-meals.yaml flows/ze-faster-logging.yaml --format junit --output flows/results-19-26.xml
 ```
 
 Verdict path (backdated fixture — covers #19, #20, #21 and #23 in one import):
@@ -102,6 +103,14 @@ Manual:
       phase boundary falls, or temporarily set the device clock.)
 - [ ] **#19 PDF:** "Elimination experiments" table (term, dates, status,
       frozen verdict).
+- [ ] **#26 reminders, by hand:** Settings → a breakfast reminder 1–2 min
+      ahead → tap the notification → "Log breakfast" opens; tap a saved
+      meal → review shows Breakfast selected; "Add an entry manually" from
+      there → the review also has Breakfast. A reminder that was scheduled
+      before this update should do the same (no reschedule needed).
+- [ ] **#26 regular meds next day:** log with one tap, leave the app
+      overnight → next morning the Meds tab shows the button again, no
+      stale Undo.
 - [ ] **#25 My meals, by hand:** the My meals list on Home with 4+ saved
       meals (it shows ~3 rows and scrolls inside itself — check it doesn't
       fight the Recent list's scrolling); "Save as my meal" with a name you
@@ -132,7 +141,7 @@ Manual:
 ## 5. GitHub housekeeping (owner-only — the agent never moves cards)
 
 - [ ] Close / move to Done: **#1, #2, #4–#11** (2026-09-26 session), **#12**,
-      **#13–#18** (after §1), **#19–#25** (after §3), and #26+ as they ship.
+      **#13–#18** (after §1), **#19–#26** (after §3), and #27+ as they ship.
 
 ## 6. Decisions the owner may want to revisit (made as plan defaults)
 
@@ -145,6 +154,10 @@ Manual:
   the next), "more" caffeine, period.
 - Slower patterns (#21): a key that was only a hidden low-confidence 24 h
   signal can appear as a 48 h slower pattern.
+- Faster logging (#26): time-of-day slots 05–11 breakfast, 11–16 lunch,
+  16–22 dinner (none at night); a meal opened from a reminder's quick log
+  takes that meal slot even if it was saved for another; "Took my regular
+  meds" saves at once (no confirm) with Undo until you leave the screen.
 - Saved meals (#25): names unique ignoring case (a clash asks Replace);
   backfill targets only past same-name meals with no ingredient tags and
   never overwrites existing ingredient text (a name-only meal's text is its

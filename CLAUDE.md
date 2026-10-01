@@ -227,6 +227,18 @@
   2026-09-30) get the template's tags merged in, in one transaction; text
   only fills an empty `ingredientsText`. Restore: the device's template
   wins an id or name clash.
+- **Faster logging (owner-decided 2026-10-01, GitHub #26).** Favourites
+  = My meals, ordered for the meal slot (Home: by time of day, 05–11
+  breakfast / 11–16 lunch / 16–22 dinner; quick log: the reminder's slot).
+  Tapping a breakfast/lunch/dinner reminder opens `/quick-log?slot=…`
+  (`useMealReminderResponses`, navigation only — a notification is never a
+  record); a meal opened there takes that slot. **Regular medications:**
+  `medication.isRegular` (0014, backups v8) requires a default dose + unit;
+  "Took my regular meds" (`RegularMedsButton`, Meds tab + quick log)
+  writes ONE event through `createMedicationEvent` with each active regular
+  med's default dose, on an explicit tap only; then "Logged at … · Undo"
+  (Undo deletes that event). The Undo offer ends on **blur**, not unmount —
+  tabs stay mounted (review 2026-10-01).
 - **Real-SQLite repository tests (2026-09-27, GitHub #18).** `jest/expo-sqlite-node.ts`
   is a Jest-only fake `expo-sqlite` backed by Node's built-in `node:sqlite`
   (**Node ≥ 22.13 to run the tests**; no dependency). A DB test file starts

@@ -160,6 +160,14 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   Review fix: the suspect must have been eaten in the baseline, otherwise a
   "drop" while avoiding it proves nothing (new inconclusive rule + preview
   warning); the watchlist store now refreshes after a start.
+- **Faster logging (GitHub #26):** a "Regular" switch on medications
+  (0014, backups v8) and a one-tap "Took my regular meds" with Undo on the
+  Meds tab; meal reminders now open a quick-log screen for that meal (meds
+  button, matching My meals first, Recent, scan/manual with the slot
+  preset); My meals on Home ordered by time of day. Review fix: the Meds
+  tab stays mounted, so the "Logged · Undo" row never cleared — the next
+  day the button was gone and Undo would delete yesterday's dose; it now
+  clears when you leave the screen. Flow `ze-faster-logging`.
 - **Saved meals / "My meals" (GitHub #25):** "Save as my meal" on meal
   review; a My meals list on Home (tap = prefilled review like Recent,
   Edit = review in template mode with Save changes / Delete); items on
@@ -294,7 +302,7 @@ analysis.
 | 12 | ~~**Confounder tracking** (GH #23)~~ — *✅ 2026-09-30 (device check owed; on the #19 branch)* | Sleep, stress, menstrual cycle, alcohol and caffeine drive gut symptoms and currently land on food. Even one daily "stress 1–5" helps. | M | Could fold into #2's daily check-in. Additive migration. |
 | 13 | ~~**"By chance" indicator on findings** (GH #24)~~ — *✅ 2026-09-30 (device check owed; on the #19 branch)* | Many ingredients × few logs = some spurious correlations. Show how many findings like this you'd expect by chance. | S–M | Complements the existing confidence tiers. |
 | 14 | ~~**Saved recipes / "my meals" with ingredients** (GH #25)~~ — *✅ 2026-09-30 (device check owed; on the #19 branch)* | Homemade and restaurant food has a name but no ingredients, blinding the ingredient engine where it matters most. | M | Re-used like Recent meals. |
-| 15 | **Faster logging** (GH #26) | Favourites ("usual breakfast"), log straight from the reminder notification (subsumes the reminder deep-link), one-tap "took my regular meds". Adherence and data quality die when logging is tedious. | M | |
+| 15 | ~~**Faster logging** (GH #26)~~ — *✅ 2026-10-01 (device check owed; on the #19 branch)* | Favourites ("usual breakfast"), log straight from the reminder notification (subsumes the reminder deep-link), one-tap "took my regular meds". Adherence and data quality die when logging is tedious. | M | |
 | 16 | **Optional app lock** (GH #27) | Sensitive health data (BMs, symptoms, medications) with no lock. | S–M | ⚠ likely `expo-local-authentication` — owner approval + CVE check. |
 | 17 | **Medication adherence view + as-needed reason** (GH #28) | "Taken 26 of 30 days" calendar; a reason field for as-needed doses ("ibuprofen — headache"). | S–M | Builds on Cycle B history. |
 | 18 | **Medication reminders** (GH #29) | Owner-requested enhancement: local notifications from a structured schedule (times/days) via the approved `expo-notifications`. | M | A reminder must never become a dose record (#10/#11). Needs a structured schedule, not today's free-text frequency. |
