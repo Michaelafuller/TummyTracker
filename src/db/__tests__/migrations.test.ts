@@ -78,4 +78,14 @@ describe('migrations', () => {
     expect(sql).not.toMatch(/drop table/i);
     expect(sql).not.toMatch(/alter table/i);
   });
+
+  it('0013 creates the saved_meal tables and indexes only, touching no existing table (GitHub #25)', () => {
+    const sql = readMigration('0013');
+    expect(sql).toMatch(/create table `saved_meal`/i);
+    expect(sql).toMatch(/create table `saved_meal_component`/i);
+    expect(sql).toMatch(/create unique index `saved_meal_name_key_unique`/i);
+    expect(sql).toMatch(/create index `saved_meal_component_saved_meal_id_idx`/i);
+    expect(sql).not.toMatch(/drop table/i);
+    expect(sql).not.toMatch(/alter table/i);
+  });
 });

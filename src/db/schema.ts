@@ -325,3 +325,58 @@ export const experiment = sqliteTable('experiment', {
 
 export type Experiment = typeof experiment.$inferSelect;
 export type NewExperiment = typeof experiment.$inferInsert;
+
+/**
+ * A saved meal / "My meal" template (GitHub #25). A template is NOT a log
+ * entry and never links to one: re-logging copies its components into the
+ * meal builder, and editing or deleting a template never touches past meals.
+ * - `nameKey` (trimmed, lowercased `name`) is unique — "Save as my meal" with
+ *   an existing name asks the user to Replace.
+ * - Date/time and notes are deliberately not stored; only what makes a meal
+ *   repeatable (name, type, slot, items).
+ */
+export const savedMeal = sqliteTable('saved_meal', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  // Trimmed, lowercased name — unique; the backfill and Replace match on it.
+  nameKey: text('name_key').notNull().unique(),
+  type: text('type', { enum: FOOD_TYPES }).notNull(),
+  mealSlot: text('meal_slot', { enum: MEAL_SLOTS }),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+export type SavedMeal = typeof savedMeal.$inferSelect;
+export type NewSavedMeal = typeof savedMeal.$inferInsert;
+
+/**
+ * One item of a saved meal — mirrors `mealComponent` (nutrition is PER ONE
+ * SERVING; `servings` is the multiplier) but belongs to a `savedMeal`.
+ */
+export const savedMealComponent = sqliteTable(
+  'saved_meal_component',
+  {
+    id: text('id').primaryKey(),
+    savedMealId: text('saved_meal_id').notNull(),
+    name: text('name').notNull(),
+    barcode: text('barcode'),
+    servings: real('servings').notNull().default(1),
+    servingG: real('serving_g'),
+    calories: real('calories'),
+    fatG: real('fat_g'),
+    saturatedFatG: real('saturated_fat_g'),
+    carbsG: real('carbs_g'),
+    proteinG: real('protein_g'),
+    fiberG: real('fiber_g'),
+    sugarG: real('sugar_g'),
+    sodiumMg: real('sodium_mg'),
+    ingredientsText: text('ingredients_text'),
+    tagsJson: text('tags_json'),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt: integer('created_at').notNull(),
+  },
+  (table) => [index('saved_meal_component_saved_meal_id_idx').on(table.savedMealId)],
+);
+
+export type SavedMealComponent = typeof savedMealComponent.$inferSelect;
+export type NewSavedMealComponent = typeof savedMealComponent.$inferInsert;
