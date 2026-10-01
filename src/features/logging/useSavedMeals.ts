@@ -2,8 +2,8 @@ import { useMemo } from 'react';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 
 import { db } from '@/db/client';
-import { groupSavedMeals, type SavedMealWithComponents } from '@/db/repository';
 import { savedMeal, savedMealComponent } from '@/db/schema';
+import { groupSavedMeals, type SavedMealWithComponents } from '@/lib/savedMeals';
 
 /**
  * Every saved meal ("My meals", GitHub #25) with its items, A-Z by name, kept

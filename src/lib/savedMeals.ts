@@ -1,7 +1,7 @@
 // Pure helpers for saved meals / "My meals" (GitHub #25). No React, no I/O.
 // A saved meal is a template: it never is, or links to, a log entry.
 
-import { FOOD_TYPES, type LogEntry, type SavedMealComponent } from '@/db/schema';
+import { FOOD_TYPES, type LogEntry, type SavedMeal, type SavedMealComponent } from '@/db/schema';
 import { parseTagsJson } from '@/lib/ingredients';
 import type { MealComponentDraft } from '@/lib/mealAggregate';
 
@@ -60,4 +60,29 @@ export function backfillTargets(entries: readonly LogEntry[], nameKey: string): 
 /** Error string for an unusable saved-meal name, or null when it's fine. */
 export function validateSavedMealName(name: string): string | null {
   return name.trim().length === 0 ? 'Name is required.' : null;
+}
+
+/** A saved meal with its items. */
+export interface SavedMealWithComponents {
+  meal: SavedMeal;
+  components: SavedMealComponent[];
+}
+
+/** Pairs saved meals with their components and sorts A-Z (by nameKey, then name). Shared with the live hook. */
+export function groupSavedMeals(
+  meals: readonly SavedMeal[],
+  components: readonly SavedMealComponent[],
+): SavedMealWithComponents[] {
+  const byMeal = new Map<string, SavedMealComponent[]>();
+  for (const component of components) {
+    const list = byMeal.get(component.savedMealId);
+    if (list) list.push(component);
+    else byMeal.set(component.savedMealId, [component]);
+  }
+  return [...meals]
+    .sort((a, b) => a.nameKey.localeCompare(b.nameKey) || a.name.localeCompare(b.name))
+    .map((meal) => ({
+      meal,
+      components: [...(byMeal.get(meal.id) ?? [])].sort((a, b) => a.sortOrder - b.sortOrder),
+    }));
 }

@@ -15,7 +15,7 @@ import {
   type MealComponentDraft,
 } from '@/lib/mealAggregate';
 import { serializeTags } from '@/lib/ingredients';
-import { backfillTargets, savedMealNameKey } from '@/lib/savedMeals';
+import { backfillTargets, groupSavedMeals, savedMealNameKey, type SavedMealWithComponents } from '@/lib/savedMeals';
 import type { TagBackfillRowUpdate } from '@/lib/tagBackfill';
 import type { NutritionField } from '@/lib/validation';
 import { normalizeWatchTerm } from '@/lib/watchlist';
@@ -1059,35 +1059,13 @@ export class SavedMealNameTakenError extends Error {
   }
 }
 
-export interface SavedMealWithComponents {
-  meal: SavedMeal;
-  components: SavedMealComponent[];
-}
+export type { SavedMealWithComponents };
 
 /** Every saved meal with its items (in builder order), A-Z by name. */
 export async function listSavedMeals(): Promise<SavedMealWithComponents[]> {
   const meals = await db.select().from(savedMeal);
   const components = await db.select().from(savedMealComponent).orderBy(asc(savedMealComponent.sortOrder));
   return groupSavedMeals(meals, components);
-}
-
-/** Pairs saved meals with their components and sorts A-Z (by nameKey, then name). Shared with the live hook. */
-export function groupSavedMeals(
-  meals: readonly SavedMeal[],
-  components: readonly SavedMealComponent[],
-): SavedMealWithComponents[] {
-  const byMeal = new Map<string, SavedMealComponent[]>();
-  for (const component of components) {
-    const list = byMeal.get(component.savedMealId);
-    if (list) list.push(component);
-    else byMeal.set(component.savedMealId, [component]);
-  }
-  return [...meals]
-    .sort((a, b) => a.nameKey.localeCompare(b.nameKey) || a.name.localeCompare(b.name))
-    .map((meal) => ({
-      meal,
-      components: [...(byMeal.get(meal.id) ?? [])].sort((a, b) => a.sortOrder - b.sortOrder),
-    }));
 }
 
 /** The saved meal holding this `nameKey` (see `savedMealNameKey`), if any. */

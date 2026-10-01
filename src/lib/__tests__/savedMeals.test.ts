@@ -1,5 +1,11 @@
-import type { LogEntry, SavedMealComponent } from '@/db/schema';
-import { backfillTargets, savedMealNameKey, savedMealToDrafts, validateSavedMealName } from '../savedMeals';
+import type { LogEntry, SavedMeal, SavedMealComponent } from '@/db/schema';
+import {
+  backfillTargets,
+  groupSavedMeals,
+  savedMealNameKey,
+  savedMealToDrafts,
+  validateSavedMealName,
+} from '../savedMeals';
 
 function entry(overrides: Partial<LogEntry>): LogEntry {
   return {
@@ -132,5 +138,39 @@ describe('validateSavedMealName', () => {
     expect(validateSavedMealName('')).toBe('Name is required.');
     expect(validateSavedMealName('   ')).toBe('Name is required.');
     expect(validateSavedMealName(' Oatmeal ')).toBeNull();
+  });
+});
+
+describe('groupSavedMeals', () => {
+  const meal = (id: string, name: string): SavedMeal => ({
+    id,
+    name,
+    nameKey: name.trim().toLowerCase(),
+    type: 'meal',
+    mealSlot: null,
+    createdAt: 1,
+    updatedAt: 1,
+  });
+
+  it('sorts meals A-Z case-insensitively and each meal\'s items by sortOrder', () => {
+    const grouped = groupSavedMeals(
+      [meal('b', 'banana smoothie'), meal('a', 'Apple pie'), meal('c', 'Cereal')],
+      [
+        component({ id: '1', savedMealId: 'a', name: 'second', sortOrder: 1 }),
+        component({ id: '2', savedMealId: 'a', name: 'first', sortOrder: 0 }),
+        component({ id: '3', savedMealId: 'c', name: 'only' }),
+      ],
+    );
+    expect(grouped.map((g) => g.meal.name)).toEqual(['Apple pie', 'banana smoothie', 'Cereal']);
+    expect(grouped[0].components.map((c) => c.name)).toEqual(['first', 'second']);
+    expect(grouped[1].components).toEqual([]);
+    expect(grouped[2].components.map((c) => c.name)).toEqual(['only']);
+  });
+
+  it('ignores components of unknown meals and does not mutate its input', () => {
+    const meals = [meal('b', 'B'), meal('a', 'A')];
+    const grouped = groupSavedMeals(meals, [component({ savedMealId: 'ghost' })]);
+    expect(grouped.map((g) => g.components.length)).toEqual([0, 0]);
+    expect(meals.map((m) => m.id)).toEqual(['b', 'a']);
   });
 });
