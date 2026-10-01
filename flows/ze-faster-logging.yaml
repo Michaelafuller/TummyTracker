@@ -1,0 +1,104 @@
+appId: com.tummytracker.app.dev
+# ZE — Faster logging (GitHub #26, 2026-10-01). Written while the phone was
+# disconnected — expect small flow-side fixes on the first run.
+#   - A regular medication (Levothyroxine 50 mcg, "Regular" on) and a
+#     non-regular one (Ibuprofen 200 mg)
+#   - Meds tab: "Took my regular meds" lists only Levothyroxine; one tap →
+#     "Logged at … · Undo"; Undo brings the button back; log again
+#   - Leaving the tab ends the Undo offer (review fix 2026-10-01): back on
+#     Meds, the button is there again, no Undo
+#   - The quick-log screen a breakfast reminder opens, reached here by deep
+#     link (best guess for the dev client — if openLink doesn't route, tap a
+#     real breakfast reminder by hand instead): titled "Log breakfast", with
+#     the meds button
+# Tapping the real notification, and the review's preset meal slot, are
+# manual / Jest checks (docs/OWED.md).
+---
+- launchApp:
+    clearState: true
+- runFlow: _helpers/reconnect-dev-client.yaml
+
+- tapOn:
+    id: "tab-meds"
+- waitForAnimationToEnd
+
+# --- A regular medication ---
+- tapOn: "Add medication"
+- waitForAnimationToEnd
+- tapOn: "Medication name"
+- inputText: "Levothyroxine"
+- runFlow: _helpers/dismiss-keyboard.yaml
+- tapOn: "Default dose"
+- inputText: "50"
+- runFlow: _helpers/dismiss-keyboard.yaml
+- tapOn: "mcg"
+- scrollUntilVisible:
+    element:
+      id: "medication-regular"
+    direction: DOWN
+    centerElement: true
+- tapOn:
+    id: "medication-regular"
+- scrollUntilVisible:
+    element:
+      text: "Save"
+    direction: DOWN
+- tapOn: "Save"
+- waitForAnimationToEnd
+
+# --- A non-regular one ---
+- tapOn: "Add medication"
+- waitForAnimationToEnd
+- tapOn: "Medication name"
+- inputText: "Ibuprofen"
+- runFlow: _helpers/dismiss-keyboard.yaml
+- tapOn: "Default dose"
+- inputText: "200"
+- runFlow: _helpers/dismiss-keyboard.yaml
+- tapOn: "mg"
+- scrollUntilVisible:
+    element:
+      text: "Save"
+    direction: DOWN
+- tapOn: "Save"
+- waitForAnimationToEnd
+
+# --- One tap, Undo, log again ---
+- assertVisible:
+    id: "regular-meds-log"
+- assertVisible: "Levothyroxine 50 mcg"
+- tapOn:
+    id: "regular-meds-log"
+- waitForAnimationToEnd
+- assertVisible: "Logged at .*"
+- assertNotVisible:
+    id: "regular-meds-log"
+- tapOn:
+    id: "regular-meds-undo"
+- waitForAnimationToEnd
+- assertVisible:
+    id: "regular-meds-log"
+- tapOn:
+    id: "regular-meds-log"
+- waitForAnimationToEnd
+- assertVisible:
+    id: "regular-meds-undo"
+
+# --- Leaving the tab ends the Undo offer ---
+- tapOn:
+    id: "tab-home"
+- waitForAnimationToEnd
+- tapOn:
+    id: "tab-meds"
+- waitForAnimationToEnd
+- assertVisible:
+    id: "regular-meds-log"
+- assertNotVisible:
+    id: "regular-meds-undo"
+
+# --- The quick-log screen (what a breakfast reminder tap opens) ---
+- openLink: "tummytracker-dev://quick-log?slot=breakfast"
+- waitForAnimationToEnd
+- assertVisible: "Log breakfast"
+- assertVisible:
+    id: "regular-meds-log"
