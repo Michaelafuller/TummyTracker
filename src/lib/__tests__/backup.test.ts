@@ -7,6 +7,8 @@ import type {
   Medication,
   MedicationDose,
   MedicationEvent,
+  SavedMeal,
+  SavedMealComponent,
 } from '@/db/schema';
 import { dosesForRestoredEvents, entriesToJson, parseBackupJson } from '../backup';
 
@@ -178,9 +180,9 @@ describe('entriesToJson / parseBackupJson roundtrip', () => {
       [BASE_MEDICATION_EVENT],
       [BASE_MEDICATION_DOSE],
     );
-    // entriesToJson always writes the current version (6) — parseBackupJson
-    // separately still reads older v1-v5 files (tested below).
-    expect(JSON.parse(json).version).toBe(6);
+    // entriesToJson always writes the current version (7) — parseBackupJson
+    // separately still reads older v1-v6 files (tested below).
+    expect(JSON.parse(json).version).toBe(7);
 
     const result = parseBackupJson(json);
     expect(result.ok).toBe(true);
@@ -208,7 +210,7 @@ describe('entriesToJson / parseBackupJson roundtrip', () => {
     expect(result.experiments).toEqual([]);
   });
 
-  it('roundtrips entries with elimination experiments intact (v5 data, now in a v6 file)', () => {
+  it('roundtrips entries with elimination experiments intact (v5 data, now in a v7 file)', () => {
     const json = entriesToJson(
       [BASE_ENTRY],
       [BASE_COMPONENT],
@@ -218,7 +220,7 @@ describe('entriesToJson / parseBackupJson roundtrip', () => {
       [BASE_DAY_CHECK_IN],
       [BASE_EXPERIMENT],
     );
-    expect(JSON.parse(json).version).toBe(6);
+    expect(JSON.parse(json).version).toBe(7);
 
     const result = parseBackupJson(json);
     expect(result.ok).toBe(true);
@@ -356,9 +358,9 @@ describe('legacy v3 backup import (no dayCheckIns key)', () => {
 });
 
 describe('daily factors (GitHub #23, backup v6)', () => {
-  it('roundtrips daily factors intact in a v6 file', () => {
+  it('roundtrips daily factors intact (v6 data, now in a v7 file)', () => {
     const json = entriesToJson([BASE_ENTRY], [], [], [], [], [], [], [BASE_DAY_FACTOR]);
-    expect(JSON.parse(json).version).toBe(6);
+    expect(JSON.parse(json).version).toBe(7);
 
     const result = parseBackupJson(json);
     expect(result.ok).toBe(true);
@@ -598,5 +600,110 @@ describe('dosesForRestoredEvents', () => {
 
   it('returns nothing for an empty backup', () => {
     expect(dosesForRestoredEvents([], ['e1'])).toEqual([]);
+  });
+});
+
+describe('saved meals (GitHub #25, backup v7)', () => {
+  const MEAL: SavedMeal = {
+    id: 'sm1',
+    name: 'Chicken Rice',
+    nameKey: 'chicken rice',
+    type: 'meal',
+    mealSlot: 'dinner',
+    createdAt: 10,
+    updatedAt: 11,
+  };
+  const COMPONENT: SavedMealComponent = {
+    id: 'smc1',
+    savedMealId: 'sm1',
+    name: 'Rice',
+    barcode: null,
+    servings: 1.5,
+    servingG: 150,
+    calories: 200,
+    fatG: 1,
+    saturatedFatG: null,
+    carbsG: 40,
+    proteinG: 4,
+    fiberG: 1,
+    sugarG: 0,
+    sodiumMg: 5,
+    ingredientsText: 'rice, water',
+    tagsJson: '["rice"]',
+    sortOrder: 0,
+    createdAt: 10,
+  };
+
+  it('roundtrips saved meals and their items in a v7 file', () => {
+    const json = entriesToJson([BASE_ENTRY], [], [], [], [], [], [], [], [MEAL], [COMPONENT]);
+    expect(JSON.parse(json).version).toBe(7);
+
+    const result = parseBackupJson(json);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.savedMeals).toEqual([MEAL]);
+    expect(result.savedMealComponents).toEqual([COMPONENT]);
+  });
+
+  it('defaults both saved-meal arrays to [] for a v6 file (no keys)', () => {
+    const result = parseBackupJson(JSON.stringify({ version: 6, entries: [BASE_ENTRY], dayFactors: [BASE_DAY_FACTOR] }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.savedMeals).toEqual([]);
+    expect(result.savedMealComponents).toEqual([]);
+  });
+
+  it('defaults both saved-meal arrays to [] for a v1 file', () => {
+    const result = parseBackupJson(JSON.stringify({ version: 1, entries: [BASE_ENTRY] }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.savedMeals).toEqual([]);
+    expect(result.savedMealComponents).toEqual([]);
+  });
+
+  it('re-derives nameKey from the name and trims it, never trusting the file', () => {
+    const result = parseBackupJson(
+      JSON.stringify({ version: 7, entries: [], savedMeals: [{ ...MEAL, name: '  Chicken RICE ', nameKey: 'whatever' }] }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.savedMeals[0]).toMatchObject({ name: 'Chicken RICE', nameKey: 'chicken rice' });
+  });
+
+  it('fills defaults for a minimal saved meal and component', () => {
+    const result = parseBackupJson(
+      JSON.stringify({
+        version: 7,
+        entries: [],
+        savedMeals: [{ id: 'a', name: 'Toast', type: 'snack', createdAt: 1, updatedAt: 1 }],
+        savedMealComponents: [{ id: 'b', savedMealId: 'a', name: 'Bread', createdAt: 1 }],
+      }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.savedMeals[0].mealSlot).toBeNull();
+    expect(result.savedMealComponents[0]).toMatchObject({ servings: 1, sortOrder: 0, calories: null, tagsJson: null });
+  });
+
+  it.each([
+    ['a blank name', { ...MEAL, name: '  ' }],
+    ['a bad type', { ...MEAL, type: 'symptom' }],
+    ['a bad meal slot', { ...MEAL, mealSlot: 'brunch' }],
+    ['no id', { ...MEAL, id: '' }],
+    ['a non-numeric createdAt', { ...MEAL, createdAt: 'x' }],
+  ])('rejects a saved meal with %s', (_label, bad) => {
+    const result = parseBackupJson(JSON.stringify({ version: 7, entries: [], savedMeals: [bad] }));
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toMatch(/saved meal at index 0/i);
+  });
+
+  it('rejects a saved-meal component without a savedMealId', () => {
+    const result = parseBackupJson(
+      JSON.stringify({ version: 7, entries: [], savedMealComponents: [{ ...COMPONENT, savedMealId: '' }] }),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toMatch(/saved meal component at index 0/i);
   });
 });

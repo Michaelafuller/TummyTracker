@@ -23,6 +23,8 @@ import {
   listAllMedicationDoses,
   listAllMedicationEvents,
   listAllMedications,
+  listAllSavedMealComponents,
+  listAllSavedMeals,
   listLogEntries,
 } from '@/db/repository';
 import { usePrefsStore } from '@/features/prefs/prefsStore';
@@ -46,6 +48,8 @@ jest.mock('@/db/repository', () => ({
   listAllDayCheckIns: jest.fn(),
   listAllDayFactors: jest.fn(),
   listAllExperiments: jest.fn(),
+  listAllSavedMeals: jest.fn(),
+  listAllSavedMealComponents: jest.fn(),
   listAllMealComponents: jest.fn(),
   listAllMedicationDoses: jest.fn(),
   listAllMedicationEvents: jest.fn(),
@@ -108,6 +112,8 @@ beforeEach(() => {
   (listAllDayCheckIns as jest.Mock).mockResolvedValue([]);
   (listAllDayFactors as jest.Mock).mockResolvedValue([]);
   (listAllExperiments as jest.Mock).mockResolvedValue([]);
+  (listAllSavedMeals as jest.Mock).mockResolvedValue([]);
+  (listAllSavedMealComponents as jest.Mock).mockResolvedValue([]);
   (hasAnyLogEntry as jest.Mock).mockResolvedValue(true);
   (Sharing.isAvailableAsync as jest.Mock).mockResolvedValue(true);
   (Sharing.shareAsync as jest.Mock).mockResolvedValue(undefined);
@@ -119,17 +125,20 @@ afterEach(() => {
 });
 
 describe('buildBackupJson', () => {
-  it('gathers every table into the existing v6 JSON shape', async () => {
+  it('gathers every table into the existing v7 JSON shape', async () => {
     (listLogEntries as jest.Mock).mockResolvedValue([{ id: 'e1' }]);
     const json = await buildBackupJson();
     const parsed = JSON.parse(json);
-    expect(parsed.version).toBe(6);
+    expect(parsed.version).toBe(7);
     expect(parsed.entries).toEqual([{ id: 'e1' }]);
     expect(parsed).toHaveProperty('mealComponents');
     expect(parsed).toHaveProperty('medications');
     expect(parsed).toHaveProperty('dayCheckIns');
     expect(parsed).toHaveProperty('experiments');
     expect(parsed).toHaveProperty('dayFactors');
+    expect(parsed).toHaveProperty('savedMeals');
+    expect(parsed).toHaveProperty('savedMealComponents');
+    expect(listAllSavedMeals).toHaveBeenCalled();
     expect(listAllDayFactors).toHaveBeenCalled();
     expect(listAllExperiments).toHaveBeenCalled();
   });
@@ -160,7 +169,7 @@ describe('exportBackupViaShare', () => {
 });
 
 describe('backUpToFolderNow', () => {
-  it('writes a new file with the generated name and the v5 JSON', async () => {
+  it('writes a new file with the generated name and the v7 JSON', async () => {
     const dir = freshDirectory();
     usePrefsStore.setState({ autoBackupDirUri: dir.uri });
 
@@ -171,7 +180,7 @@ describe('backUpToFolderNow', () => {
     expect(files).toHaveLength(1);
     expect(files[0].name).toMatch(/^tummytracker-auto-\d{4}-\d{2}-\d{2}-\d{6}\.json$/);
     const written = JSON.parse(await files[0].text());
-    expect(written.version).toBe(6);
+    expect(written.version).toBe(7);
     expect(usePrefsStore.getState().lastBackupAt).not.toBeNull();
     expect(usePrefsStore.getState().lastAutoBackupAt).toBe(usePrefsStore.getState().lastBackupAt);
     expect(usePrefsStore.getState().autoBackupError).toBeNull();

@@ -18,7 +18,10 @@ import {
   type Medication,
   type MedicationDose,
   type MedicationEvent,
+  type SavedMeal,
+  type SavedMealComponent,
 } from '@/db/schema';
+import { savedMealNameKey } from '@/lib/savedMeals';
 
 export interface BackupFile {
   version: number;
@@ -35,13 +38,17 @@ export interface BackupFile {
   experiments?: Experiment[];
   /** Absent before v6 (pre daily-factors, GitHub #23) and treated as [] on import. */
   dayFactors?: DayFactor[];
+  /** Absent before v7 (pre saved-meals, GitHub #25) and treated as [] on import. */
+  savedMeals?: SavedMeal[];
+  savedMealComponents?: SavedMealComponent[];
 }
 
 /**
  * Serializes entries + their mealComponent rows, the medication inventory and
  * history, the day check-in answers, and the elimination experiments (GitHub
- * #19 backup v5), and the daily factors (GitHub #23 backup v6). Version bumps
- * to 6 but `parseBackupJson` still reads v1–v5 files (missing keys) by
+ * #19 backup v5), the daily factors (GitHub #23 backup v6), and the saved meals
+ * with their items (GitHub #25 backup v7). Version bumps to 7 but
+ * `parseBackupJson` still reads v1–v6 files (missing keys) by
  * defaulting every new array to empty — old backups remain importable.
  */
 export function entriesToJson(
@@ -53,9 +60,11 @@ export function entriesToJson(
   dayCheckIns: DayCheckIn[] = [],
   experiments: Experiment[] = [],
   dayFactors: DayFactor[] = [],
+  savedMeals: SavedMeal[] = [],
+  savedMealComponents: SavedMealComponent[] = [],
 ): string {
   const payload: BackupFile = {
-    version: 6,
+    version: 7,
     entries,
     mealComponents,
     medications,
@@ -64,6 +73,8 @@ export function entriesToJson(
     dayCheckIns,
     experiments,
     dayFactors,
+    savedMeals,
+    savedMealComponents,
   };
   return JSON.stringify(payload, null, 2);
 }
@@ -133,6 +144,8 @@ export type ParseResult =
       dayCheckIns: DayCheckIn[];
       experiments: Experiment[];
       dayFactors: DayFactor[];
+      savedMeals: SavedMeal[];
+      savedMealComponents: SavedMealComponent[];
     }
   | { ok: false; error: string };
 
@@ -309,6 +322,69 @@ function normaliseDayFactor(v: Record<string, unknown>): DayFactor {
   };
 }
 
+function isValidSavedMeal(v: unknown): v is SavedMeal {
+  if (!v || typeof v !== 'object') return false;
+  const r = v as Record<string, unknown>;
+  if (!isString(r.id) || r.id.length === 0) return false;
+  if (!isString(r.name) || r.name.trim().length === 0) return false;
+  if (!(FOOD_TYPES as readonly string[]).includes(r.type as string)) return false;
+  if (r.mealSlot !== null && r.mealSlot !== undefined) {
+    if (!(MEAL_SLOTS as readonly string[]).includes(r.mealSlot as string)) return false;
+  }
+  if (typeof r.createdAt !== 'number') return false;
+  if (typeof r.updatedAt !== 'number') return false;
+  return true;
+}
+
+/** Normalises a saved meal from the backup. `nameKey` is always re-derived from `name`, never trusted from the file. */
+function normaliseSavedMeal(v: Record<string, unknown>): SavedMeal {
+  const name = (v.name as string).trim();
+  return {
+    id: v.id as string,
+    name,
+    nameKey: savedMealNameKey(name),
+    type: v.type as SavedMeal['type'],
+    mealSlot: ((v.mealSlot !== undefined ? v.mealSlot : null) as SavedMeal['mealSlot']) ?? null,
+    createdAt: v.createdAt as number,
+    updatedAt: v.updatedAt as number,
+  };
+}
+
+function isValidSavedMealComponent(v: unknown): v is SavedMealComponent {
+  if (!v || typeof v !== 'object') return false;
+  const r = v as Record<string, unknown>;
+  if (!isString(r.id) || r.id.length === 0) return false;
+  if (!isString(r.savedMealId) || r.savedMealId.length === 0) return false;
+  if (!isString(r.name)) return false;
+  if (typeof r.createdAt !== 'number') return false;
+  return true;
+}
+
+/** Normalises a saved-meal component from the backup so optional absent fields become null/defaults. */
+function normaliseSavedMealComponent(v: Record<string, unknown>): SavedMealComponent {
+  const nullable = <T>(key: string): T | null => (v[key] !== undefined ? v[key] : null) as T | null;
+  return {
+    id: v.id as string,
+    savedMealId: v.savedMealId as string,
+    name: v.name as string,
+    barcode: nullable<string>('barcode'),
+    servings: typeof v.servings === 'number' ? v.servings : 1,
+    servingG: nullable<number>('servingG'),
+    calories: nullable<number>('calories'),
+    fatG: nullable<number>('fatG'),
+    saturatedFatG: nullable<number>('saturatedFatG'),
+    carbsG: nullable<number>('carbsG'),
+    proteinG: nullable<number>('proteinG'),
+    fiberG: nullable<number>('fiberG'),
+    sugarG: nullable<number>('sugarG'),
+    sodiumMg: nullable<number>('sodiumMg'),
+    ingredientsText: nullable<string>('ingredientsText'),
+    tagsJson: nullable<string>('tagsJson'),
+    sortOrder: typeof v.sortOrder === 'number' ? v.sortOrder : 0,
+    createdAt: v.createdAt as number,
+  };
+}
+
 function isValidExperiment(v: unknown): v is Experiment {
   if (!v || typeof v !== 'object') return false;
   const r = v as Record<string, unknown>;
@@ -348,7 +424,7 @@ function normaliseExperiment(v: Record<string, unknown>): Experiment {
 
 /**
  * Parses a backup file, accepting both the legacy v1 shape (no mealComponents
- * key — imports with an empty component list) and the v2–v6 shapes
+ * key — imports with an empty component list) and the v2–v7 shapes
  * produced by entriesToJson. Also accepts a bare entries array for maximum
  * backward compat.
  */
@@ -457,6 +533,27 @@ export function parseBackupJson(text: string): ParseResult {
     dayFactors.push(normaliseDayFactor(rawDayFactors[i] as Record<string, unknown>));
   }
 
+  // Absent before v7 — default to [] so v1–v6 backups remain importable.
+  const rawSavedMeals: unknown[] = Array.isArray(root.savedMeals) ? (root.savedMeals as unknown[]) : [];
+  const savedMeals: SavedMeal[] = [];
+  for (let i = 0; i < rawSavedMeals.length; i++) {
+    if (!isValidSavedMeal(rawSavedMeals[i])) {
+      return { ok: false, error: `Saved meal at index ${i} has an invalid shape.` };
+    }
+    savedMeals.push(normaliseSavedMeal(rawSavedMeals[i] as Record<string, unknown>));
+  }
+
+  const rawSavedMealComponents: unknown[] = Array.isArray(root.savedMealComponents)
+    ? (root.savedMealComponents as unknown[])
+    : [];
+  const savedMealComponents: SavedMealComponent[] = [];
+  for (let i = 0; i < rawSavedMealComponents.length; i++) {
+    if (!isValidSavedMealComponent(rawSavedMealComponents[i])) {
+      return { ok: false, error: `Saved meal component at index ${i} has an invalid shape.` };
+    }
+    savedMealComponents.push(normaliseSavedMealComponent(rawSavedMealComponents[i] as Record<string, unknown>));
+  }
+
   return {
     ok: true,
     entries,
@@ -467,6 +564,8 @@ export function parseBackupJson(text: string): ParseResult {
     dayCheckIns,
     experiments,
     dayFactors,
+    savedMeals,
+    savedMealComponents,
   };
 }
 

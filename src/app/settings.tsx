@@ -14,6 +14,7 @@ import {
   getLogEntry,
   insertDayCheckInsPreservingIds,
   insertDayFactorsPreservingIds,
+  insertSavedMealsPreservingIds,
   insertExperimentsPreservingIds,
   insertMealComponents,
   insertMedicationDosesPreservingIds,
@@ -251,6 +252,15 @@ export default function SettingsScreen() {
           ? ` Imported ${dayFactorResult.inserted} ${dayFactorResult.inserted === 1 ? 'day of factors' : 'days of factors'} (${dayFactorResult.skipped} already existed).`
           : '';
 
+      // Saved meals (GitHub #25): ids preserved; a meal whose id OR name
+      // already exists on the device is skipped (the device wins, with its own
+      // items), and only restored meals bring their items.
+      const savedMealResult = await insertSavedMealsPreservingIds(parsed.savedMeals, parsed.savedMealComponents);
+      const savedMealSummary =
+        parsed.savedMeals.length > 0
+          ? ` Imported ${savedMealResult.inserted} ${savedMealResult.inserted === 1 ? 'saved meal' : 'saved meals'} (${savedMealResult.skipped} already existed).`
+          : '';
+
       // Experiments (GitHub #19): ids preserved like medications; a restored
       // 'active' row is demoted to 'abandoned' rather than dropped when the
       // device already has (or this file already restored) an active one.
@@ -265,7 +275,7 @@ export default function SettingsScreen() {
 
       Alert.alert(
         'Import complete',
-        `Imported ${imported} ${imported === 1 ? 'entry' : 'entries'} (${skipped} already existed).${medSummary}${dayCheckInSummary}${dayFactorSummary}${experimentSummary}`,
+        `Imported ${imported} ${imported === 1 ? 'entry' : 'entries'} (${skipped} already existed).${medSummary}${dayCheckInSummary}${dayFactorSummary}${savedMealSummary}${experimentSummary}`,
       );
     } catch (e) {
       Alert.alert('Import failed', e instanceof Error ? e.message : String(e));

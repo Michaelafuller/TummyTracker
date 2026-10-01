@@ -15,6 +15,7 @@ import {
   type MealComponentDraft,
 } from '@/lib/mealAggregate';
 import { serializeTags } from '@/lib/ingredients';
+import { backfillTargets, savedMealNameKey } from '@/lib/savedMeals';
 import type { TagBackfillRowUpdate } from '@/lib/tagBackfill';
 import type { NutritionField } from '@/lib/validation';
 import { normalizeWatchTerm } from '@/lib/watchlist';
@@ -32,6 +33,8 @@ import {
   medication,
   medicationDose,
   medicationEvent,
+  savedMeal,
+  savedMealComponent,
   SLEEP_LEVELS,
   watchlistItem,
   type DayCheckIn,
@@ -50,6 +53,9 @@ import {
   type NewMedication,
   type NewMedicationDose,
   type NewMedicationEvent,
+  type NewSavedMealComponent,
+  type SavedMeal,
+  type SavedMealComponent,
   type WatchlistItem,
 } from './schema';
 
@@ -1037,4 +1043,255 @@ export async function insertExperimentsPreservingIds(
     await db.insert(experiment).values(insertBatch);
   }
   return { inserted: toInsert.length, skipped: rows.length - toInsert.length };
+}
+
+// ---------------------------------------------------------------------------
+// Saved meals / "My meals" (GitHub #25). A saved meal is a template: these
+// functions never touch log entries, with ONE exception — `backfillSavedMealTags`,
+// which the UI only calls after an explicit "Add" in its confirmation.
+// ---------------------------------------------------------------------------
+
+/** Thrown by {@link saveSavedMeal} when another template already holds the name and the caller didn't ask to replace it. */
+export class SavedMealNameTakenError extends Error {
+  constructor(name: string) {
+    super(`A saved meal named "${name}" already exists.`);
+    this.name = 'SavedMealNameTakenError';
+  }
+}
+
+export interface SavedMealWithComponents {
+  meal: SavedMeal;
+  components: SavedMealComponent[];
+}
+
+/** Every saved meal with its items (in builder order), A-Z by name. */
+export async function listSavedMeals(): Promise<SavedMealWithComponents[]> {
+  const meals = await db.select().from(savedMeal);
+  const components = await db.select().from(savedMealComponent).orderBy(asc(savedMealComponent.sortOrder));
+  return groupSavedMeals(meals, components);
+}
+
+/** Pairs saved meals with their components and sorts A-Z (by nameKey, then name). Shared with the live hook. */
+export function groupSavedMeals(
+  meals: readonly SavedMeal[],
+  components: readonly SavedMealComponent[],
+): SavedMealWithComponents[] {
+  const byMeal = new Map<string, SavedMealComponent[]>();
+  for (const component of components) {
+    const list = byMeal.get(component.savedMealId);
+    if (list) list.push(component);
+    else byMeal.set(component.savedMealId, [component]);
+  }
+  return [...meals]
+    .sort((a, b) => a.nameKey.localeCompare(b.nameKey) || a.name.localeCompare(b.name))
+    .map((meal) => ({
+      meal,
+      components: [...(byMeal.get(meal.id) ?? [])].sort((a, b) => a.sortOrder - b.sortOrder),
+    }));
+}
+
+/** The saved meal holding this `nameKey` (see `savedMealNameKey`), if any. */
+export async function findSavedMealByNameKey(nameKey: string): Promise<SavedMeal | undefined> {
+  const rows = await db.select().from(savedMeal).where(eq(savedMeal.nameKey, nameKey)).limit(1);
+  return rows[0];
+}
+
+export interface SaveSavedMealInput {
+  /** Edit this template. Omit to create one. */
+  id?: string;
+  name: string;
+  type: (typeof FOOD_TYPES)[number];
+  mealSlot: SavedMeal['mealSlot'];
+  components: readonly MealComponentDraft[];
+  /**
+   * The id of ANOTHER template that currently holds this name, which the
+   * caller has confirmed to Replace. Without `id` that template is overwritten
+   * in place (keeping its id); with `id` it is deleted and the edited
+   * template (`id`) takes its name. Never two rows with one `nameKey`.
+   */
+  replaceId?: string;
+}
+
+/**
+ * Creates or edits a saved meal (replacing ALL of its items) in ONE
+ * transaction. The name is stored trimmed; `nameKey` is its lowercase. A name
+ * held by a different template that wasn't named in `replaceId` throws
+ * {@link SavedMealNameTakenError} and writes nothing.
+ */
+export async function saveSavedMeal(input: SaveSavedMealInput): Promise<SavedMeal> {
+  const name = input.name.trim();
+  const nameKey = savedMealNameKey(name);
+  const now = Date.now();
+  const componentIds = input.components.map(() => createId());
+  const newId = createId();
+
+  // Sync callback — see createLogEntries' comment above for why.
+  return db.transaction((tx) => {
+    const clash = tx.select().from(savedMeal).where(eq(savedMeal.nameKey, nameKey)).limit(1).get();
+    const editing = input.id
+      ? tx.select().from(savedMeal).where(eq(savedMeal.id, input.id)).limit(1).get()
+      : undefined;
+    if (input.id && !editing) throw new Error(`saveSavedMeal: no saved meal with id "${input.id}".`);
+
+    let targetId: string;
+    let createdAt = now;
+    if (editing) {
+      targetId = editing.id;
+      createdAt = editing.createdAt;
+      if (clash && clash.id !== editing.id) {
+        if (clash.id !== input.replaceId) throw new SavedMealNameTakenError(name);
+        // Free the name: the clashing template (and its items) goes away.
+        tx.delete(savedMealComponent).where(eq(savedMealComponent.savedMealId, clash.id)).run();
+        tx.delete(savedMeal).where(eq(savedMeal.id, clash.id)).run();
+      }
+    } else if (clash) {
+      if (clash.id !== input.replaceId) throw new SavedMealNameTakenError(name);
+      targetId = clash.id;
+      createdAt = clash.createdAt;
+    } else {
+      targetId = newId;
+    }
+
+    const row: SavedMeal = {
+      id: targetId,
+      name,
+      nameKey,
+      type: input.type,
+      mealSlot: input.mealSlot,
+      createdAt,
+      updatedAt: now,
+    };
+    const componentRows: NewSavedMealComponent[] = input.components.map((component, index) => ({
+      ...component,
+      id: componentIds[index],
+      savedMealId: targetId,
+      sortOrder: index,
+      createdAt: now,
+    }));
+
+    if (editing || clash) {
+      tx.update(savedMeal)
+        .set({ name, nameKey, type: row.type, mealSlot: row.mealSlot, updatedAt: now })
+        .where(eq(savedMeal.id, targetId))
+        .run();
+      tx.delete(savedMealComponent).where(eq(savedMealComponent.savedMealId, targetId)).run();
+    } else {
+      tx.insert(savedMeal).values(row).run();
+    }
+    if (componentRows.length > 0) {
+      tx.insert(savedMealComponent).values(componentRows).run();
+    }
+    return row;
+  });
+}
+
+/** Deletes a saved meal and its items in one transaction. Past meals are never touched. */
+export async function deleteSavedMeal(id: string): Promise<void> {
+  // Sync callback — see createLogEntries' comment above for why.
+  db.transaction((tx) => {
+    tx.delete(savedMealComponent).where(eq(savedMealComponent.savedMealId, id)).run();
+    tx.delete(savedMeal).where(eq(savedMeal.id, id)).run();
+  });
+}
+
+/**
+ * The opt-in backfill (GitHub #25): gives past food entries named like a
+ * saved meal (`nameKey`) the template's ingredient tags, but ONLY entries
+ * that have no tags at all (`backfillTargets`). Their `tagsJson` becomes
+ * `tags`; `ingredientsText` is set from the template only when the entry's is
+ * null/empty; `updatedAt` is bumped. Components of those entries are never
+ * touched. Targets are recomputed inside the transaction — never trust a
+ * count the UI computed earlier. Returns how many entries were updated.
+ */
+export async function backfillSavedMealTags(
+  nameKey: string,
+  tags: readonly string[],
+  ingredientsText: string | null,
+): Promise<number> {
+  if (tags.length === 0) return 0;
+  const tagsJson = serializeTags([...tags]);
+  const now = Date.now();
+  const text = ingredientsText?.trim() ? ingredientsText : null;
+
+  // Sync callback — see createLogEntries' comment above for why.
+  return db.transaction((tx) => {
+    const foodEntries = tx
+      .select()
+      .from(logEntry)
+      .where(inArray(logEntry.type, [...FOOD_TYPES]))
+      .all();
+    const targets = backfillTargets(foodEntries, nameKey);
+    for (const target of targets) {
+      const patch: Partial<NewLogEntry> = { tagsJson, updatedAt: now };
+      if (text && !target.ingredientsText?.trim()) patch.ingredientsText = text;
+      tx.update(logEntry).set(patch).where(eq(logEntry.id, target.id)).run();
+    }
+    return targets.length;
+  });
+}
+
+/** All saved_meal rows — used by the backup export (src/lib/backup.ts). */
+export async function listAllSavedMeals(): Promise<SavedMeal[]> {
+  return db.select().from(savedMeal).orderBy(asc(savedMeal.createdAt));
+}
+
+/** All saved_meal_component rows — used by the backup export. */
+export async function listAllSavedMealComponents(): Promise<SavedMealComponent[]> {
+  return db.select().from(savedMealComponent).orderBy(asc(savedMealComponent.sortOrder));
+}
+
+/**
+ * Restores saved meals from a backup, PRESERVING ids. A meal is skipped when
+ * its id OR its `nameKey` already exists on the device (the device wins,
+ * whole — like check-ins), and duplicate ids/nameKeys inside `meals` keep the
+ * first. Components are inserted only for the meals actually inserted, so a
+ * skipped meal keeps exactly the items the device already has. Chunked like
+ * the other restore helpers.
+ */
+export async function insertSavedMealsPreservingIds(
+  meals: SavedMeal[],
+  components: SavedMealComponent[],
+): Promise<{ inserted: number; skipped: number }> {
+  if (meals.length === 0) return { inserted: 0, skipped: 0 };
+
+  const seenKeys = new Set<string>();
+  const seenIds = new Set<string>();
+  const deduped: SavedMeal[] = [];
+  for (const meal of meals) {
+    if (seenKeys.has(meal.nameKey) || seenIds.has(meal.id)) continue;
+    seenKeys.add(meal.nameKey);
+    seenIds.add(meal.id);
+    deduped.push(meal);
+  }
+
+  const existingIds = new Set<string>();
+  const existingKeys = new Set<string>();
+  for (const idBatch of chunk(deduped.map((meal) => meal.id), RESTORE_CHUNK_SIZE)) {
+    const existing = await db.select({ id: savedMeal.id }).from(savedMeal).where(inArray(savedMeal.id, idBatch));
+    for (const row of existing) existingIds.add(row.id);
+  }
+  for (const keyBatch of chunk(deduped.map((meal) => meal.nameKey), RESTORE_CHUNK_SIZE)) {
+    const existing = await db
+      .select({ nameKey: savedMeal.nameKey })
+      .from(savedMeal)
+      .where(inArray(savedMeal.nameKey, keyBatch));
+    for (const row of existing) existingKeys.add(row.nameKey);
+  }
+
+  const toInsert = deduped.filter((meal) => !existingIds.has(meal.id) && !existingKeys.has(meal.nameKey));
+  for (const insertBatch of chunk(toInsert, RESTORE_CHUNK_SIZE)) {
+    await db.insert(savedMeal).values(insertBatch);
+  }
+
+  const insertedIds = new Set(toInsert.map((meal) => meal.id));
+  const seenComponentIds = new Set<string>();
+  const componentsToInsert = components.filter((component) => {
+    if (!insertedIds.has(component.savedMealId) || seenComponentIds.has(component.id)) return false;
+    seenComponentIds.add(component.id);
+    return true;
+  });
+  for (const insertBatch of chunk(componentsToInsert, RESTORE_CHUNK_SIZE)) {
+    await db.insert(savedMealComponent).values(insertBatch);
+  }
+  return { inserted: toInsert.length, skipped: meals.length - toInsert.length };
 }

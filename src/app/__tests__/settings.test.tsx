@@ -7,12 +7,15 @@ import {
   insertDayCheckInsPreservingIds,
   insertDayFactorsPreservingIds,
   insertExperimentsPreservingIds,
+  insertSavedMealsPreservingIds,
   listAllDayCheckIns,
   listAllDayFactors,
   listAllExperiments,
   listAllMedicationDoses,
   listAllMedicationEvents,
   listAllMedications,
+  listAllSavedMealComponents,
+  listAllSavedMeals,
   listLogEntries,
 } from '@/db/repository';
 import { disableDayCheckIn, refreshDayCheckIn } from '@/features/checkin/dayCheckInService';
@@ -25,7 +28,7 @@ import SettingsScreen from '../settings';
 // The gathering/export path (exportBackupViaShare/buildBackupJson) is kept
 // REAL here — it runs against the expo-file-system/expo-sharing/repository
 // mocks below, exactly as the pre-service handleExport used to, so the
-// existing export-content tests keep exercising the real v6 JSON shape. Only
+// existing export-content tests keep exercising the real v7 JSON shape. Only
 // the folder-picker actions (which need a real SAF folder to do anything
 // meaningful) are replaced with jest.fn()s for the new Automatic backup tests.
 const mockChooseBackupFolder = jest.fn();
@@ -81,6 +84,9 @@ jest.mock('@/db/repository', () => ({
   insertDayFactorsPreservingIds: jest.fn(),
   listAllExperiments: jest.fn(),
   insertExperimentsPreservingIds: jest.fn(),
+  listAllSavedMeals: jest.fn(),
+  listAllSavedMealComponents: jest.fn(),
+  insertSavedMealsPreservingIds: jest.fn(),
 }));
 
 jest.mock('@/features/notifications/service', () => ({
@@ -142,6 +148,9 @@ beforeEach(() => {
   (insertDayFactorsPreservingIds as jest.Mock).mockResolvedValue({ inserted: 0, skipped: 0 });
   (listAllExperiments as jest.Mock).mockResolvedValue([]);
   (insertExperimentsPreservingIds as jest.Mock).mockResolvedValue({ inserted: 0, skipped: 0 });
+  (listAllSavedMeals as jest.Mock).mockResolvedValue([]);
+  (listAllSavedMealComponents as jest.Mock).mockResolvedValue([]);
+  (insertSavedMealsPreservingIds as jest.Mock).mockResolvedValue({ inserted: 0, skipped: 0 });
   (ensureNotificationPermission as jest.Mock).mockResolvedValue(true);
 });
 
@@ -292,7 +301,7 @@ describe('SettingsScreen — Data section (day check-ins, GitHub #13)', () => {
     const [uri] = mockShareAsync.mock.calls[0];
     const { File } = jest.requireActual('expo-file-system');
     const written = JSON.parse(await new File(uri).text());
-    expect(written.version).toBe(6);
+    expect(written.version).toBe(7);
     expect(written.dayCheckIns).toEqual([
       { id: 'ci1', date: '2026-06-15', status: 'fine', createdAt: 1, updatedAt: 1 },
     ]);
@@ -441,7 +450,7 @@ describe('SettingsScreen — Data section (daily factors, GitHub #23)', () => {
     const [uri] = mockShareAsync.mock.calls[0];
     const { File } = jest.requireActual('expo-file-system');
     const written = JSON.parse(await new File(uri).text());
-    expect(written.version).toBe(6);
+    expect(written.version).toBe(7);
     expect(written.dayFactors).toEqual([row]);
   });
 
@@ -487,6 +496,56 @@ describe('SettingsScreen — Data section (daily factors, GitHub #23)', () => {
     mockPickFileAsync.mockResolvedValue({
       canceled: false,
       result: { text: async () => JSON.stringify({ version: 5, entries: [] }) },
+    });
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+
+    const { findByLabelText } = await renderScreen(<SettingsScreen />);
+    await fireEvent.press(await findByLabelText('Import data'));
+
+    await waitFor(() =>
+      expect(Alert.alert).toHaveBeenCalledWith('Import complete', 'Imported 0 entries (0 already existed).'),
+    );
+    (Alert.alert as jest.Mock).mockRestore();
+  });
+});
+
+describe('SettingsScreen — Data section (saved meals, GitHub #25)', () => {
+  it('import summary reports the imported saved-meal count and passes meals + items through', async () => {
+    const backup = {
+      version: 7,
+      entries: [],
+      savedMeals: [
+        { id: 'm1', name: 'Oatmeal', nameKey: 'oatmeal', type: 'meal', mealSlot: null, createdAt: 1, updatedAt: 1 },
+      ],
+      savedMealComponents: [{ id: 'c1', savedMealId: 'm1', name: 'Oats', createdAt: 1 }],
+    };
+    mockPickFileAsync.mockResolvedValue({
+      canceled: false,
+      result: { text: async () => JSON.stringify(backup) },
+    });
+    (insertSavedMealsPreservingIds as jest.Mock).mockResolvedValue({ inserted: 1, skipped: 2 });
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+
+    const { findByLabelText } = await renderScreen(<SettingsScreen />);
+    await fireEvent.press(await findByLabelText('Import data'));
+
+    await waitFor(() =>
+      expect(Alert.alert).toHaveBeenCalledWith(
+        'Import complete',
+        'Imported 0 entries (0 already existed). Imported 1 saved meal (2 already existed).',
+      ),
+    );
+    expect(insertSavedMealsPreservingIds).toHaveBeenCalledWith(
+      [expect.objectContaining({ id: 'm1', name: 'Oatmeal', nameKey: 'oatmeal' })],
+      [expect.objectContaining({ id: 'c1', savedMealId: 'm1', servings: 1 })],
+    );
+    (Alert.alert as jest.Mock).mockRestore();
+  });
+
+  it('import summary omits the saved-meal sentence for a v6 file without any', async () => {
+    mockPickFileAsync.mockResolvedValue({
+      canceled: false,
+      result: { text: async () => JSON.stringify({ version: 6, entries: [] }) },
     });
     jest.spyOn(Alert, 'alert').mockImplementation(() => {});
 

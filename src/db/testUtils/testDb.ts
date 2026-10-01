@@ -31,6 +31,8 @@ import {
   medication,
   medicationDose,
   medicationEvent,
+  savedMeal,
+  savedMealComponent,
   watchlistItem,
 } from '../schema';
 
@@ -54,6 +56,8 @@ const APP_TABLES = [
   dayCheckIn,
   dayFactor,
   experiment,
+  savedMeal,
+  savedMealComponent,
 ];
 
 /** Deletes every row from every app table. Call in `beforeEach` for a clean slate within one file's shared in-memory DB. */
