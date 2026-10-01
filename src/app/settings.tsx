@@ -61,6 +61,8 @@ export default function SettingsScreen() {
   const dayCheckInHour = usePrefsStore((s) => s.dayCheckInHour);
   const dayCheckInMinute = usePrefsStore((s) => s.dayCheckInMinute);
   const setDayCheckIn = usePrefsStore((s) => s.setDayCheckIn);
+  const trackPeriod = usePrefsStore((s) => s.trackPeriod);
+  const setTrackPeriod = usePrefsStore((s) => s.setTrackPeriod);
   const lastBackupAt = usePrefsStore((s) => s.lastBackupAt);
   const autoBackupDirUri = usePrefsStore((s) => s.autoBackupDirUri);
   const autoBackupDirName = usePrefsStore((s) => s.autoBackupDirName);
@@ -513,6 +515,18 @@ export default function SettingsScreen() {
               accessibilityLabel="Day check-in time"
             />
           </FormField>
+        </View>
+        <View style={styles.row}>
+          <View style={styles.rowHeader}>
+            <View style={styles.rowLabel}>
+              <ThemedText type="smallBold">Track period</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                Adds a period option to the day details. Off by default; your data never leaves this
+                device.
+              </ThemedText>
+            </View>
+            <Switch value={trackPeriod} onValueChange={setTrackPeriod} accessibilityLabel="Track period" />
+          </View>
         </View>
 
         <View style={styles.divider} />

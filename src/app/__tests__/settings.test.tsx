@@ -550,6 +550,38 @@ describe('SettingsScreen — Day check-in section (GitHub #13)', () => {
   });
 });
 
+describe('SettingsScreen — Track period (GitHub #23)', () => {
+  it('renders the switch, off by default, with its explanation', async () => {
+    const { findByLabelText, getByText } = await renderScreen(<SettingsScreen />);
+    const toggle = await findByLabelText('Track period');
+    expect(toggle.props.value).toBe(false);
+    expect(
+      getByText(
+        'Adds a period option to the day details. Off by default; your data never leaves this device.',
+      ),
+    ).toBeTruthy();
+  });
+
+  it('turning it on persists trackPeriod without asking for any permission', async () => {
+    const { findByLabelText } = await renderScreen(<SettingsScreen />);
+    await fireEvent(await findByLabelText('Track period'), 'valueChange', true);
+
+    expect(usePrefsStore.getState().trackPeriod).toBe(true);
+    expect((await findByLabelText('Track period')).props.value).toBe(true);
+    expect(ensureNotificationPermission).not.toHaveBeenCalled();
+  });
+
+  it('turning it back off persists false', async () => {
+    usePrefsStore.setState({ trackPeriod: true });
+    const { findByLabelText } = await renderScreen(<SettingsScreen />);
+    const toggle = await findByLabelText('Track period');
+    expect(toggle.props.value).toBe(true);
+
+    await fireEvent(toggle, 'valueChange', false);
+    expect(usePrefsStore.getState().trackPeriod).toBe(false);
+  });
+});
+
 describe('SettingsScreen — last backup line (GitHub #14)', () => {
   it('shows "Never backed up" when there has been no backup', async () => {
     const { findByText } = await renderScreen(<SettingsScreen />);

@@ -36,16 +36,28 @@ import {
   type MedicationFinding,
   type MedicationNote,
 } from '@/features/analysis/medications';
+import {
+  FACTOR_FOOTER,
+  analyzeFactorDays,
+  factorCaveat,
+  factorCaveatSentence,
+  factorDays,
+  factorNoteSentence,
+  factorSentence,
+  visibleFactorRows,
+} from '@/features/analysis/factors';
 import { SLOW_WINDOW_MS } from '@/features/analysis/temporal';
 import { useDayCheckIns } from '@/features/checkin/useDayCheckIns';
+import { useDayFactors } from '@/features/checkin/useDayFactors';
 import { useAllEntries, useAllMealComponents } from '@/features/logging/useEntries';
 import { useMedicationDoses, useMedicationEvents, useMedications } from '@/features/medications/useMedicationData';
+import { usePrefsStore } from '@/features/prefs/prefsStore';
 import { WatchButton } from '@/features/watchlist/WatchButton';
 import { WatchlistSection } from '@/features/watchlist/WatchlistSection';
 import { useTheme } from '@/hooks/use-theme';
 import { bmRegularity, bristolDistribution, weeklyBmCounts } from '@/lib/bmTrends';
 import { weeklyIntake, weeklyOutcomes } from '@/lib/chartData';
-import { dayCoverage } from '@/lib/dayCoverage';
+import { COVERAGE_WINDOW_DAYS, dayCoverage } from '@/lib/dayCoverage';
 import { medicationClass } from '@/lib/medicationClasses';
 import { NUTRITION_NOUNS } from '@/lib/nutrition';
 import type { ConfidenceTier } from '@/lib/stats';
@@ -227,6 +239,8 @@ export default function InsightsScreen() {
   const entries = useAllEntries();
   const mealComponents = useAllMealComponents();
   const checkIns = useDayCheckIns();
+  const factorRows = useDayFactors();
+  const trackPeriod = usePrefsStore((s) => s.trackPeriod);
   const meds = useMedications();
   const medEvents = useMedicationEvents();
   const medDoses = useMedicationDoses();
@@ -244,10 +258,18 @@ export default function InsightsScreen() {
   // Medication exposure and findings are computed once per data change and
   // shared by the Medications section and the confounder caveats (#20).
   const exposure = useMemo(() => medicationExposureDays(meds, medEvents, medDoses), [meds, medEvents, medDoses]);
+  // Daily factors (#23): only rows with something visible logged — period is
+  // blanked while tracking is off — so a factor-logged day counts as covered.
+  const visibleFactors = useMemo(() => visibleFactorRows(factorRows, { trackPeriod }), [factorRows, trackPeriod]);
   const medicationAnalysis = useMemo(
-    () => analyzeMedicationDays(entries, checkIns, meds, medEvents, medDoses),
-    [entries, checkIns, meds, medEvents, medDoses],
+    () => analyzeMedicationDays(entries, checkIns, meds, medEvents, medDoses, visibleFactors),
+    [entries, checkIns, meds, medEvents, medDoses, visibleFactors],
   );
+  const factorAnalysis = useMemo(
+    () => analyzeFactorDays(entries, checkIns, visibleFactors, { trackPeriod }),
+    [entries, checkIns, visibleFactors, trackPeriod],
+  );
+  const factorDayMap = useMemo(() => factorDays(visibleFactors, { trackPeriod }), [visibleFactors, trackPeriod]);
   // Dose-response (#22): servings come from the component rows, grouped once.
   const componentsByEntry = useMemo(() => groupComponentsByEntry(mealComponents), [mealComponents]);
   /** A card's dose line — only for a clear increase; null otherwise. */
@@ -257,13 +279,22 @@ export default function InsightsScreen() {
     );
     return split?.clearIncrease ? doseLine(split, kind) : null;
   };
-  const caveatFor = (instances: Parameters<typeof confounderCaveat>[0]): string | null => {
-    if (exposure.size === 0) return null;
-    const caveat = confounderCaveat(instances, exposure, meds);
-    return caveat ? caveatSentence(caveat) : null;
+  /** A card's confounder lines: the medication caveat (#20), then the daily-factor caveat (#23). */
+  const caveatsFor = (instances: Parameters<typeof confounderCaveat>[0]): string[] => {
+    const lines: string[] = [];
+    if (exposure.size > 0) {
+      const caveat = confounderCaveat(instances, exposure, meds);
+      if (caveat) lines.push(caveatSentence(caveat));
+    }
+    if (factorDayMap.size > 0) {
+      const caveat = factorCaveat(instances, factorDayMap);
+      if (caveat) lines.push(factorCaveatSentence(caveat));
+    }
+    return lines;
   };
   const hasMedicationSection = medicationAnalysis.findings.length > 0 || medicationAnalysis.notes.length > 0;
-  const coverage = dayCoverage(entries, checkIns, now);
+  const hasFactorSection = factorAnalysis.findings.length > 0 || factorAnalysis.notes.length > 0;
+  const coverage = dayCoverage(entries, checkIns, now, COVERAGE_WINDOW_DAYS, visibleFactors);
   const roughOutcomeBuckets = weeklyOutcomes(entries, now);
   const hasRoughOutcomeData = roughOutcomeBuckets.some((b) => b.count > 0);
   const regularity = bmRegularity(entries, now);
@@ -277,7 +308,8 @@ export default function InsightsScreen() {
     ingredientFindings.length > 0 ||
     pairFindings.length > 0 ||
     hasSlowerPatterns ||
-    medicationAnalysis.findings.length > 0;
+    medicationAnalysis.findings.length > 0 ||
+    factorAnalysis.findings.length > 0;
 
   return (
     <ThemedView style={styles.container}>
@@ -302,7 +334,9 @@ export default function InsightsScreen() {
                 {coverageSentence(coverage.covered, coverage.total, coverage.checkedIn)}
               </ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
-                A day counts when you logged something or answered the day check-in.
+                {visibleFactors.length > 0
+                  ? 'A day counts when you logged something, answered the day check-in, or added day details.'
+                  : 'A day counts when you logged something or answered the day check-in.'}
               </ThemedText>
             </>
           ) : null}
@@ -359,7 +393,7 @@ export default function InsightsScreen() {
             <ThemedText type="subtitle">Ingredients linked to rough outcomes</ThemedText>
             {ingredientFindings.map((finding) => {
               const instances = findingInstances(entries, 'tag', finding.key);
-              const caveat = caveatFor(instances);
+              const caveats = caveatsFor(instances);
               return (
                 <Card
                   key={finding.key}
@@ -374,7 +408,9 @@ export default function InsightsScreen() {
                   }
                   pressLabel={`See all logs: ${finding.label}`}>
                   <BarMeter label={finding.label} rate={finding.hitRate} baseRate={finding.baseRate} />
-                  {caveat ? <CaveatLine text={caveat} /> : null}
+                  {caveats.map((line) => (
+                    <CaveatLine key={line} text={line} />
+                  ))}
                   <WatchButton tag={finding.label} />
                 </Card>
               );
@@ -387,7 +423,7 @@ export default function InsightsScreen() {
             <ThemedText type="subtitle">Combinations</ThemedText>
             {pairFindings.map((finding) => {
               const instances = pairInstances(entries, finding.key);
-              const caveat = caveatFor(instances);
+              const caveats = caveatsFor(instances);
               return (
                 <Card
                   key={finding.key}
@@ -397,7 +433,9 @@ export default function InsightsScreen() {
                   confidence={finding.confidence}
                   n={finding.occurrences}>
                   <BarMeter label={finding.label} rate={finding.hitRate} baseRate={finding.baseRate} />
-                  {caveat ? <CaveatLine text={caveat} /> : null}
+                  {caveats.map((line) => (
+                    <CaveatLine key={line} text={line} />
+                  ))}
                 </Card>
               );
             })}
@@ -409,7 +447,7 @@ export default function InsightsScreen() {
             <ThemedText type="subtitle">Foods linked to rough outcomes</ThemedText>
             {foodFindings.map((finding) => {
               const instances = findingInstances(entries, 'food', finding.label);
-              const caveat = caveatFor(instances);
+              const caveats = caveatsFor(instances);
               return (
                 <Card
                   key={finding.key}
@@ -424,7 +462,9 @@ export default function InsightsScreen() {
                   }
                   pressLabel={`See all logs: ${finding.label}`}>
                   <BarMeter label={finding.label} rate={finding.hitRate} baseRate={finding.baseRate} />
-                  {caveat ? <CaveatLine text={caveat} /> : null}
+                  {caveats.map((line) => (
+                    <CaveatLine key={line} text={line} />
+                  ))}
                 </Card>
               );
             })}
@@ -515,6 +555,30 @@ export default function InsightsScreen() {
             ))}
             <ThemedText type="small" themeColor="textSecondary">
               {MEDICATION_FOOTER}
+            </ThemedText>
+          </View>
+        ) : null}
+
+        {hasFactorSection ? (
+          <View style={styles.section}>
+            <ThemedText type="subtitle">Daily factors linked to rough days</ThemedText>
+            {factorAnalysis.findings.map((finding) => (
+              <Card
+                key={finding.key}
+                title={finding.label}
+                body={factorSentence(finding)}
+                confidence={finding.confidence}
+                n={finding.flaggedDays}
+                unit="days"
+              />
+            ))}
+            {factorAnalysis.notes.map((note) => (
+              <ThemedText key={note.key} type="small" themeColor="textSecondary">
+                {factorNoteSentence(note)}
+              </ThemedText>
+            ))}
+            <ThemedText type="small" themeColor="textSecondary">
+              {FACTOR_FOOTER}
             </ThemedText>
           </View>
         ) : null}

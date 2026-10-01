@@ -3,6 +3,8 @@ import { fireEvent, render } from '@testing-library/react-native';
 import { SafeAreaProvider, type Metrics } from 'react-native-safe-area-context';
 
 import type { NutrientOutcomeFinding, OutcomeFinding } from '@/features/analysis/insights';
+import { usePrefsStore } from '@/features/prefs/prefsStore';
+import { formatDateInput } from '@/lib/datetime';
 import InsightsScreen, { nutrientSentence, outcomeSentence } from '../insights';
 
 let mockEntries: unknown[] = [];
@@ -27,6 +29,13 @@ jest.mock('@/features/medications/useMedicationData', () => ({
   useMedications: () => mockMeds,
   useMedicationEvents: () => mockMedEvents,
   useMedicationDoses: () => mockMedDoses,
+}));
+
+// The daily-factors section, coverage and caveats (GitHub #23) read the
+// day_factor table through a live-query hook — mocked the same way.
+let mockFactorRows: unknown[] = [];
+jest.mock('@/features/checkin/useDayFactors', () => ({
+  useDayFactors: () => mockFactorRows,
 }));
 
 const mockPush = jest.fn();
@@ -92,6 +101,8 @@ beforeEach(() => {
   mockMeds = [];
   mockMedEvents = [];
   mockMedDoses = [];
+  mockFactorRows = [];
+  usePrefsStore.setState({ trackPeriod: false });
 });
 
 describe('sentence helpers', () => {
@@ -789,5 +800,232 @@ describe('dose-response line on food and ingredient cards (GitHub #22)', () => {
     // ingredient card + food card, both from the 48 h instances.
     expect(getAllByText(/^More than 1 serving/)).toHaveLength(2);
     expect(getByText('More than 1 serving: 4 of 4 (100%) · 1 or less: 2 of 4 (50%)')).toBeTruthy();
+  });
+});
+
+describe('daily factors in Insights (GitHub #23)', () => {
+  let seq = 0;
+
+  /** Local noon of 2026-03-01 + `offset` days. */
+  function dayAt(offset: number, hour = 12): number {
+    return new Date(2026, 2, 1 + offset, hour).getTime();
+  }
+
+  function factorRow(date: string, overrides: Record<string, unknown> = {}) {
+    return {
+      id: `fr${seq++}`,
+      date,
+      sleep: null,
+      stress: null,
+      alcohol: null,
+      caffeine: null,
+      period: null,
+      createdAt: 0,
+      updatedAt: 0,
+      ...overrides,
+    };
+  }
+
+  /**
+   * Stress fixture: 10 high-stress days (offsets 0-9, 6 rough) and 15 days
+   * logged at stress 2 (offsets 100-114, 3 rough). Meal names are unique so no
+   * food finding can form.
+   */
+  function stressDays() {
+    const rows: unknown[] = [];
+    const add = (offset: number, rough: boolean, stress: number) => {
+      rows.push({ ...baseEntry, id: `s${seq++}`, type: 'meal', name: `Meal ${offset}`, loggedAt: dayAt(offset) });
+      if (rough) {
+        rows.push({
+          ...baseEntry,
+          id: `s${seq++}`,
+          type: 'symptom',
+          name: 'Symptom',
+          loggedAt: dayAt(offset, 18),
+          severity: 4,
+        });
+      }
+      mockFactorRows.push(factorRow(formatDateInput(dayAt(offset)), { stress }));
+    };
+    for (let i = 0; i < 10; i++) add(i, i < 6, 5);
+    for (let i = 0; i < 15; i++) add(100 + i, i < 3, 2);
+    return rows;
+  }
+
+  function chickenFixture() {
+    const rows: unknown[] = [];
+    for (const [i, loggedAt] of [0, 48 * HOUR, 96 * HOUR].entries()) {
+      rows.push({ ...baseEntry, id: `fcs${i}`, type: 'meal', name: 'Chicken Salad', loggedAt });
+      rows.push({
+        ...baseEntry,
+        id: `fcso${i}`,
+        type: 'symptom',
+        name: 'Symptom',
+        loggedAt: loggedAt + HOUR,
+        severity: 4,
+      });
+    }
+    for (const [i, loggedAt] of [500 * HOUR, 548 * HOUR, 596 * HOUR].entries()) {
+      rows.push({ ...baseEntry, id: `fr${i}`, type: 'meal', name: 'Rice', loggedAt });
+    }
+    return rows;
+  }
+
+  const FOOD_SENTENCE = '3 of 3 meals were followed by a rough outcome within 24 h (100% vs 50% baseline).';
+
+  it('shows a factor finding card with the days chip, and the footer', async () => {
+    mockEntries = stressDays();
+    const { getByText } = await renderScreen(<InsightsScreen />);
+
+    expect(getByText('Daily factors linked to rough days')).toBeTruthy();
+    expect(getByText('High-stress days')).toBeTruthy();
+    expect(
+      getByText('Rough on 6 of 10 high-stress days (60%) vs 3 of 15 other days you logged stress (20%).'),
+    ).toBeTruthy();
+    expect(getByText('High confidence · 10 days')).toBeTruthy();
+    expect(getByText("Days count only when you logged that factor. Linked doesn't mean caused.")).toBeTruthy();
+  });
+
+  it('shows a note for a factor with too few flagged days', async () => {
+    mockEntries = [
+      { ...baseEntry, id: 'p1', type: 'meal', name: 'A', loggedAt: dayAt(0) },
+      { ...baseEntry, id: 'p2', type: 'meal', name: 'B', loggedAt: dayAt(1) },
+    ];
+    mockFactorRows = [
+      factorRow(formatDateInput(dayAt(0)), { sleep: 'poor' }),
+      factorRow(formatDateInput(dayAt(1)), { sleep: 'poor' }),
+    ];
+    const { getByText } = await renderScreen(<InsightsScreen />);
+    expect(getByText('Daily factors linked to rough days')).toBeTruthy();
+    expect(getByText('Poor sleep — only 2 logged days so far.')).toBeTruthy();
+  });
+
+  it('hides the section when no factors are logged', async () => {
+    mockEntries = stressDays();
+    mockFactorRows = [];
+    const { queryByText } = await renderScreen(<InsightsScreen />);
+    expect(queryByText('Daily factors linked to rough days')).toBeNull();
+  });
+
+  it('hides period findings and notes while tracking is off, and shows them when it is on', async () => {
+    const rows: unknown[] = [];
+    for (let i = 0; i < 10; i++) {
+      rows.push({ ...baseEntry, id: `pm${seq++}`, type: 'meal', name: `Meal ${i}`, loggedAt: dayAt(i) });
+      if (i < 8) {
+        rows.push({ ...baseEntry, id: `pm${seq++}`, type: 'symptom', name: 'S', loggedAt: dayAt(i, 18), severity: 4 });
+      }
+      mockFactorRows.push(factorRow(formatDateInput(dayAt(i)), { period: true }));
+    }
+    for (let i = 0; i < 10; i++) {
+      rows.push({ ...baseEntry, id: `pm${seq++}`, type: 'meal', name: `Meal ${100 + i}`, loggedAt: dayAt(100 + i) });
+      mockFactorRows.push(factorRow(formatDateInput(dayAt(100 + i)), { period: false }));
+    }
+    mockEntries = rows;
+
+    const off = await renderScreen(<InsightsScreen />);
+    expect(off.queryByText('Daily factors linked to rough days')).toBeNull();
+    expect(off.queryByText(/period/i)).toBeNull();
+    await off.unmount();
+
+    usePrefsStore.setState({ trackPeriod: true });
+    const on = await renderScreen(<InsightsScreen />);
+    expect(on.getByText('Daily factors linked to rough days')).toBeTruthy();
+    expect(on.getByText('Period days')).toBeTruthy();
+  });
+
+  it('adds a caveat line to a food card when its rough outcomes fall on flagged days, numbers unchanged', async () => {
+    mockEntries = chickenFixture();
+    const { getByText, queryByText, unmount } = await renderScreen(<InsightsScreen />);
+    expect(getByText(FOOD_SENTENCE)).toBeTruthy();
+    expect(queryByText(/were on high-stress days/)).toBeNull();
+    await unmount();
+
+    mockFactorRows = [0, 48 * HOUR, 96 * HOUR].map((ms) => factorRow(formatDateInput(ms), { stress: 5 }));
+    const withFactors = await renderScreen(<InsightsScreen />);
+    expect(withFactors.getByText(FOOD_SENTENCE)).toBeTruthy();
+    expect(withFactors.getByText('Chicken Salad')).toBeTruthy();
+    expect(withFactors.getByText('Low confidence · 3 meals')).toBeTruthy();
+    expect(
+      withFactors.getByText('3 of the 3 meals followed by a rough outcome were on high-stress days.'),
+    ).toBeTruthy();
+  });
+
+  it('shows the medication caveat and the factor caveat together, medication first', async () => {
+    mockEntries = chickenFixture();
+    mockMeds = [
+      {
+        id: 'amox',
+        name: 'Amoxicillin',
+        defaultDose: null,
+        doseUnit: null,
+        frequency: null,
+        startDate: null,
+        endDate: null,
+        isActive: true,
+        notes: null,
+        createdAt: 0,
+        updatedAt: 0,
+      },
+    ];
+    mockMedEvents = [{ id: 'ev1', takenAt: 0, timeKnown: true, notes: null, createdAt: 0, updatedAt: 0 }];
+    mockMedDoses = [
+      { id: 'do1', eventId: 'ev1', medicationId: 'amox', dose: 1, doseUnit: 'tablet', createdAt: 0, updatedAt: 0 },
+    ];
+    mockFactorRows = [0, 48 * HOUR, 96 * HOUR].map((ms) => factorRow(formatDateInput(ms), { sleep: 'poor' }));
+
+    const { getByText, toJSON } = await renderScreen(<InsightsScreen />);
+    const medLine = '3 of the 3 meals followed by a rough outcome were eaten while you were taking Amoxicillin.';
+    const factorLine = '3 of the 3 meals followed by a rough outcome were on poor-sleep days.';
+    expect(getByText(medLine)).toBeTruthy();
+    expect(getByText(factorLine)).toBeTruthy();
+    const tree = JSON.stringify(toJSON());
+    expect(tree.indexOf(medLine)).toBeLessThan(tree.indexOf(factorLine));
+  });
+
+  it('shows no factor caveat when the flagged days do not overlap the food outcomes', async () => {
+    mockEntries = chickenFixture();
+    mockFactorRows = [factorRow('2030-01-01', { stress: 5 })];
+    const { getByText, queryByText } = await renderScreen(<InsightsScreen />);
+    expect(getByText(FOOD_SENTENCE)).toBeTruthy();
+    expect(queryByText(/were on high-stress days/)).toBeNull();
+  });
+
+  describe('coverage line', () => {
+    afterEach(() => {
+      (Date.now as jest.Mock).mockRestore?.();
+    });
+
+    it('counts a factor-only day as covered and says so in the footnote', async () => {
+      const now = new Date(2026, 5, 15, 12, 0, 0, 0).getTime();
+      jest.spyOn(Date, 'now').mockReturnValue(now);
+      mockEntries = [{ ...baseEntry, id: 'cv1', type: 'meal', name: 'Food', loggedAt: now }];
+      mockFactorRows = [factorRow('2026-06-14', { sleep: 'good' })];
+
+      const { getByText } = await renderScreen(<InsightsScreen />);
+      expect(getByText('Days covered: 2 of 2 (last 2 days) · 0 checked in')).toBeTruthy();
+      expect(
+        getByText('A day counts when you logged something, answered the day check-in, or added day details.'),
+      ).toBeTruthy();
+    });
+
+    it('does not count a period-only day while tracking is off', async () => {
+      const now = new Date(2026, 5, 15, 12, 0, 0, 0).getTime();
+      jest.spyOn(Date, 'now').mockReturnValue(now);
+      mockEntries = [{ ...baseEntry, id: 'cv2', type: 'meal', name: 'Food', loggedAt: now }];
+      mockFactorRows = [factorRow('2026-06-14', { period: true })];
+
+      const { getByText } = await renderScreen(<InsightsScreen />);
+      expect(getByText('Days covered: 1 of 1 (last 1 day) · 0 checked in')).toBeTruthy();
+    });
+
+    it('does not count a row whose chips were all cleared', async () => {
+      const now = new Date(2026, 5, 15, 12, 0, 0, 0).getTime();
+      jest.spyOn(Date, 'now').mockReturnValue(now);
+      mockEntries = [{ ...baseEntry, id: 'cv3', type: 'meal', name: 'Food', loggedAt: now }];
+      mockFactorRows = [factorRow('2026-06-14')];
+
+      const { getByText } = await renderScreen(<InsightsScreen />);
+      expect(getByText('Days covered: 1 of 1 (last 1 day) · 0 checked in')).toBeTruthy();
+    });
   });
 });
