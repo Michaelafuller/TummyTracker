@@ -11,7 +11,7 @@
 
 - **Two places hold the code:**
   - `main` (the main checkout, `C:\Users\E146796\projects\TummyTracker`) =
-    `39224e7`, through **#18**, **2 docs/flow commits ahead of `origin/main`**
+    `f6e6593`, through **#18**, **3 docs/flow commits ahead of `origin/main`**
     (not pushed). This is what the owner's pending device run (#13–#18)
     expects — **don't change app code on `main` until that run is done.**
   - **Branch `worktree-agent-a93006f35a36fc943`** in the git worktree

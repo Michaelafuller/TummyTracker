@@ -9,8 +9,11 @@
 
 Status at a glance (2026-09-30):
 
-- `main` = `39224e7`, **2 commits ahead of `origin/main`** (`b2e3c66` flows for
-  #16–#18, `39224e7` the #19 Cycle A plan) — docs/flows only, not pushed.
+- `main` = `f6e6593`, **3 commits ahead of `origin/main`** (`b2e3c66` flows for
+  #16–#18, `39224e7` the #19 Cycle A plan, `f6e6593` `docs/RESUME_HERE.md`) —
+  docs/flows only, not pushed. The merge won't be a fast-forward (main has
+  `f6e6593`), but it can't conflict: RESUME_HERE.md is a new file — delete it
+  in the merge.
 - Branch `worktree-agent-a93006f35a36fc943` (worktree
   `.claude/worktrees/agent-a93006f35a36fc943`) = #19–#23 on top of
   `39224e7`, reviewed, **unmerged, unpushed**; adds migrations **0011**
@@ -56,8 +59,9 @@ Then tell the orchestrator → it merges the branch into `main` (§2).
 
 ## 2. Merge (the orchestrator does this, on the owner's word)
 
-- [ ] Merge `worktree-agent-a93006f35a36fc943` into `main` (should be a
-      fast-forward unless `main` gained flow fixes in §1), re-run typecheck,
+- [ ] Merge `worktree-agent-a93006f35a36fc943` into `main` (a normal merge —
+      `main` has `f6e6593` and maybe §1 flow fixes); delete
+      `docs/RESUME_HERE.md`; re-run typecheck,
       lint, a **full `npm test`** (first full run since 113/1,168) and
       `bundle:check` on `main`; record in `docs/RESULTS.md`.
 - [ ] Owner: **push** when happy.
