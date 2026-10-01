@@ -231,9 +231,37 @@ export function analyzeFactorDays(
   const visible = visibleFactorRows(factorRows, opts);
   const days = factorDays(visible, opts);
   const { covered, rough } = coveredAndRoughDays(entries, checkIns, visible);
+  const { candidates, notes } = compareFactorDays(covered, rough, days);
 
-  const highOrMedium: FactorFinding[] = [];
-  const low: FactorFinding[] = [];
+  const highOrMedium = candidates.filter((f) => f.confidence !== 'low');
+  const low = candidates.filter((f) => f.confidence === 'low');
+
+  const byExcessDesc = (a: FactorFinding, b: FactorFinding) =>
+    b.flaggedRate - b.baseRate - (a.flaggedRate - a.baseRate) ||
+    FACTOR_KEYS.indexOf(a.key) - FACTOR_KEYS.indexOf(b.key);
+
+  highOrMedium.sort(byExcessDesc);
+  const findings =
+    highOrMedium.length > 0 ? highOrMedium : low.sort(byExcessDesc).slice(0, MAX_LOW_CONFIDENCE_FINDINGS);
+  return { findings, notes };
+}
+
+/**
+ * The comparison core behind `analyzeFactorDays`, taking the covered and rough
+ * day sets as arguments so the chance check (chance.ts) can pass a slid
+ * `rough` set. Returns, with NO display rules (no low-only fallback, no cap,
+ * no sorting): `checked` - factors actually compared (not turned into a note,
+ * not "logged but never flagged"); `candidates` - every compared factor whose
+ * flagged rate exceeds its base rate, at every tier (low included); and
+ * `notes` in factor order. Gates and tiers are documented on `analyzeFactorDays`.
+ */
+export function compareFactorDays(
+  covered: ReadonlySet<string>,
+  rough: ReadonlySet<string>,
+  days: ReadonlyMap<FactorKey, FactorDays>,
+): { checked: number; candidates: FactorFinding[]; notes: FactorNote[] } {
+  let checked = 0;
+  const candidates: FactorFinding[] = [];
   const notes: FactorNote[] = [];
 
   for (const key of FACTOR_KEYS) {
@@ -272,10 +300,11 @@ export function analyzeFactorDays(
       note('too-few-days');
       continue;
     }
+    checked++;
 
     const flaggedRate = flaggedRough / flaggedDays;
     const baseRate = baseRough / baseDays;
-    if (flaggedRate <= baseRate) continue; // no excess risk — neither finding nor note
+    if (flaggedRate <= baseRate) continue; // no excess risk: neither finding nor note
 
     let confidence: ConfidenceTier;
     if (wilsonLowerBound(flaggedRough, flaggedDays) > baseRate) {
@@ -289,7 +318,7 @@ export function analyzeFactorDays(
       confidence = 'low';
     }
 
-    const finding: FactorFinding = {
+    candidates.push({
       key,
       label: copy.finding,
       flaggedDays,
@@ -299,18 +328,10 @@ export function analyzeFactorDays(
       baseRough,
       baseRate,
       confidence,
-    };
-    (confidence === 'low' ? low : highOrMedium).push(finding);
+    });
   }
 
-  const byExcessDesc = (a: FactorFinding, b: FactorFinding) =>
-    b.flaggedRate - b.baseRate - (a.flaggedRate - a.baseRate) ||
-    FACTOR_KEYS.indexOf(a.key) - FACTOR_KEYS.indexOf(b.key);
-
-  highOrMedium.sort(byExcessDesc);
-  const findings =
-    highOrMedium.length > 0 ? highOrMedium : low.sort(byExcessDesc).slice(0, MAX_LOW_CONFIDENCE_FINDINGS);
-  return { findings, notes };
+  return { checked, candidates, notes };
 }
 
 export interface FactorCaveat {

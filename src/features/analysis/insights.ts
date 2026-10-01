@@ -16,6 +16,7 @@ import {
   isOutcome,
   MEDIUM_CONFIDENCE_MIN_MEALS,
   mealsFollowedByOutcome,
+  outcomeRateCandidates,
   SLOW_WINDOW_MS,
   tagHitRates,
   type OutcomeFinding,
@@ -73,11 +74,28 @@ export function analyzeIngredientOutcomes(
   entries: readonly LogEntry[],
   windowMs: number = DEFAULT_WINDOW_MS,
 ): OutcomeFinding[] {
-  return analyzeOutcomeRates(
-    entries,
-    (meal) => parseTagsJson(meal.tagsJson).map((tag) => ({ key: tag, label: tag })),
-    { windowMs },
-  );
+  return analyzeOutcomeRates(entries, ingredientKeysOf, { windowMs });
+}
+
+/** Grouping keys for ingredient/allergen/additive tags: one key per parsed tag. */
+const ingredientKeysOf = (meal: LogEntry): OutcomeKey[] =>
+  parseTagsJson(meal.tagsJson).map((tag) => ({ key: tag, label: tag }));
+
+/** Grouping keys for recurring foods: the trimmed name, case-insensitive, first-seen casing as label. */
+const foodKeysOf = (meal: LogEntry): OutcomeKey[] => {
+  const name = meal.name.trim();
+  return name.length > 0 ? [{ key: name.toLowerCase(), label: name }] : [];
+};
+
+/**
+ * Every compared ingredient's excess-risk result at every tier (low included),
+ * with no display rules — see `outcomeRateCandidates`. Used by the chance check.
+ */
+export function ingredientCandidates(
+  entries: readonly LogEntry[],
+  windowMs: number = DEFAULT_WINDOW_MS,
+): { checked: number; candidates: OutcomeFinding[] } {
+  return outcomeRateCandidates(entries, ingredientKeysOf, { windowMs });
 }
 
 /**
@@ -89,14 +107,15 @@ export function analyzeFoodOutcomes(
   entries: readonly LogEntry[],
   windowMs: number = DEFAULT_WINDOW_MS,
 ): OutcomeFinding[] {
-  return analyzeOutcomeRates(
-    entries,
-    (meal) => {
-      const name = meal.name.trim();
-      return name.length > 0 ? [{ key: name.toLowerCase(), label: name }] : [];
-    },
-    { minOccurrences: MIN_FOOD_OCCURRENCES, windowMs },
-  );
+  return analyzeOutcomeRates(entries, foodKeysOf, { minOccurrences: MIN_FOOD_OCCURRENCES, windowMs });
+}
+
+/** Food counterpart of `ingredientCandidates`. */
+export function foodCandidates(
+  entries: readonly LogEntry[],
+  windowMs: number = DEFAULT_WINDOW_MS,
+): { checked: number; candidates: OutcomeFinding[] } {
+  return outcomeRateCandidates(entries, foodKeysOf, { minOccurrences: MIN_FOOD_OCCURRENCES, windowMs });
 }
 
 /**
@@ -115,10 +134,22 @@ export function analyzePairOutcomes(
   entries: readonly LogEntry[],
   windowMs: number = DEFAULT_WINDOW_MS,
 ): OutcomeFinding[] {
-  const foodEntries = entries.filter(isFood);
+  const findings = analyzeOutcomeRates(entries, pairKeysOf(entries), {
+    minOccurrences: MIN_PAIR_OCCURRENCES,
+    windowMs,
+  });
+  const passes = interactionFilter(entries, windowMs);
+  return findings.filter(passes).slice(0, MAX_PAIR_FINDINGS);
+}
 
+/**
+ * Builds the `keysOf` for tag pairs: each meal yields `"a + b"` (tags sorted)
+ * for every pair among its tags that are in the MAX_PAIR_TAGS most frequent
+ * (frequency counted over all food entries' parsed tags).
+ */
+function pairKeysOf(entries: readonly LogEntry[]): (meal: LogEntry) => OutcomeKey[] {
   const tagCounts = new Map<string, number>();
-  for (const entry of foodEntries) {
+  for (const entry of entries.filter(isFood)) {
     for (const tag of parseTagsJson(entry.tagsJson)) {
       tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
     }
@@ -130,33 +161,50 @@ export function analyzePairOutcomes(
       .map(([tag]) => tag),
   );
 
-  const findings = analyzeOutcomeRates(
-    entries,
-    (meal) => {
-      const tags = parseTagsJson(meal.tagsJson).filter((t) => topTagSet.has(t));
-      const keys: OutcomeKey[] = [];
-      for (let i = 0; i < tags.length; i++) {
-        for (let j = i + 1; j < tags.length; j++) {
-          const [a, b] = [tags[i], tags[j]].sort();
-          const key = `${a} + ${b}`;
-          keys.push({ key, label: key });
-        }
+  return (meal) => {
+    const tags = parseTagsJson(meal.tagsJson).filter((t) => topTagSet.has(t));
+    const keys: OutcomeKey[] = [];
+    for (let i = 0; i < tags.length; i++) {
+      for (let j = i + 1; j < tags.length; j++) {
+        const [a, b] = [tags[i], tags[j]].sort();
+        const key = `${a} + ${b}`;
+        keys.push({ key, label: key });
       }
-      return keys;
-    },
-    { minOccurrences: MIN_PAIR_OCCURRENCES, windowMs },
-  );
+    }
+    return keys;
+  };
+}
 
+/** The interaction test: a pair must beat BOTH constituent tags' raw rates by PAIR_RATE_MARGIN. */
+function interactionFilter(
+  entries: readonly LogEntry[],
+  windowMs: number,
+): (f: OutcomeFinding) => boolean {
   const rates = tagHitRates(entries, windowMs);
-  return findings
-    .filter((f) => {
-      const [a, b] = f.key.split(' + ');
-      return (
-        f.hitRate >= (rates.get(a) ?? 0) + PAIR_RATE_MARGIN &&
-        f.hitRate >= (rates.get(b) ?? 0) + PAIR_RATE_MARGIN
-      );
-    })
-    .slice(0, MAX_PAIR_FINDINGS);
+  return (f) => {
+    const [a, b] = f.key.split(' + ');
+    return (
+      f.hitRate >= (rates.get(a) ?? 0) + PAIR_RATE_MARGIN &&
+      f.hitRate >= (rates.get(b) ?? 0) + PAIR_RATE_MARGIN
+    );
+  };
+}
+
+/**
+ * Every compared pair's excess-risk result that passes the interaction filter,
+ * at every tier (low included) — uncapped and without the low-only fallback.
+ * `checked` is how many pairs had at least MIN_PAIR_OCCURRENCES meals. Used by
+ * the chance check (chance.ts); `analyzePairOutcomes` keeps its own pipeline.
+ */
+export function pairCandidates(
+  entries: readonly LogEntry[],
+  windowMs: number = DEFAULT_WINDOW_MS,
+): { checked: number; candidates: OutcomeFinding[] } {
+  const { checked, candidates } = outcomeRateCandidates(entries, pairKeysOf(entries), {
+    minOccurrences: MIN_PAIR_OCCURRENCES,
+    windowMs,
+  });
+  return { checked, candidates: candidates.filter(interactionFilter(entries, windowMs)) };
 }
 
 export interface NutrientOutcomeFinding {
@@ -185,8 +233,26 @@ export interface NutrientOutcomeFinding {
  * otherwise `low`, which is suppressed — only medium+high findings surface.
  */
 export function analyzeNutrientOutcomes(entries: readonly LogEntry[]): NutrientOutcomeFinding[] {
+  const { candidates } = nutrientCandidates(entries);
+  return candidates
+    .filter((f) => f.confidence !== 'low')
+    .sort((a, b) => b.highRate - b.lowRate - (a.highRate - a.lowRate));
+}
+
+/**
+ * Every nutrient whose high-value meals beat the low-value meals by at least
+ * NUTRIENT_RATE_MARGIN, at every tier — including the `low` tier that
+ * `analyzeNutrientOutcomes` suppresses — in NUTRITION_FIELDS order, unsorted.
+ * `checked` is how many nutrients passed the sample and group-size gates. Used
+ * by the chance check (chance.ts).
+ */
+export function nutrientCandidates(entries: readonly LogEntry[]): {
+  checked: number;
+  candidates: NutrientOutcomeFinding[];
+} {
   const food = entries.filter(isFood);
-  const findings: NutrientOutcomeFinding[] = [];
+  const candidates: NutrientOutcomeFinding[] = [];
+  let checked = 0;
 
   for (const nutrient of NUTRITION_FIELDS) {
     const samples = food.filter((e) => e[nutrient] != null);
@@ -196,6 +262,7 @@ export function analyzeNutrientOutcomes(entries: readonly LogEntry[]): NutrientO
     const high = samples.filter((e) => (e[nutrient] as number) >= threshold);
     const low = samples.filter((e) => (e[nutrient] as number) < threshold);
     if (high.length < MIN_GROUP_SIZE || low.length < MIN_GROUP_SIZE) continue;
+    checked++;
 
     const outcomeMap = mealsFollowedByOutcome(entries, samples);
     const hitsHigh = high.filter((e) => outcomeMap.get(e.id)).length;
@@ -211,9 +278,8 @@ export function analyzeNutrientOutcomes(entries: readonly LogEntry[]): NutrientO
         : high.length >= MEDIUM_CONFIDENCE_MIN_MEALS
           ? 'medium'
           : 'low';
-    if (confidence === 'low') continue;
 
-    findings.push({
+    candidates.push({
       nutrient,
       thresholdValue: round1(threshold),
       highRate,
@@ -223,7 +289,7 @@ export function analyzeNutrientOutcomes(entries: readonly LogEntry[]): NutrientO
     });
   }
 
-  return findings.sort((a, b) => b.highRate - b.lowRate - (a.highRate - a.lowRate));
+  return { checked, candidates };
 }
 
 export interface InsightsSummary {

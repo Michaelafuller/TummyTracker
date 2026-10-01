@@ -122,6 +122,93 @@ export interface OutcomeRateOptions {
   minOccurrences?: number;
 }
 
+/** Every compared key's excess-risk result, before any display rule is applied. */
+export interface OutcomeCandidates {
+  /** Keys actually compared: those with at least `minOccurrences` meals. */
+  checked: number;
+  /**
+   * Every key whose hit rate exceeds the baseline, with its tier (low
+   * included) — unsorted (first-seen key order) and uncapped.
+   */
+  candidates: OutcomeFinding[];
+}
+
+/**
+ * The raw results behind `analyzeOutcomeRates`: for each grouping key with at
+ * least `minOccurrences` meals, the excess-risk finding and its confidence
+ * tier, with NO display rules (no low-only fallback, no cap, no sorting). The
+ * chance check (chance.ts) counts these the same way on the real journal and
+ * on every slid copy. Tier rules are documented on `analyzeOutcomeRates`.
+ */
+export function outcomeRateCandidates(
+  entries: readonly LogEntry[],
+  keysOf: (meal: LogEntry) => OutcomeKey[],
+  options: OutcomeRateOptions = {},
+): OutcomeCandidates {
+  const windowMs = options.windowMs ?? DEFAULT_WINDOW_MS;
+  const minOccurrences = options.minOccurrences ?? DEFAULT_MIN_MEALS;
+
+  // Food entries that yield at least one grouping key — these are the potential triggers.
+  // `keysOf` is evaluated once per meal (it may parse tags).
+  const eligibleMeals: LogEntry[] = [];
+  const keysByMeal = new Map<string, OutcomeKey[]>();
+  for (const e of entries) {
+    if (!FOOD_TYPES_SET.has(e.type)) continue;
+    const keys = keysOf(e);
+    if (keys.length === 0) continue;
+    eligibleMeals.push(e);
+    keysByMeal.set(e.id, keys);
+  }
+
+  if (eligibleMeals.length === 0) return { checked: 0, candidates: [] };
+
+  const mealOutcomeMap = mealsFollowedByOutcome(entries, eligibleMeals, windowMs);
+
+  const baseHits = eligibleMeals.filter((m) => mealOutcomeMap.get(m.id)).length;
+  const baseRate = eligibleMeals.length > 0 ? baseHits / eligibleMeals.length : 0;
+
+  // Group by key (first-seen label wins).
+  const byKey = new Map<string, { label: string; meals: LogEntry[] }>();
+  for (const meal of eligibleMeals) {
+    for (const { key, label } of keysByMeal.get(meal.id) ?? []) {
+      const group = byKey.get(key) ?? { label, meals: [] };
+      group.meals.push(meal);
+      byKey.set(key, group);
+    }
+  }
+
+  let checked = 0;
+  const candidates: OutcomeFinding[] = [];
+  for (const [key, group] of byKey.entries()) {
+    if (group.meals.length < minOccurrences) continue;
+    checked++;
+    const hits = group.meals.filter((m) => mealOutcomeMap.get(m.id)).length;
+    const hitRate = hits / group.meals.length;
+    if (hitRate <= baseRate) continue; // no excess risk
+
+    const lowerBound = wilsonLowerBound(hits, group.meals.length);
+    let confidence: ConfidenceTier;
+    if (lowerBound > baseRate) {
+      confidence = 'high';
+    } else if (hitRate >= baseRate + MEDIUM_HIT_RATE_MARGIN && group.meals.length >= MEDIUM_CONFIDENCE_MIN_MEALS) {
+      confidence = 'medium';
+    } else {
+      confidence = 'low';
+    }
+
+    candidates.push({
+      key,
+      label: group.label,
+      occurrences: group.meals.length,
+      hits,
+      hitRate: Math.round(hitRate * 100) / 100,
+      baseRate: Math.round(baseRate * 100) / 100,
+      confidence,
+    });
+  }
+  return { checked, candidates };
+}
+
 /**
  * For each grouping key returned by `keysOf`, measure how often a meal in
  * that group is followed by a bad outcome within `windowMs`. Reports groups
@@ -149,64 +236,9 @@ export function analyzeOutcomeRates(
   keysOf: (meal: LogEntry) => OutcomeKey[],
   options: OutcomeRateOptions = {},
 ): OutcomeFinding[] {
-  const windowMs = options.windowMs ?? DEFAULT_WINDOW_MS;
-  const minOccurrences = options.minOccurrences ?? DEFAULT_MIN_MEALS;
-
-  // Food entries that yield at least one grouping key — these are the potential triggers.
-  const eligibleMeals = entries.filter(
-    (e) => FOOD_TYPES_SET.has(e.type) && keysOf(e).length > 0,
-  );
-
-  if (eligibleMeals.length === 0) return [];
-
-  const mealOutcomeMap = mealsFollowedByOutcome(entries, eligibleMeals, windowMs);
-
-  const baseHits = eligibleMeals.filter((m) => mealOutcomeMap.get(m.id)).length;
-  const baseRate = eligibleMeals.length > 0 ? baseHits / eligibleMeals.length : 0;
-
-  // Group by key (first-seen label wins).
-  const byKey = new Map<string, { label: string; meals: LogEntry[] }>();
-  for (const meal of eligibleMeals) {
-    for (const { key, label } of keysOf(meal)) {
-      const group = byKey.get(key) ?? { label, meals: [] };
-      group.meals.push(meal);
-      byKey.set(key, group);
-    }
-  }
-
-  const highOrMedium: OutcomeFinding[] = [];
-  const low: OutcomeFinding[] = [];
-  for (const [key, group] of byKey.entries()) {
-    if (group.meals.length < minOccurrences) continue;
-    const hits = group.meals.filter((m) => mealOutcomeMap.get(m.id)).length;
-    const hitRate = hits / group.meals.length;
-    if (hitRate <= baseRate) continue; // no excess risk
-
-    const lowerBound = wilsonLowerBound(hits, group.meals.length);
-    let confidence: ConfidenceTier;
-    if (lowerBound > baseRate) {
-      confidence = 'high';
-    } else if (hitRate >= baseRate + MEDIUM_HIT_RATE_MARGIN && group.meals.length >= MEDIUM_CONFIDENCE_MIN_MEALS) {
-      confidence = 'medium';
-    } else {
-      confidence = 'low';
-    }
-
-    const finding: OutcomeFinding = {
-      key,
-      label: group.label,
-      occurrences: group.meals.length,
-      hits,
-      hitRate: Math.round(hitRate * 100) / 100,
-      baseRate: Math.round(baseRate * 100) / 100,
-      confidence,
-    };
-    if (confidence === 'low') {
-      low.push(finding);
-    } else {
-      highOrMedium.push(finding);
-    }
-  }
+  const { candidates } = outcomeRateCandidates(entries, keysOf, options);
+  const highOrMedium = candidates.filter((f) => f.confidence !== 'low');
+  const low = candidates.filter((f) => f.confidence === 'low');
 
   const byExcessDesc = (a: OutcomeFinding, b: OutcomeFinding) =>
     b.hitRate - b.baseRate - (a.hitRate - a.baseRate);

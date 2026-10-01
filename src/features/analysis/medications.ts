@@ -147,9 +147,38 @@ export function analyzeMedicationDays(
 ): { findings: MedicationFinding[]; notes: MedicationNote[] } {
   const exposure = medicationExposureDays(meds, events, doses);
   const { covered, rough } = coveredAndRoughDays(entries, checkIns, factorRows);
+  const { candidates, notes } = compareMedicationDays(covered, rough, meds, exposure);
 
-  const highOrMedium: MedicationFinding[] = [];
-  const low: MedicationFinding[] = [];
+  const highOrMedium = candidates.filter((f) => f.confidence !== 'low');
+  const low = candidates.filter((f) => f.confidence === 'low');
+
+  const byExcessDesc = (a: MedicationFinding, b: MedicationFinding) =>
+    b.exposedRate - b.otherRate - (a.exposedRate - a.otherRate) || a.name.localeCompare(b.name);
+
+  notes.sort((a, b) => a.name.localeCompare(b.name));
+  highOrMedium.sort(byExcessDesc);
+  const findings =
+    highOrMedium.length > 0 ? highOrMedium : low.sort(byExcessDesc).slice(0, MAX_LOW_CONFIDENCE_FINDINGS);
+  return { findings, notes };
+}
+
+/**
+ * The comparison core behind `analyzeMedicationDays`, taking the covered and
+ * rough day sets as arguments so the chance check (chance.ts) can pass a slid
+ * `rough` set. Returns, with NO display rules (no low-only fallback, no cap,
+ * no sorting): `checked` - medications that were actually compared (not turned
+ * into a note); `candidates` - every compared medication whose exposed rate
+ * exceeds its other-days rate, at every tier (low included); and `notes` in
+ * `meds` order. The gates and tiers are documented on `analyzeMedicationDays`.
+ */
+export function compareMedicationDays(
+  covered: ReadonlySet<string>,
+  rough: ReadonlySet<string>,
+  meds: readonly Medication[],
+  exposure: ReadonlyMap<string, ReadonlySet<string>>,
+): { checked: number; candidates: MedicationFinding[]; notes: MedicationNote[] } {
+  let checked = 0;
+  const candidates: MedicationFinding[] = [];
   const notes: MedicationNote[] = [];
 
   for (const med of meds) {
@@ -174,10 +203,11 @@ export function analyzeMedicationDays(
       notes.push({ medicationId: med.id, name: med.name, reason: 'nearly-every-day', exposedDays });
       continue;
     }
+    checked++;
 
     const exposedRate = exposedRough / exposedDays;
     const otherRate = otherRough / otherDays;
-    if (exposedRate <= otherRate) continue; // no excess risk — neither finding nor note
+    if (exposedRate <= otherRate) continue; // no excess risk: neither finding nor note
 
     let confidence: ConfidenceTier;
     if (wilsonLowerBound(exposedRough, exposedDays) > otherRate) {
@@ -191,7 +221,7 @@ export function analyzeMedicationDays(
       confidence = 'low';
     }
 
-    const finding: MedicationFinding = {
+    candidates.push({
       medicationId: med.id,
       name: med.name,
       exposedDays,
@@ -201,18 +231,10 @@ export function analyzeMedicationDays(
       otherRough,
       otherRate,
       confidence,
-    };
-    (confidence === 'low' ? low : highOrMedium).push(finding);
+    });
   }
 
-  const byExcessDesc = (a: MedicationFinding, b: MedicationFinding) =>
-    b.exposedRate - b.otherRate - (a.exposedRate - a.otherRate) || a.name.localeCompare(b.name);
-
-  notes.sort((a, b) => a.name.localeCompare(b.name));
-  highOrMedium.sort(byExcessDesc);
-  const findings =
-    highOrMedium.length > 0 ? highOrMedium : low.sort(byExcessDesc).slice(0, MAX_LOW_CONFIDENCE_FINDINGS);
-  return { findings, notes };
+  return { checked, candidates, notes };
 }
 
 export interface ConfounderCaveat {
