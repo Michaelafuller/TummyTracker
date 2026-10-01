@@ -15,16 +15,21 @@ import { useDayCheckInResponses } from '@/features/checkin/useDayCheckInResponse
 import { ExperimentHomeCard } from '@/features/experiments/ExperimentHomeCard';
 import { useExperimentNotificationResponses } from '@/features/experiments/useExperimentNotificationResponses';
 import { useMealBuilderStore } from '@/features/logging/mealBuilderStore';
+import { MyMealsSection } from '@/features/logging/MyMealsSection';
 import { RecentFoodPicker } from '@/features/logging/RecentFoodPicker';
+import { useSavedMeals } from '@/features/logging/useSavedMeals';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDateInput } from '@/lib/datetime';
 import { entryToComponentDrafts } from '@/lib/mealAggregate';
+import { savedMealToDrafts, type SavedMealWithComponents } from '@/lib/savedMeals';
 
 export default function HomeScreen() {
   const theme = useTheme();
   const router = useRouter();
   const loadBuilder = useMealBuilderStore((s) => s.load);
+  const loadSavedMealForEdit = useMealBuilderStore((s) => s.loadSavedMealForEdit);
   const clearBuilder = useMealBuilderStore((s) => s.clear);
+  const savedMeals = useSavedMeals();
   const [recents, setRecents] = useState<LogEntry[]>([]);
   const [today, setToday] = useState(() => formatDateInput(Date.now()));
   const [now, setNow] = useState(() => Date.now());
@@ -88,6 +93,43 @@ export default function HomeScreen() {
       }
     },
     [loadBuilder, router],
+  );
+
+  // Tapping a saved meal ("My meals", GitHub #25) behaves exactly like a Recent
+  // row: its items are COPIED into a fresh builder session (time = now), the
+  // template itself is never touched or linked to the meal that gets logged.
+  const handleMyMealTap = useCallback(
+    (item: SavedMealWithComponents) => {
+      if (recentTapInFlight.current) {
+        return;
+      }
+      recentTapInFlight.current = true;
+      try {
+        loadBuilder(savedMealToDrafts(item.components), {
+          name: item.meal.name,
+          type: item.meal.type,
+          mealSlot: item.meal.mealSlot,
+        });
+        router.push('/meal/review');
+      } catch {
+        Alert.alert("Couldn't open that meal", 'Something went wrong loading it — try again.');
+      } finally {
+        recentTapInFlight.current = false;
+      }
+    },
+    [loadBuilder, router],
+  );
+
+  const handleMyMealEdit = useCallback(
+    (item: SavedMealWithComponents) => {
+      loadSavedMealForEdit(item.meal.id, savedMealToDrafts(item.components), {
+        name: item.meal.name,
+        type: item.meal.type,
+        mealSlot: item.meal.mealSlot,
+      });
+      router.push('/meal/review');
+    },
+    [loadSavedMealForEdit, router],
   );
 
   const handleStartNewMeal = useCallback(() => {
@@ -176,6 +218,8 @@ export default function HomeScreen() {
           <BackupNudge hasData={hasData} now={now} />
 
           <DayCheckInCard date={today} />
+
+          <MyMealsSection items={savedMeals} onLog={handleMyMealTap} onEdit={handleMyMealEdit} />
 
           {recents.length > 0 && (
             <ThemedView style={styles.recentSection}>

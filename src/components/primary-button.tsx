@@ -11,6 +11,7 @@ export interface PrimaryButtonProps {
   /** Falls back to `label` when omitted (some callers keep a stable label,
    * e.g. "Save meal", while the visible text switches to "Saving…"). */
   accessibilityLabel?: string;
+  testID?: string;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -22,12 +23,20 @@ export interface PrimaryButtonProps {
  * Pressable. Unified here on `primary`/`primaryText` — already the styles of
  * the home CTA and insights badges — so the app has one CTA style, not two.
  */
-export function PrimaryButton({ label, onPress, disabled = false, accessibilityLabel, style }: PrimaryButtonProps) {
+export function PrimaryButton({
+  label,
+  onPress,
+  disabled = false,
+  accessibilityLabel,
+  testID,
+  style,
+}: PrimaryButtonProps) {
   const theme = useTheme();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
+      testID={testID}
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}

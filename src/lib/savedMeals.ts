@@ -57,6 +57,11 @@ export function backfillTargets(entries: readonly LogEntry[], nameKey: string): 
   );
 }
 
+/** A stable, test-friendly id fragment for a saved meal's row ("Chicken Rice" -> "chicken-rice"). */
+export function savedMealSlug(name: string): string {
+  return (name.trim() || 'untitled').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+}
+
 /** Error string for an unusable saved-meal name, or null when it's fine. */
 export function validateSavedMealName(name: string): string | null {
   return name.trim().length === 0 ? 'Name is required.' : null;

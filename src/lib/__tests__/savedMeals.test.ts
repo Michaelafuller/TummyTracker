@@ -3,6 +3,7 @@ import {
   backfillTargets,
   groupSavedMeals,
   savedMealNameKey,
+  savedMealSlug,
   savedMealToDrafts,
   validateSavedMealName,
 } from '../savedMeals';
@@ -65,6 +66,14 @@ function component(overrides: Partial<SavedMealComponent>): SavedMealComponent {
 describe('savedMealNameKey', () => {
   it('trims and lowercases', () => {
     expect(savedMealNameKey('  Chicken Rice  ')).toBe('chicken rice');
+  });
+});
+
+describe('savedMealSlug', () => {
+  it('lowercases and hyphenates', () => {
+    expect(savedMealSlug(' Chicken Rice! ')).toBe('chicken-rice-');
+    expect(savedMealSlug('Oatmeal')).toBe('oatmeal');
+    expect(savedMealSlug('   ')).toBe('untitled');
   });
 });
 

@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
 import { DateTimeField } from '@/components/date-time-field';
 import { FormField, ThemedTextInput } from '@/components/form-fields';
@@ -11,7 +11,13 @@ import { ServingsStepper } from '@/components/servings-stepper';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { FOOD_TYPES, MEAL_SLOTS, type MealSlot } from '@/db/schema';
-import { createMealWithComponents } from '@/db/repository';
+import {
+  backfillSavedMealTags,
+  createMealWithComponents,
+  deleteSavedMeal,
+  findSavedMealByNameKey,
+  saveSavedMeal,
+} from '@/db/repository';
 import { refreshCheckInIfEnabled } from '@/features/goals/checkInService';
 import { useGoalsStore } from '@/features/goals/goalsStore';
 import { useMealBuilderStore } from '@/features/logging/mealBuilderStore';
@@ -28,8 +34,9 @@ import { useTheme } from '@/hooks/use-theme';
 import { tallyDailyNutrition } from '@/lib/dailyTally';
 import { dayBounds } from '@/lib/datetime';
 import { evaluateGoals, exceededCaps, withPendingNutrition, type GoalEvaluation } from '@/lib/goals';
-import { aggregateComponents, unionComponentTags } from '@/lib/mealAggregate';
+import { aggregateComponents, mealIngredientsText, unionComponentTags } from '@/lib/mealAggregate';
 import { NUTRITION_NOUNS, nutritionUnit } from '@/lib/nutrition';
+import { backfillTargets, savedMealNameKey, validateSavedMealName } from '@/lib/savedMeals';
 import { MAX_NOTES_LENGTH } from '@/lib/validation';
 import { describeWatchedMatches, findWatchedTagsInTags } from '@/lib/watchlist';
 
@@ -39,6 +46,30 @@ function capNoticeLine(evaluation: GoalEvaluation): string {
   const amount = (value: number) => (unit.length > 0 ? `${value}${unit}` : String(value));
   const noun = NUTRITION_NOUNS[evaluation.goal.nutrient];
   return `Saving puts ${noun} at ${amount(evaluation.total)} — over your ${amount(evaluation.goal.threshold)} cap`;
+}
+
+/** Alert as a promise: true when the confirm button is chosen, false for Cancel / dismiss. */
+function confirmAsync(
+  title: string,
+  message: string,
+  confirmLabel: string,
+  options: { cancelLabel?: string; destructive?: boolean } = {},
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    Alert.alert(
+      title,
+      message,
+      [
+        { text: options.cancelLabel ?? 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+        {
+          text: confirmLabel,
+          style: options.destructive ? 'destructive' : 'default',
+          onPress: () => resolve(true),
+        },
+      ],
+      { cancelable: true, onDismiss: () => resolve(false) },
+    );
+  });
 }
 
 const TYPE_OPTIONS = FOOD_TYPES.map((value) => ({
@@ -56,6 +87,14 @@ const MEAL_SLOT_OPTIONS = MEAL_SLOTS.map((value) => ({
  * Phase 2.3). Lists the components collected so far with a live aggregate
  * preview, then collects the meal-level fields once and saves everything as a
  * single logEntry + N mealComponent rows via createMealWithComponents.
+ *
+ * Two modes (GitHub #25), told apart by the builder store's `editingSavedMealId`:
+ * - LOGGING (null, the default): the screen above, plus "Save as my meal" which
+ *   stores the items/name/type/slot as a My meals template (never date/notes).
+ * - TEMPLATE (a saved meal's id): edits that template. No date/time, notes or goal
+ *   cap notice; "Save changes" / "Delete my meal" act on the template only.
+ * Neither mode ever changes a past meal, except the opt-in backfill the user
+ * confirms after saving a template.
  */
 export default function MealReviewScreen() {
   const theme = useTheme();
@@ -64,6 +103,8 @@ export default function MealReviewScreen() {
   const updateComponent = useMealBuilderStore((state) => state.updateComponent);
   const removeComponent = useMealBuilderStore((state) => state.removeComponent);
   const clearBuilder = useMealBuilderStore((state) => state.clear);
+  const editingSavedMealId = useMealBuilderStore((state) => state.editingSavedMealId);
+  const isTemplateMode = editingSavedMealId !== null;
 
   const [state, setState] = useState<MealReviewFormState>(() => ({
     ...defaultMealReviewState(components),
@@ -71,6 +112,9 @@ export default function MealReviewScreen() {
   }));
   const [errors, setErrors] = useState<MealReviewErrors>({});
   const [submitting, setSubmitting] = useState(false);
+  // Logging mode: what was last stored via "Save as my meal", so the button can
+  // read "Saved to My meals" until the name, type, slot or items change again.
+  const [savedSignature, setSavedSignature] = useState<string | null>(null);
 
   // This screen stays mounted across "Add item" (meal/component.tsx returns via
   // router.dismissTo('/meal/review')), so keep the auto-generated name in sync
@@ -118,6 +162,116 @@ export default function MealReviewScreen() {
     [],
   );
 
+  const templateSignature = JSON.stringify([state.name.trim(), state.type, state.mealSlot, components]);
+  const savedToMyMeals = savedSignature === templateSignature;
+
+  /** The offer to add the template's ingredients to past, tag-less meals of the same name (explicit choice only). */
+  async function offerBackfill(name: string, nameKey: string) {
+    const tags = unionComponentTags(components);
+    if (tags.length === 0) return;
+    const count = backfillTargets(allEntries, nameKey).length;
+    if (count === 0) return;
+    const add = await confirmAsync(
+      'Add ingredients to past meals?',
+      `Add these ingredients to ${count} past '${name}' ${count === 1 ? 'meal' : 'meals'} that don't have any? This updates your Insights.`,
+      'Add',
+      { cancelLabel: 'Not now' },
+    );
+    if (!add) return;
+    // The repository recomputes the targets itself; `updated` is the truth.
+    const updated = await backfillSavedMealTags(nameKey, tags, mealIngredientsText(components));
+    Alert.alert('Ingredients added', `Updated ${updated} past ${updated === 1 ? 'meal' : 'meals'}.`);
+  }
+
+  /**
+   * Stores the builder as a My meals template (creating it, or editing the
+   * open one in template mode). A name another template already holds asks to
+   * Replace first. Returns true once saved.
+   */
+  async function persistTemplate(): Promise<boolean> {
+    const nameError = validateSavedMealName(state.name);
+    if (nameError) {
+      setErrors({ name: nameError });
+      return false;
+    }
+    setErrors({});
+    const name = state.name.trim();
+    const nameKey = savedMealNameKey(name);
+
+    let replaceId: string | undefined;
+    const clash = await findSavedMealByNameKey(nameKey);
+    if (clash && clash.id !== editingSavedMealId) {
+      const replace = await confirmAsync(
+        `Replace '${name}' in My meals?`,
+        'Its items will be replaced. Meals you already logged are not changed.',
+        'Replace',
+        { destructive: true },
+      );
+      if (!replace) return false;
+      replaceId = clash.id;
+    }
+
+    await saveSavedMeal({
+      id: editingSavedMealId ?? undefined,
+      name,
+      type: state.type === 'snack' ? 'snack' : 'meal',
+      mealSlot: state.mealSlot,
+      components,
+      replaceId,
+    });
+    await offerBackfill(name, nameKey);
+    return true;
+  }
+
+  async function handleSaveAsMyMeal() {
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      if (await persistTemplate()) setSavedSignature(templateSignature);
+    } catch {
+      Alert.alert("Couldn't save to My meals", 'Something went wrong — try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleSaveChanges() {
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      if (await persistTemplate()) {
+        clearBuilder();
+        router.back();
+      }
+    } catch {
+      Alert.alert("Couldn't save your changes", 'Something went wrong — try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleDeleteMyMeal() {
+    if (submitting || editingSavedMealId === null) return;
+    const id = editingSavedMealId;
+    const confirmed = await confirmAsync(
+      `Delete '${state.name.trim() || 'this meal'}'?`,
+      'It will be removed from My meals. Meals you already logged are not changed.',
+      'Delete',
+      { destructive: true },
+    );
+    if (!confirmed) return;
+    setSubmitting(true);
+    try {
+      await deleteSavedMeal(id);
+      clearBuilder();
+      router.back();
+    } catch {
+      Alert.alert("Couldn't delete this meal", 'Something went wrong — try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function handleSave() {
     const result = buildMealEntry(state, components);
     setErrors(result.errors);
@@ -138,6 +292,11 @@ export default function MealReviewScreen() {
 
   return (
     <FormScrollView>
+      {isTemplateMode ? (
+        <ThemedText type="subtitle" testID="review-template-heading">
+          Edit my meal
+        </ThemedText>
+      ) : null}
       <ThemedText type="smallBold">In this meal</ThemedText>
       <View style={styles.componentList}>
         {components.map((component, index) => (
@@ -219,24 +378,28 @@ export default function MealReviewScreen() {
         />
       </FormField>
 
-      <DateTimeField
-        dateInput={state.dateInput}
-        timeInput={state.timeInput}
-        onDateChange={(v) => set('dateInput', v)}
-        onTimeChange={(v) => set('timeInput', v)}
-        error={errors.loggedAt}
-      />
+      {isTemplateMode ? null : (
+        <>
+          <DateTimeField
+            dateInput={state.dateInput}
+            timeInput={state.timeInput}
+            onDateChange={(v) => set('dateInput', v)}
+            onTimeChange={(v) => set('timeInput', v)}
+            error={errors.loggedAt}
+          />
 
-      <FormField label="Notes" error={errors.notes} hint={`${noteCount}/${MAX_NOTES_LENGTH}`}>
-        <ThemedTextInput
-          value={state.notes}
-          onChangeText={(value) => set('notes', value)}
-          placeholder="Anything worth remembering"
-          accessibilityLabel="Notes"
-          multiline
-          maxLength={MAX_NOTES_LENGTH}
-        />
-      </FormField>
+          <FormField label="Notes" error={errors.notes} hint={`${noteCount}/${MAX_NOTES_LENGTH}`}>
+            <ThemedTextInput
+              value={state.notes}
+              onChangeText={(value) => set('notes', value)}
+              placeholder="Anything worth remembering"
+              accessibilityLabel="Notes"
+              multiline
+              maxLength={MAX_NOTES_LENGTH}
+            />
+          </FormField>
+        </>
+      )}
 
       {watchedMatches.length > 0 ? (
         <View
@@ -250,7 +413,7 @@ export default function MealReviewScreen() {
         </View>
       ) : null}
 
-      {exceededCapEvaluations.length > 0 ? (
+      {!isTemplateMode && exceededCapEvaluations.length > 0 ? (
         <View
           accessibilityRole="alert"
           accessibilityLabel={`Saving would exceed a goal cap: ${exceededCapEvaluations.map(capNoticeLine).join('; ')}`}
@@ -266,12 +429,50 @@ export default function MealReviewScreen() {
         </View>
       ) : null}
 
-      <PrimaryButton
-        label={submitting ? 'Saving…' : 'Save meal'}
-        accessibilityLabel="Save meal"
-        disabled={submitting || components.length === 0}
-        onPress={handleSave}
-      />
+      {isTemplateMode ? (
+        <>
+          <PrimaryButton
+            label={submitting ? 'Saving…' : 'Save changes'}
+            accessibilityLabel="Save changes"
+            testID="review-save-changes"
+            disabled={submitting || components.length === 0}
+            onPress={handleSaveChanges}
+          />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Delete my meal"
+            testID="review-delete-my-meal"
+            disabled={submitting}
+            onPress={handleDeleteMyMeal}
+            style={styles.deleteButton}>
+            <ThemedText type="link" themeColor="danger">
+              Delete my meal
+            </ThemedText>
+          </Pressable>
+        </>
+      ) : (
+        <>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Save as my meal"
+            testID="review-save-as-my-meal"
+            accessibilityState={{ disabled: submitting || components.length === 0 || savedToMyMeals }}
+            disabled={submitting || components.length === 0 || savedToMyMeals}
+            onPress={handleSaveAsMyMeal}
+            style={[
+              styles.addItemButton,
+              { borderColor: theme.border, opacity: components.length === 0 ? 0.5 : 1 },
+            ]}>
+            <ThemedText style={styles.addItemLabel}>{savedToMyMeals ? 'Saved to My meals' : 'Save as my meal'}</ThemedText>
+          </Pressable>
+          <PrimaryButton
+            label={submitting ? 'Saving…' : 'Save meal'}
+            accessibilityLabel="Save meal"
+            disabled={submitting || components.length === 0}
+            onPress={handleSave}
+          />
+        </>
+      )}
     </FormScrollView>
   );
 }
@@ -297,6 +498,10 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     paddingVertical: Spacing.two + Spacing.one,
     alignItems: 'center',
+  },
+  deleteButton: {
+    alignItems: 'center',
+    paddingVertical: Spacing.two,
   },
   addItemLabel: {
     fontSize: 16,

@@ -3,9 +3,10 @@ import { Alert, AppState } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 
 import { getMealComponents, hasAnyLogEntry, listRecentFoodEntries } from '@/db/repository';
-import type { LogEntry, MealComponent } from '@/db/schema';
+import type { LogEntry, MealComponent, SavedMeal, SavedMealComponent } from '@/db/schema';
 import { useMealBuilderStore } from '@/features/logging/mealBuilderStore';
 import type { MealComponentDraft } from '@/lib/mealAggregate';
+import { groupSavedMeals, type SavedMealWithComponents } from '@/lib/savedMeals';
 import HomeScreen from '../index';
 
 const mockPush = jest.fn();
@@ -71,6 +72,13 @@ jest.mock('@/features/checkin/DayCheckInCard', () => ({
     const { Text } = jest.requireActual('react-native');
     return mockCreateElement(Text, { testID: 'day-check-in-card' }, date);
   },
+}));
+
+// "My meals" (GitHub #25) comes from a live Drizzle query — mocked here so this
+// screen test never touches the real (native-only) expo-sqlite client.
+let mockSavedMeals: SavedMealWithComponents[] = [];
+jest.mock('@/features/logging/useSavedMeals', () => ({
+  useSavedMeals: () => mockSavedMeals,
 }));
 
 const BASE_ENTRY: LogEntry = {
@@ -141,7 +149,8 @@ beforeEach(() => {
   });
   (getMealComponents as jest.Mock).mockResolvedValue([]);
   (hasAnyLogEntry as jest.Mock).mockResolvedValue(false);
-  useMealBuilderStore.setState({ components: [], reviewPrefill: null });
+  mockSavedMeals = [];
+  useMealBuilderStore.setState({ components: [], reviewPrefill: null, editingSavedMealId: null });
 });
 
 describe('HomeScreen', () => {
@@ -345,5 +354,120 @@ describe('HomeScreen', () => {
     (getMealComponents as jest.Mock).mockResolvedValueOnce([]);
     await fireEvent.press(oatmealRow);
     await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/meal/review'));
+  });
+});
+
+describe('HomeScreen My meals (GitHub #25)', () => {
+  function savedMeal(id: string, name: string, overrides: Partial<SavedMeal> = {}): SavedMeal {
+    return { id, name, nameKey: name.toLowerCase(), type: 'meal', mealSlot: null, createdAt: 1, updatedAt: 1, ...overrides };
+  }
+  function savedComponent(id: string, savedMealId: string, name: string, sortOrder: number): SavedMealComponent {
+    return {
+      id,
+      savedMealId,
+      name,
+      barcode: null,
+      servings: 1.5,
+      servingG: null,
+      calories: 100,
+      fatG: null,
+      saturatedFatG: null,
+      carbsG: null,
+      proteinG: null,
+      fiberG: null,
+      sugarG: null,
+      sodiumMg: null,
+      ingredientsText: 'oats',
+      tagsJson: '["oats"]',
+      sortOrder,
+      createdAt: 1,
+    };
+  }
+  function setMeals() {
+    mockSavedMeals = groupSavedMeals(
+      [
+        savedMeal('m2', 'Toast', { type: 'snack', mealSlot: 'breakfast' }),
+        savedMeal('m1', 'Oatmeal bowl', { mealSlot: 'dinner' }),
+      ],
+      [
+        savedComponent('c2', 'm1', 'Milk', 1),
+        savedComponent('c1', 'm1', 'Oats', 0),
+        savedComponent('c3', 'm2', 'Bread', 0),
+      ],
+    );
+  }
+
+  beforeEach(() => {
+    (listRecentFoodEntries as jest.Mock).mockResolvedValue([BASE_ENTRY]);
+  });
+
+  it('hides the section when there are no saved meals', async () => {
+    const { queryByTestId, queryByText, findByLabelText } = await render(<HomeScreen />);
+    await findByLabelText('Re-log Oatmeal');
+    expect(queryByTestId('my-meals-section')).toBeNull();
+    expect(queryByText('My meals')).toBeNull();
+  });
+
+  it('lists saved meals A-Z with an item count, above Recent', async () => {
+    setMeals();
+    const { getByTestId, getByText, getAllByTestId, findByLabelText, toJSON } = await render(<HomeScreen />);
+    await findByLabelText('Re-log Oatmeal');
+
+    expect(getByText('My meals')).toBeTruthy();
+    expect(getByTestId('my-meal-oatmeal-bowl')).toHaveTextContent('Oatmeal bowl2 items');
+    expect(getByTestId('my-meal-toast')).toHaveTextContent('Toast1 item');
+    const rowIds = getAllByTestId(/^my-meal-(?!.*-edit$)/).map((node) => node.props.testID as string);
+    expect(rowIds).toEqual(['my-meal-oatmeal-bowl', 'my-meal-toast']);
+
+    // Above Recent in the tree.
+    const tree = JSON.stringify(toJSON());
+    expect(tree.indexOf('my-meals-section')).toBeGreaterThan(-1);
+    expect(tree.indexOf('my-meals-section')).toBeLessThan(tree.indexOf('Search past foods'));
+  });
+
+  it('tapping a saved meal copies its items into the builder (time = now) and opens the review', async () => {
+    setMeals();
+    const { getByLabelText } = await render(<HomeScreen />);
+    await fireEvent.press(getByLabelText('Log Oatmeal bowl'));
+
+    expect(mockPush).toHaveBeenCalledWith('/meal/review');
+    const { components, reviewPrefill, editingSavedMealId } = useMealBuilderStore.getState();
+    expect(components.map((c) => [c.name, c.servings, c.sortOrder])).toEqual([
+      ['Oats', 1.5, 0],
+      ['Milk', 1.5, 1],
+    ]);
+    // Same shape as a Recent tap: name/type/slot only — no date/time, no notes.
+    expect(reviewPrefill).toEqual({ name: 'Oatmeal bowl', type: 'meal', mealSlot: 'dinner' });
+    expect(editingSavedMealId).toBeNull();
+    expect(components[0]).not.toHaveProperty('id');
+  });
+
+  it('"Edit" loads template mode with the meal id and opens the review', async () => {
+    setMeals();
+    const { getByLabelText } = await render(<HomeScreen />);
+    await fireEvent.press(getByLabelText('Edit Toast'));
+
+    expect(mockPush).toHaveBeenCalledWith('/meal/review');
+    const { components, reviewPrefill, editingSavedMealId } = useMealBuilderStore.getState();
+    expect(editingSavedMealId).toBe('m2');
+    expect(components.map((c) => c.name)).toEqual(['Bread']);
+    expect(reviewPrefill).toEqual({ name: 'Toast', type: 'snack', mealSlot: 'breakfast' });
+  });
+
+  it('a normal start (Scan a barcode) after template mode leaves it', async () => {
+    setMeals();
+    useMealBuilderStore.setState({ components: [draft('Oats')], reviewPrefill: { name: 'x' }, editingSavedMealId: 'm1' });
+    const { getByLabelText } = await render(<HomeScreen />);
+    await fireEvent.press(getByLabelText('Scan a barcode'));
+    expect(useMealBuilderStore.getState().editingSavedMealId).toBeNull();
+  });
+
+  it('re-logging a Recent after template mode is logging mode', async () => {
+    setMeals();
+    useMealBuilderStore.setState({ components: [draft('Oats')], reviewPrefill: { name: 'x' }, editingSavedMealId: 'm1' });
+    const { findByLabelText } = await render(<HomeScreen />);
+    await fireEvent.press(await findByLabelText('Re-log Oatmeal'));
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/meal/review'));
+    expect(useMealBuilderStore.getState().editingSavedMealId).toBeNull();
   });
 });
