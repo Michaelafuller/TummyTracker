@@ -12,6 +12,7 @@
 // chance" — never "this is a coincidence" or "this is real").
 
 import type { LogEntry, Medication, MedicationDose, MedicationEvent } from '@/db/schema';
+import { formatDateInput } from '@/lib/datetime';
 import type { ConfidenceTier } from '@/lib/stats';
 import { compareFactorDays, factorDays, type FactorRow } from './factors';
 import { foodCandidates, ingredientCandidates, nutrientCandidates, pairAnalysis } from './insights';
@@ -25,10 +26,9 @@ export const MIN_SLIDES = 10;
 /** At most this many slides (evenly spaced) are run. */
 export const MAX_SLIDES = 30;
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
 /**
- * Slide distances (days) for a journal spanning `spanDays` days: every d in
+ * Slide distances for a journal of `spanDays` logged (meal-level) or covered
+ * (day-level) days — positions in that list of days, not calendar days: every d in
  * [MIN_SLIDE_DAYS, spanDays - MIN_SLIDE_DAYS]; when more than MAX_SLIDES,
  * MAX_SLIDES of them evenly spaced (deterministic, ascending, unique); [] when
  * fewer than MIN_SLIDES.
@@ -48,42 +48,38 @@ function localMidnight(ms: number): number {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 }
 
-function earliestMidnight(entries: readonly LogEntry[]): number {
-  let min = Infinity;
-  for (const e of entries) if (e.loggedAt < min) min = e.loggedAt;
-  return localMidnight(min);
-}
-
-/** Whole local days from the earliest to the latest entry, inclusive (0 for no entries). */
-export function journalSpanDays(entries: readonly LogEntry[]): number {
-  if (entries.length === 0) return 0;
-  let min = Infinity;
-  let max = -Infinity;
-  for (const e of entries) {
-    if (e.loggedAt < min) min = e.loggedAt;
-    if (e.loggedAt > max) max = e.loggedAt;
-  }
-  // Rounded so a 23 h / 25 h DST day still counts as one day.
-  return Math.round((localMidnight(max) - localMidnight(min)) / DAY_MS) + 1;
+/** Local midnight of a 'YYYY-MM-DD' key. */
+function midnightOfKey(key: string): number {
+  const [year, month, day] = key.split('-').map(Number);
+  return new Date(year, month - 1, day).getTime();
 }
 
 /**
- * Meal-level slide: a copy of `entries` where every `isOutcome` entry's
- * loggedAt moves `days` x 24 h later, wrapped circularly inside the journal
- * span [start, start + spanDays x 24 h) where start = local midnight of the
- * earliest entry. Non-outcome entries are the SAME objects (untouched); the
- * input is never mutated.
+ * The local days ('YYYY-MM-DD') with at least one entry, ascending. The
+ * meal-level slide moves outcomes among THESE days, not along the calendar:
+ * a logging break or one stray backdated entry would otherwise push most
+ * slides into empty time, where no meal precedes an outcome — luck would
+ * look rarer than it is (review 2026-09-30).
+ */
+export function loggedDayKeys(entries: readonly LogEntry[]): string[] {
+  return [...new Set(entries.map((e) => formatDateInput(e.loggedAt)))].sort();
+}
+
+/**
+ * Meal-level slide: a copy of `entries` where every `isOutcome` entry moves
+ * `days` places later among the logged days (`loggedDayKeys`), wrapping, at
+ * the same local time of day. Non-outcome entries are the SAME objects
+ * (untouched); the input is never mutated.
  */
 export function slideOutcomes(entries: readonly LogEntry[], days: number): LogEntry[] {
-  if (entries.length === 0) return [];
-  const start = earliestMidnight(entries);
-  const spanMs = journalSpanDays(entries) * DAY_MS;
-  const shiftMs = days * DAY_MS;
+  const keys = loggedDayKeys(entries);
+  const n = keys.length;
+  const indexOf = new Map(keys.map((key, i) => [key, i] as const));
   return entries.map((entry) => {
     if (!isOutcome(entry)) return entry;
-    const rel = entry.loggedAt - start;
-    const moved = (((rel + shiftMs) % spanMs) + spanMs) % spanMs;
-    return { ...entry, loggedAt: start + moved };
+    const from = indexOf.get(formatDateInput(entry.loggedAt)) ?? 0;
+    const to = keys[(((from + days) % n) + n) % n];
+    return { ...entry, loggedAt: midnightOfKey(to) + (entry.loggedAt - localMidnight(entry.loggedAt)) };
   });
 }
 
@@ -256,7 +252,7 @@ export function chanceChecks(input: {
   // --- Meal-level families: slide the outcomes' timestamps against the meals.
   const mealFamilies = new Set(MEAL_FAMILIES.filter((f) => families.has(f)));
   if (mealFamilies.size > 0) {
-    const offsets = slideOffsets(journalSpanDays(entries));
+    const offsets = slideOffsets(loggedDayKeys(entries).length);
     if (offsets.length === 0) {
       for (const f of mealFamilies) result[f] = null;
     } else {

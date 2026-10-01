@@ -1063,7 +1063,18 @@ describe('chance-check line on finding cards (GitHub #24)', () => {
   }
 
   it('shows a chance line under an ingredient card on a journal long enough to slide', async () => {
-    mockEntries = ingredientJournal([48 * HOUR, 96 * HOUR, 500 * HOUR, 548 * HOUR, 596 * HOUR]);
+    // The slide moves outcomes among LOGGED days, so the journal needs >= 15 of
+    // them: untagged, uniquely named meals fill 25 days without joining any
+    // ingredient or food group (the lactose card's numbers stay the same).
+    const filler = Array.from({ length: 25 }, (_, i) => ({
+      ...baseEntry,
+      id: `ch${seq++}`,
+      type: 'meal',
+      name: `Plain meal ${i}`,
+      loggedAt: i * 24 * HOUR + 6 * HOUR,
+      tagsJson: null,
+    }));
+    mockEntries = [...ingredientJournal([48 * HOUR, 96 * HOUR, 500 * HOUR, 548 * HOUR, 596 * HOUR]), ...filler];
     const { getByText, getAllByTestId } = await renderScreen(<InsightsScreen />);
 
     expect(getByText('lactose')).toBeTruthy();

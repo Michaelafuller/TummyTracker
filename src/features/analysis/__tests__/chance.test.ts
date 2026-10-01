@@ -2,7 +2,7 @@ import type { LogEntry } from '@/db/schema';
 import {
   chanceChecks,
   chanceSentence,
-  journalSpanDays,
+  loggedDayKeys,
   MAX_SLIDES,
   MIN_SLIDE_DAYS,
   MIN_SLIDES,
@@ -52,7 +52,7 @@ describe('slideOffsets', () => {
   });
 });
 
-describe('journalSpanDays and slideOutcomes', () => {
+describe('loggedDayKeys and slideOutcomes', () => {
   // 20 local days: meals every day at 12:00, outcomes on a few days at various hours.
   const meals = Array.from({ length: 20 }, (_, d) => makeEntry({ type: 'meal', loggedAt: dayAt(d, 12) }));
   const outcomes = [
@@ -66,10 +66,22 @@ describe('journalSpanDays and slideOutcomes', () => {
   ];
   const entries = [...meals, ...outcomes, ...quiet];
 
-  it('counts whole local days from the earliest to the latest entry, inclusive', () => {
-    expect(journalSpanDays(entries)).toBe(20);
-    expect(journalSpanDays([])).toBe(0);
-    expect(journalSpanDays([meals[0]])).toBe(1);
+  it('lists each local day with an entry once, ascending', () => {
+    expect(loggedDayKeys(entries)).toHaveLength(20);
+    expect(loggedDayKeys([...entries].reverse())).toEqual(loggedDayKeys(entries));
+    expect(loggedDayKeys([])).toEqual([]);
+    expect(loggedDayKeys([meals[0]])).toHaveLength(1);
+  });
+
+  it('slides among logged days only, skipping a break in logging', () => {
+    // Logged on days 0-9 and 100-109; an outcome on day 8 at 17:00, slid 3 logged days.
+    const gapped = [
+      ...Array.from({ length: 10 }, (_, d) => makeEntry({ type: 'meal', loggedAt: dayAt(d, 12) })),
+      ...Array.from({ length: 10 }, (_, d) => makeEntry({ type: 'meal', loggedAt: dayAt(100 + d, 12) })),
+      makeEntry({ id: 'late', type: 'symptom', severity: 4, loggedAt: dayAt(8, 17) }),
+    ];
+    const moved = slideOutcomes(gapped, 3).find((e) => e.id === 'late') as LogEntry;
+    expect(moved.loggedAt).toBe(dayAt(101, 17)); // day 8 -> 9 -> 100 -> 101, same time of day
   });
 
   it('moves only outcomes, and only by whole days', () => {
@@ -335,5 +347,41 @@ describe('chanceSentence', () => {
   it('never claims causation or safety', () => {
     const sentence = chanceSentence(check(), 'low', NOUN);
     expect(sentence).not.toMatch(/coincidence|real|safe|cause/i);
+  });
+});
+
+describe('chanceChecks: calendar gaps never make noise look trustworthy (review 2026-09-30)', () => {
+  // Pure noise that the check flags as "could easily be chance" (see above).
+  const NOISE: JournalOptions = { seed: 1, days: 70, tagPool: 8, tagsPerMeal: [2, 3], outcomeProb: 0.35 };
+
+  function ingredientsCheck(entries: LogEntry[]): ChanceCheck {
+    const j = buildJournal(NOISE);
+    return chanceChecks({ ...j, entries, trackPeriod: false, families: new Set(['ingredients']) })
+      .ingredients as ChanceCheck;
+  }
+
+  it('one stray entry dated two years earlier leaves the estimate where it was', () => {
+    const { entries } = buildJournal(NOISE);
+    const clean = ingredientsCheck(entries);
+    const stray = makeEntry({ id: 'stray', type: 'bowel_movement', bristolScale: 4, loggedAt: dayAt(-730, 9) });
+    const withStray = ingredientsCheck([stray, ...entries]);
+
+    expect(withStray.found).toEqual(clean.found);
+    expect(withStray.expected.low).toBeGreaterThan(clean.expected.low * 0.75);
+    expect(chanceSentence(withStray, 'low', NOUN)).toContain('could easily be chance');
+  });
+
+  it('a long break in logging leaves the estimate where it was', () => {
+    const { entries } = buildJournal(NOISE);
+    const clean = ingredientsCheck(entries);
+    // Days 35+ of the same journal happen 200 days later instead.
+    const gapped = entries.map((e) =>
+      e.loggedAt >= dayAt(35, 0) ? { ...e, loggedAt: e.loggedAt + 200 * DAY } : e,
+    );
+    const withGap = ingredientsCheck(gapped);
+
+    expect(withGap.found).toEqual(clean.found);
+    expect(withGap.expected.low).toBeGreaterThan(clean.expected.low * 0.75);
+    expect(chanceSentence(withGap, 'low', NOUN)).toContain('could easily be chance');
   });
 });
