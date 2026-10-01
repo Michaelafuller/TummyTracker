@@ -62,11 +62,18 @@ export function mealsFollowedByOutcome(
   meals: readonly LogEntry[],
   windowMs: number = DEFAULT_WINDOW_MS,
 ): Map<string, boolean> {
-  const outcomes = entries.filter(isOutcome);
+  // Sort outcome times once, then binary-search each meal for the first outcome
+  // strictly after it: a hit when that one is within the (inclusive) window.
+  const outcomeTimes = entries.filter(isOutcome).map((o) => o.loggedAt).sort((a, b) => a - b);
   function hasFollowingOutcome(meal: LogEntry): boolean {
-    return outcomes.some(
-      (o) => o.loggedAt > meal.loggedAt && o.loggedAt <= meal.loggedAt + windowMs,
-    );
+    let lo = 0;
+    let hi = outcomeTimes.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (outcomeTimes[mid] > meal.loggedAt) hi = mid;
+      else lo = mid + 1;
+    }
+    return lo < outcomeTimes.length && outcomeTimes[lo] <= meal.loggedAt + windowMs;
   }
   return new Map(meals.map((m) => [m.id, hasFollowingOutcome(m)]));
 }
