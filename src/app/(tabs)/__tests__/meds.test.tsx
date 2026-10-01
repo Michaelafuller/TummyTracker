@@ -27,6 +27,15 @@ jest.mock('@/features/medications/useMedicationData', () => ({
   useMedicationDoses: () => mockDoses,
 }));
 
+// RegularMedsButton (GitHub #26) imports the repository; the screen tests only
+// exercise it through the mocked medication data, so a stub is enough.
+const mockCreateMedicationEvent = jest.fn();
+const mockDeleteMedicationEvent = jest.fn();
+jest.mock('@/db/repository', () => ({
+  createMedicationEvent: (...args: unknown[]) => mockCreateMedicationEvent(...args),
+  deleteMedicationEvent: (...args: unknown[]) => mockDeleteMedicationEvent(...args),
+}));
+
 // See src/components/ui/__mocks__/collapsible.tsx for why this needs a stand-in
 // under Jest at all — this bare call picks up that shared manual mock.
 jest.mock('@/components/ui/collapsible');
@@ -173,5 +182,21 @@ describe('MedicationsScreen Recent doses (Cycle B, #6)', () => {
     const { findByLabelText } = await renderScreen(<MedicationsScreen />);
     await fireEvent.press(await findByLabelText('See all history'));
     expect(mockPush).toHaveBeenCalledWith('/medication/history');
+  });
+});
+
+describe('MedicationsScreen regular meds button (GitHub #26)', () => {
+  it('shows "Took my regular meds" when an active regular medication exists, and hides it otherwise', async () => {
+    mockMedications = [
+      makeMedication({ id: 'm1', name: 'Vitamin D', defaultDose: 1000, doseUnit: 'unit', isRegular: true }),
+    ];
+    const first = await renderScreen(<MedicationsScreen />);
+    expect(await first.findByTestId('regular-meds-log')).toBeTruthy();
+    expect(first.getByText('Vitamin D 1000 unit')).toBeTruthy();
+    await first.unmount();
+
+    mockMedications = [makeMedication({ id: 'm1', name: 'Vitamin D', isRegular: false })];
+    const second = await renderScreen(<MedicationsScreen />);
+    expect(second.queryByTestId('regular-meds-log')).toBeNull();
   });
 });

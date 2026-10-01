@@ -9,6 +9,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Collapsible } from '@/components/ui/collapsible';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import type { Medication } from '@/db/schema';
+import { RegularMedsButton } from '@/features/medications/RegularMedsButton';
 import { useMedicationDoses, useMedicationEvents, useMedications } from '@/features/medications/useMedicationData';
 import { useTheme } from '@/hooks/use-theme';
 import { formatTime12h } from '@/lib/datetime';
@@ -110,6 +111,8 @@ export default function MedicationsScreen() {
           },
         ]}>
         <ThemedText type="subtitle">Medications</ThemedText>
+
+        <RegularMedsButton />
 
         {medications.length === 0 ? (
           <ThemedText type="small" themeColor="textSecondary">
