@@ -1,243 +1,188 @@
-# HANDOFF.md — Execute session: Saved meals ("My meals") with ingredients, GitHub #25
+# HANDOFF.md — Execute session: Faster logging, GitHub #26
 
 > **Read first:** this file only. `CLAUDE.md` is auto-loaded (§0: synchronous
-> transactions, the #13/#23 restore rules — this cycle mirrors them). **You
-> are on the burn-down branch (`worktree-agent-a93006f35a36fc943`) in its
-> worktree** — #19–#24 are reviewed but unmerged; this cycle stacks on them.
-> Never touch the main checkout.
+> transactions; #19's notification-response pattern; #25 My meals — this
+> cycle builds on them). **You are on the burn-down branch
+> (`worktree-agent-a93006f35a36fc943`) in its worktree** — #19–#25 are
+> reviewed but unmerged; this cycle stacks on them. Never touch the main
+> checkout.
 >
-> **JS/TS + one additive migration (owner-approved 2026-09-30)** — no
+> **JS/TS + one additive migration (owner-approved 2026-10-01)** — no
 > dependency, no permission, no native change, no EAS build.
 
-**Planned 2026-09-30 (Opus plan session, owner-reviewed) — GitHub
-Michaelafuller/TummyTracker#25.** Done-when (issue): "I can create, edit and
-re-log a saved meal with an ingredient list." Owner decisions (2026-09-30):
+**Planned 2026-10-01 (Opus plan session, owner-reviewed) — GitHub
+Michaelafuller/TummyTracker#26.** Done-when (issue): "favourites exist, the
+reminder notification opens a quick log, and regular medications can be
+logged with one tap." Owner decisions (2026-10-01):
 
-1. **Two new tables** — `saved_meal` + `saved_meal_component` (mirrors
-   `meal_component`), additive migration **0013**, backups **v7**. A
-   template never is, or links to, a log entry.
-2. **Created from meal review** ("Save as my meal"), **listed on Home** above
-   Recent ("My meals"), **edited/deleted from that list**.
-3. **Tapping a saved meal opens the prefilled review** (time = now) — exactly
-   like tapping a Recent row. Editing a template never changes past meals.
-4. **Opt-in backfill, per meal:** after saving a template that has
-   ingredient tags, offer to add them to past meals with the same name that
-   have none. Explicit choice only; additive tags only.
+1. **Favourites = My meals (#25), ordered by meal time.** No new concept.
+   Where a meal slot is known — from a reminder, or from the time of day on
+   Home — saved meals with that slot come first.
+2. **Tapping a breakfast/lunch/dinner reminder opens a quick-log screen** for
+   that slot: matching My meals first, then the other My meals, then Recent.
+   Tapping one opens the prefilled review with the slot set and time = now.
+   The notification itself does not change.
+3. **A "Regular" switch per medication** — additive column, migration
+   **0014**. A regular medication must have a default dose and unit.
+   "Took my regular meds" logs exactly the **active** regular medications.
+4. **One tap saves at once, with Undo** — one dose event (time = now, each
+   medication's default dose + unit). The button is on the Meds tab and the
+   quick-log screen.
 
 Plan-session judgments (flag them in your summary; owner may override):
-- **Names are unique, case-insensitively** (`nameKey` = trimmed lowercase).
-  "Save as my meal" with a name that exists asks **Replace** / Cancel.
-- **Backfill target** = food entries (meal/snack) whose trimmed lowercase
-  name equals the template's `nameKey` **and** whose own `tagsJson` parses
-  empty. Their `tagsJson` becomes the template's tag union, and their
-  `ingredientsText` is set from the template **only if it is null/empty**.
-  Components of those past entries are never touched. Tags already present
-  anywhere → the entry is not a target (never merged into).
-- **Per-item edit on the review screen** (tap an item's name → the existing
-  item form, prefilled; "Save item" replaces it). Needed to edit a template's
-  ingredients; logging a meal gets it too.
-- **Restore:** a backup's saved meal is skipped when its id **or** its
-  `nameKey` already exists on the device (device wins, like check-ins).
-- My meals sort **A–Z** (no usage tracking — there is no link to entries).
+- **Time-of-day slot on Home:** 05:00–10:59 breakfast, 11:00–15:59 lunch,
+  16:00–21:59 dinner, otherwise none (plain A–Z). Read once per mount.
+- **Quick-log sets the slot:** a meal opened from the quick-log screen gets
+  the screen's slot even if the saved meal has another one (the user said
+  "this is breakfast" by tapping the breakfast reminder).
+- **Undo = delete that one event** (`deleteMedicationEvent`), offered
+  inline until the user leaves the screen. After a successful log the button
+  is replaced by the "Logged … · Undo" line, so a double tap can't log twice.
+- **Backups → v8** (medication rows carry `isRegular`; absent = false).
+- Already-scheduled reminders keep working: the tap handler keys on the
+  existing `content.data.slot`, so no reschedule is needed.
 
 ---
 
 ## 0. Invariants — read twice
 
-- **No existing number changes on its own.** Saving, editing, deleting or
-  re-logging a template never touches log entries. The **only** path that
-  changes history is the backfill, and only after the user taps "Add" in
-  its confirmation.
-- **Copy, never link.** Re-log copies the template's items into the builder
-  (like Recent); the saved meal row and the new entry share nothing.
-- **Synchronous repository transactions** (CLAUDE.md §0): template
-  create/replace/delete and the backfill each run in ONE `db.transaction`
-  with only `.run()/.all()/.get()` inside; ids and timestamps computed first.
-- Tags are derived exactly as today (`unionComponentTags`, the item form's
-  `extractTags`); never invent a new parser.
-- Every interactive element gets an `accessibilityLabel`; give rows a
-  `testID` (Maestro will drive them).
-- Stage by path; LF; no `@ts-ignore` / lint disables / bare `any`.
+- **A notification is never a record.** Tapping a reminder only navigates.
+  Nothing is logged until the user taps a meal and saves, or taps "Took my
+  regular meds".
+- **Doses are only ever written by an explicit tap** (CLAUDE.md §0,
+  medications): "Took my regular meds" writes one event through the existing
+  `createMedicationEvent` — never on a schedule, never from `frequency`.
+  Each dose snapshots the medication's default dose/unit at tap time.
+- **Copy, never link** for meals (as #25): the quick log copies a template's
+  or a past entry's items into the builder.
+- Existing behaviour unchanged: Home's existing buttons, Recent, My meals tap/
+  Edit, reminders scheduling, the check-in and experiment notification
+  handlers.
+- Synchronous repository transactions; every interactive element has an
+  `accessibilityLabel` and a `testID`; stage by path; LF; no `@ts-ignore` /
+  lint disables / bare `any`.
 
-## 1. Schema + migration 0013 — `src/db/schema.ts`
+## 1. Schema + migration 0014
 
-```ts
-export const savedMeal = sqliteTable('saved_meal', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  /** Trimmed, lowercased name — unique; the backfill and Replace match on it. */
-  nameKey: text('name_key').notNull().unique(),
-  type: text('type', { enum: FOOD_TYPES }).notNull(),   // match how logEntry.type is declared
-  mealSlot: text('meal_slot', { enum: MEAL_SLOTS }),    // nullable
-  createdAt: integer('created_at').notNull(),
-  updatedAt: integer('updated_at').notNull(),
-});
+`medication.isRegular` — `integer('is_regular', { mode: 'boolean' }).notNull().default(false)`
+(mirror how `isActive` is declared). `npm run db:generate` → `0014_*.sql`
+must be a single `ALTER TABLE \`medication\` ADD \`is_regular\` …` (paste it
+in your summary). Migration harness test like the previous ones.
 
-export const savedMealComponent = sqliteTable(
-  'saved_meal_component',
-  {
-    id: text('id').primaryKey(),
-    savedMealId: text('saved_meal_id').notNull(),
-    // ...every other column of meal_component, same names/types/defaults
-    // (name, barcode, servings, servingG, the nutrition reals, ingredientsText,
-    // tagsJson, sortOrder, createdAt)
-  },
-  (table) => [index('saved_meal_component_saved_meal_id_idx').on(table.savedMealId)],
-);
-```
+Backup **v8**: medication rows serialise `isRegular`; `parseBackupJson`
+defaults a missing/non-boolean `isRegular` to `false`; v1–v7 files import
+unchanged. Tests: v8 round trip, a v7 medication imports as not regular.
 
-Match how `logEntry`/`mealComponent` declare enums and defaults (read them
-first). `npm run db:generate` → `0013_*.sql` + meta + `migrations.js`; paste
-the SQL in your summary. It must be CREATE TABLE / CREATE INDEX only.
-Migration harness test like the previous ones (`src/db/__tests__/`).
+Commit: `feat(db): medication is_regular + additive migration 0014, backup v8`.
 
-Commit: `feat(db): saved_meal tables + additive migration 0013`.
+## 2. Regular medications — pure + repository + form
 
-## 2. Pure helpers — `src/lib/savedMeals.ts`
+- `src/lib/medications.ts` (or the closest existing pure module):
+  `regularDoses(meds: Medication[]): MedicationDoseInput[]` — active AND
+  regular AND `defaultDose > 0` AND a non-empty `doseUnit`, in the order the
+  Meds tab lists them; `{ medicationId, dose: defaultDose, doseUnit }`.
+- `validateMedication` / the form model: a new `isRegular` boolean in the
+  form state and the built medication; **regular requires a default dose and
+  a unit** — error on the dose field: "A regular medication needs a default
+  dose and unit." (or the unit field when only that's missing; your call,
+  say which).
+- `MedicationForm.tsx`: a "Regular — I take this every day" switch
+  (`accessibilityLabel="Regular medication"`, `testID="medication-regular"`),
+  with a one-line hint that it powers "Took my regular meds". Create/update
+  pass it through.
+- Repository: create/update accept `isRegular`; nothing else changes.
 
-- `savedMealNameKey(name: string): string` — trim + lowercase.
-- `savedMealToDrafts(components: SavedMealComponent[]): MealComponentDraft[]`
-  — sorted by `sortOrder`, dropping `id`/`savedMealId`/`createdAt`.
-- `backfillTargets(entries: LogEntry[], nameKey: string): LogEntry[]` — the
-  rule above (food types only; name match by `savedMealNameKey(entry.name)`;
-  `parseTagsJson(entry.tagsJson).length === 0`).
-- `validateSavedMealName(name)` → error string or null (required, ≤ the same
-  max length the meal name uses, if any).
+Tests: `regularDoses` (inactive, not regular, missing dose/unit, order),
+validation, form switch round trip, repository create/update with the flag.
 
-Unit tests for each (case/whitespace matching, snacks included, BMs/symptoms
-excluded, an entry with any tag excluded, empty template tags → no targets
-needed — the UI never offers).
+Commit: `feat(meds): regular medications`.
 
-## 3. Repository — `src/db/repository.ts`
+## 3. "Took my regular meds" — `src/features/medications/RegularMedsButton.tsx`
 
-- `listSavedMeals(): Promise<{ meal: SavedMeal; components: SavedMealComponent[] }[]>` — A–Z by name.
-- `findSavedMealByNameKey(nameKey)`.
-- `saveSavedMeal(input: { id?: string; name; type; mealSlot; components: MealComponentDraft[] }): Promise<SavedMeal>`
-  — create when no `id`; with `id`, replace that template's fields and ALL
-  its components (delete + insert) in one transaction. If another template
-  already holds the `nameKey`, the caller must have asked to Replace: in that
-  case pass `replaceId` (that template's id) and the function overwrites it
-  instead (same transaction). Never two rows with one `nameKey`.
-- `deleteSavedMeal(id)` — the meal and its components, one transaction.
-- `backfillSavedMealTags(nameKey, tags: string[], ingredientsText: string | null): Promise<number>`
-  — reads the targets (`backfillTargets` over the food entries), then in ONE
-  transaction sets `tagsJson` (+ `ingredientsText` when the entry's is
-  null/empty) and `updatedAt` on each; returns the count. Recomputes targets
-  inside the call, never trusts a stale count from the UI.
-- A live hook `useSavedMeals()` in the style of the existing live hooks
-  (`useDayFactors` etc.).
+A self-contained component used on the Meds tab and the quick-log screen:
 
-Real-SQLite repository tests (`src/db/__tests__/`, see CLAUDE.md §0): create,
-replace by id, replace by name clash, delete removes components, backfill
-updates only targets and leaves tagged/other-name/non-food rows byte-identical,
-backfill count, and an atomicity test like `repository.atomicity.test.ts`
-(force a failure mid-transaction → nothing written).
+- Renders nothing when `regularDoses(activeMeds)` is empty.
+- Otherwise a button "Took my regular meds" (`testID="regular-meds-log"`,
+  accessibilityLabel "Took my regular meds: <names>") with a one-line list
+  of what it will log ("Levothyroxine 50 mcg · Vitamin D 1000 unit").
+- Tap → in-flight guard → `createMedicationEvent({ takenAt: now, timeKnown:
+  true, notes: null }, regularDoses(meds))` → the button is replaced by
+  "Logged at 8:02 · Undo" (`testID="regular-meds-undo"`, Undo
+  accessibilityLabel "Undo regular meds log"). Undo →
+  `deleteMedicationEvent(event.id)` → back to the button. Errors → an Alert,
+  nothing else changes.
+- Meds tab: place it at the top of the screen's content, above the list.
 
-## 4. Backup v7 — `src/lib/backup.ts` + export/import call sites
+Tests: hidden with none; tap writes exactly one event with the right doses
+(and only active regular ones); a second tap while in flight writes nothing;
+Undo deletes that event id; failure shows an Alert.
 
-- `BackupFile.savedMeals?` and `savedMealComponents?` ("Absent before v7");
-  `entriesToJson` gains both params (defaults `[]`), version 7.
-- `parseBackupJson` normalises them like the other arrays; v1–v6 files
-  import with none.
-- Restore: skip a saved meal whose `id` or `nameKey` exists on the device
-  (and skip its components); insert the rest with their components. Mirror
-  the day-factor restore's batching.
-- Tests: v7 round trip, v6 file imports with zero saved meals, a clash by
-  name keeps the device's row and its components.
+Commit: `feat(meds): one-tap "Took my regular meds" with Undo`.
 
-Commit: `feat(meals): saved-meal repository, live hook, backup v7`.
+## 4. Meal-time ordering + shared launchers
 
-## 5. Screens
+- Pure (`src/lib/savedMeals.ts`): `slotForHour(hour: number): MealSlot | null`
+  per the judgment above; `orderSavedMealsForSlot(items, slot)` — items whose
+  `meal.mealSlot === slot` first (A–Z), then the rest (A–Z); `slot = null` →
+  unchanged A–Z.
+- Extract Home's `handleRecentTap` / `handleMyMealTap` / `handleMyMealEdit`
+  into a hook `src/features/logging/useBuilderLaunchers.ts` (same in-flight
+  guard, same Alert on failure) with an optional `slot` override applied to
+  the review prefill's `mealSlot`. Home uses it with no override (behaviour
+  identical — existing Home tests must pass unmodified) and orders My meals
+  by `slotForHour(new Date(now).getHours())`.
 
-### 5a. Builder mode — `src/features/logging/mealBuilderStore.ts`
+Tests: `slotForHour` boundaries (04:59, 05:00, 10:59, 11:00, 15:59, 16:00,
+21:59, 22:00), ordering, the hook's override.
 
-Add `editingSavedMealId: string | null` (default null). `load(...)` and
-`clear()` reset it to null; a new `loadSavedMealForEdit(id, components,
-prefill)` sets components + prefill + the id. Every existing caller keeps
-today's behaviour.
+Commit: `feat(logging): meal-time ordering for My meals; shared builder launchers`.
 
-### 5b. Review screen — `src/app/meal/review.tsx`
+## 5. Quick-log screen + reminder tap
 
-- **Logging mode** (`editingSavedMealId === null`, today's screen) gains a
-  secondary **"Save as my meal"** button above "Save meal"
-  (`accessibilityLabel="Save as my meal"`, `testID="review-save-as-my-meal"`),
-  enabled when there's ≥ 1 item and the name validates. It saves the items
-  (with their current servings), name, type and slot — **not** date/time or
-  notes — and stays on the screen (a brief confirmation, e.g. the button
-  label turns to "Saved to My meals"). Name clash → `Alert` "Replace
-  '<name>' in My meals?" [Cancel] [Replace]. Then the backfill offer (5d).
-- **Template mode** (`editingSavedMealId` set): title/heading "Edit my
-  meal"; hide date/time, notes, the goal-cap notice; the primary button is
-  **"Save changes"** (`testID="review-save-changes"`) → `saveSavedMeal({ id, … })`
-  (rename into another template's name → the same Replace alert), then the
-  backfill offer, then `clearBuilder()` + `router.back()`. A **"Delete my
-  meal"** button (`testID="review-delete-my-meal"`, danger) with a confirm
-  Alert → `deleteSavedMeal` → clear → back. The watched-ingredient notice
-  stays (useful context).
-- **Per-item edit (both modes):** each item row's name becomes a Pressable
-  (`accessibilityLabel="Edit <name>"`, `testID="component-<i>-edit"`) →
-  `router.push({ pathname: '/meal/component', params: { edit: String(i) } })`.
-  Servings stepper and Remove unchanged.
+- Route `src/app/quick-log.tsx` (`/quick-log?slot=breakfast`, registered in
+  `_layout.tsx` like the other stack screens, title "Log breakfast" etc.).
+  Invalid/missing slot → behave as no slot (title "Quick log").
+  Content, top to bottom: `RegularMedsButton`; "My meals" (ordered for the
+  slot, rows like Home's but without Edit, testID `quick-my-meal-<slug>`);
+  "Recent" (`RecentFoodPicker`, same data source as Home); and the two
+  existing ways in ("Scan barcode", "Add an entry manually") — those clear
+  the builder and also carry the slot into the review prefill (check how the
+  scan/manual path builds its prefill; if carrying the slot there needs more
+  than a small change, leave them as plain links and say so).
+  Tapping a meal → `useBuilderLaunchers({ slot })` → `/meal/review`.
+- `src/features/notifications/useMealReminderResponses.ts`, sibling of
+  `useExperimentNotificationResponses` (copy its once-per-identifier guard
+  and `clearLastNotificationResponse`): a **default tap** on a notification
+  whose `content.data.slot` is a `ReminderSlot` → `router.push({ pathname:
+  '/quick-log', params: { slot } })`. Pure parser
+  `parseMealReminderResponse` in `notifications/model.ts`. Mounted on Home
+  next to the other two hooks. Ignores every other slot / action.
 
-### 5c. Item form — `src/app/meal/component.tsx`
+Tests: parser (each slot, other slots, non-default action, bad data);
+hook navigates once per identifier; quick-log screen renders sections,
+orders for the slot, applies the slot to the prefill, hides meds button
+with no regular meds; Home still passes unmodified (add the new hook's mock
+the way the other two are mocked — that's the only allowed Home-test edit).
 
-With an `edit` param: `ComponentForm initial` = that draft (map draft →
-form state the same way the existing saved-component edit screen does —
-reuse its mapper, don't write a second one), `submitLabel="Save item"`, no
-secondary; submit → `updateComponent(index, draft)` (keep its `sortOrder`)
-→ `router.back()`. Without the param, today's behaviour exactly.
-
-### 5d. Backfill offer (after any template save that has ≥ 1 tag)
-
-Count `backfillTargets` (from the live entries); if > 0, `Alert`:
-title "Add ingredients to past meals?", body "Add these ingredients to N
-past '<name>' meals that don't have any? This updates your Insights."
-[Not now] [Add]. Add → `backfillSavedMealTags` → a short confirmation.
-No offer when the count is 0 or the template has no tags.
-
-### 5e. Home — `src/app/(tabs)/index.tsx`
-
-A **"My meals"** section above Recent, only when ≥ 1 saved meal: one row per
-meal (A–Z) — the name (+ "N items"), the whole row a Pressable
-(`accessibilityLabel="Log <name>"`, `testID="my-meal-<slug>"`) that behaves
-like `handleRecentTap` (same in-flight guard; `load(savedMealToDrafts(...),
-{ name, type, mealSlot })` → `/meal/review`, time defaults to now), and an
-**"Edit"** link (`accessibilityLabel="Edit <name>"`, `testID="my-meal-<slug>-edit"`)
-→ `loadSavedMealForEdit` → `/meal/review`. Keep it compact; if the list is
-long it must not push Recent off-screen — cap the visible rows (e.g. 5) with
-the rest reachable by scrolling inside the section, your call, say what you
-chose.
-
-Tests (component, `--runTestsByPath` for `(tabs)` paths): Home section
-hidden with none / listed A–Z / tap loads the builder and navigates / Edit
-loads template mode; review: Save as my meal (new, clash → Replace,
-Cancel), template mode hides date/notes and Save changes / Delete work,
-per-item edit replaces the item, backfill Alert appears only with targets
-and only Add writes; component screen edit mode.
-
-Commit: `feat(meals): My meals on Home, save/edit/delete from review, per-item edit, backfill offer`.
+Commit: `feat(logging): quick-log screen opened by meal reminders`.
 
 ## 6. Definition of done
 
 - `npm run typecheck`, `npm run lint` (0 warnings), `npm run bundle:check`.
 - **Targeted Jest only (never the full suite):** files you created/touched,
-  all `src/db/__tests__/*`, `src/lib/__tests__/{backup,savedMeals,mealAggregate}*`,
-  `src/features/logging/__tests__/*`, `src/app/meal/__tests__/*`, Home
-  (`npx jest --runTestsByPath "src/app/(tabs)/__tests__/index.test.tsx"`),
-  settings (`--runTestsByPath` for `settings.test.tsx`) if export/import
-  call sites changed there, plus `src/features/analysis/__tests__/*`
-  (must pass unmodified — nothing there should change).
-- No `@ts-ignore`, no lint disables, no `any` without `// reason:`, no deps,
-  no schema change beyond §1. Don't run Maestro/EAS/`expo start`/adb; don't
-  edit `flows/`, `CLAUDE.md`, `docs/`; don't push or merge.
-- Commits (stage by path), each as soon as its tests pass:
-  `feat(db): saved_meal tables + additive migration 0013` ·
-  `feat(meals): saved-meal repository, live hook, backup v7` ·
-  `feat(meals): My meals on Home, save/edit/delete from review, per-item edit, backfill offer`
-  (split the last if it gets large — e.g. per-item edit first) — each ending
-  `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`.
+  all `src/db/__tests__/*`, `src/lib/__tests__/{backup,savedMeals,medications,validation}*`,
+  `src/features/{medications,notifications,logging,checkin,experiments}/__tests__/*`,
+  `src/app/medication/__tests__/*`, `src/app/meal/__tests__/*`, and via
+  `--runTestsByPath`: Home `index.test.tsx`, Meds `meds.test.tsx`,
+  `settings.test.tsx` (export/import call sites), plus any new screen test.
+- No deps, no schema change beyond §1. Don't run Maestro / EAS / `expo
+  start` / adb; don't edit `flows/`, `CLAUDE.md`, `docs/`; don't push or merge.
+- If an existing test must change, only because the spec changes that
+  behaviour (e.g. backup version 7 → 8, a mock gaining a function) — list
+  each one with the reason.
+- Commits as listed (stage by path), each as soon as its tests pass, each
+  ending `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`.
 - **Execute summary:** files per commit + hashes; the generated SQL
-  verbatim; rung results; targeted Jest counts; a worked backfill example
-  pasted from a test (entries before → targets → after); every existing test
-  touched and why; deviations; review pointers (template mode vs logging
-  mode leaks, the Replace path, the backfill target rule).
+  verbatim; rung results; targeted Jest counts; every existing test touched
+  and why; deviations; review pointers (the in-flight/Undo guard, the slot
+  override path, the response hook's guard).
