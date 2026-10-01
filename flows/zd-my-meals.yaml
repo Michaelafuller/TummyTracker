@@ -1,0 +1,150 @@
+appId: com.tummytracker.app.dev
+# ZD — Saved meals / "My meals" (GitHub #25, 2026-09-30). Written while the
+# phone was disconnected — expect small flow-side fixes on the first run.
+#   - Seed a past name-only meal: "Mom's lasagna", one manual item, no
+#     ingredients (stored with only its name as a tag)
+#   - Build the template: the same name, ingredients "pasta, cheese", 300 kcal
+#     → Save as my meal → the backfill offer names 1 past meal → Add
+#   - Home lists it under My meals; tapping it opens review prefilled
+#     (300 kcal) → Save meal logs a copy
+#   - Edit: servings 1 → 2 (600 kcal) → Save changes (no offer: nothing
+#     name-only is left) → reopening shows 600 kcal
+#   - Delete my meal → the My meals section is gone
+# The backfilled tags themselves aren't visible in any screen — Jest covers
+# them (src/db/__tests__/repository.savedMeals.test.ts).
+---
+- launchApp:
+    clearState: true
+- runFlow: _helpers/reconnect-dev-client.yaml
+
+# --- Seed: a past meal logged by name only ---
+- tapOn: "Add an entry manually"
+- tapOn: "Component name"
+- inputText: "Mom's lasagna"
+- runFlow: _helpers/dismiss-keyboard.yaml
+- scrollUntilVisible:
+    element:
+      text: "Finish meal"
+    direction: DOWN
+- tapOn: "Finish meal"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "Save meal"
+    direction: DOWN
+- tapOn: "Save meal"
+- waitForAnimationToEnd
+
+# --- Build the template with ingredients and save it to My meals ---
+- tapOn: "Add an entry manually"
+- tapOn: "Component name"
+- inputText: "Mom's lasagna"
+- runFlow: _helpers/dismiss-keyboard.yaml
+- scrollUntilVisible:
+    element:
+      text: "Ingredients (optional)"
+    direction: DOWN
+- tapOn: "Ingredients"
+- inputText: "pasta, cheese"
+- runFlow: _helpers/dismiss-keyboard.yaml
+- scrollUntilVisible:
+    element:
+      text: "Calories"
+    direction: DOWN
+    centerElement: true
+- tapOn: "Calories"
+- inputText: "300"
+- runFlow: _helpers/dismiss-keyboard.yaml
+- scrollUntilVisible:
+    element:
+      text: "Finish meal"
+    direction: DOWN
+- tapOn: "Finish meal"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      id: "review-save-as-my-meal"
+    direction: DOWN
+- tapOn:
+    id: "review-save-as-my-meal"
+- waitForAnimationToEnd
+# The opt-in backfill offer: exactly the one name-only past meal.
+- assertVisible: "Add ingredients to past meals.*"
+- assertVisible: "Add these ingredients to 1 past 'Mom's lasagna' meal that.*"
+- tapOn: "Add"
+- waitForAnimationToEnd
+- assertVisible: "Updated 1 past meal.*"
+- tapOn: "OK"
+- assertVisible: "Saved to My meals"
+# Leave without logging this one.
+- back
+- waitForAnimationToEnd
+
+# --- Re-log from My meals ---
+- scrollUntilVisible:
+    element:
+      id: "my-meals-section"
+    direction: DOWN
+- tapOn:
+    id: "my-meal-mom-s-lasagna"
+- waitForAnimationToEnd
+- assertVisible:
+    id: "component-0"
+- assertVisible:
+    id: "component-0-kcal"
+    text: "300 kcal"
+- scrollUntilVisible:
+    element:
+      text: "Save meal"
+    direction: DOWN
+- tapOn: "Save meal"
+- waitForAnimationToEnd
+
+# --- Edit: 2 servings, Save changes ---
+- scrollUntilVisible:
+    element:
+      id: "my-meal-mom-s-lasagna-edit"
+    direction: DOWN
+- tapOn:
+    id: "my-meal-mom-s-lasagna-edit"
+- waitForAnimationToEnd
+- assertVisible:
+    id: "review-template-heading"
+- assertNotVisible: "Save meal"
+- tapOn:
+    id: "component-0-servings-inc"
+- assertVisible:
+    id: "component-0-kcal"
+    text: "600 kcal"
+- scrollUntilVisible:
+    element:
+      id: "review-save-changes"
+    direction: DOWN
+- tapOn:
+    id: "review-save-changes"
+- waitForAnimationToEnd
+# No offer this time: the backfilled meal and the re-logged copy both have ingredients.
+- assertNotVisible: "Add ingredients to past meals.*"
+- scrollUntilVisible:
+    element:
+      id: "my-meal-mom-s-lasagna-edit"
+    direction: DOWN
+- tapOn:
+    id: "my-meal-mom-s-lasagna-edit"
+- waitForAnimationToEnd
+- assertVisible:
+    id: "component-0-kcal"
+    text: "600 kcal"
+
+# --- Delete it ---
+- scrollUntilVisible:
+    element:
+      id: "review-delete-my-meal"
+    direction: DOWN
+- tapOn:
+    id: "review-delete-my-meal"
+- assertVisible: "Delete 'Mom's lasagna'.*"
+- tapOn: "Delete"
+- waitForAnimationToEnd
+- assertNotVisible:
+    id: "my-meals-section"
