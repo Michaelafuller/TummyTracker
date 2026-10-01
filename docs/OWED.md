@@ -15,11 +15,12 @@ Status at a glance (2026-09-30):
   `f6e6593`), but it can't conflict: RESUME_HERE.md is a new file — delete it
   in the merge.
 - Branch `worktree-agent-a93006f35a36fc943` (worktree
-  `.claude/worktrees/agent-a93006f35a36fc943`) = #19–#24 on top of
+  `.claude/worktrees/agent-a93006f35a36fc943`) = #19–#25 on top of
   `39224e7`, reviewed, **unmerged, unpushed**; adds migrations **0011**
-  (`experiment`) and **0012** (`day_factor`) and backups **v5 → v6**.
+  (`experiment`), **0012** (`day_factor`) and **0013** (`saved_meal`,
+  `saved_meal_component`) and backups **v5 → v7**.
 - Device: Pixel 5, dev client = the 2026-08-29 EAS development build. All
-  #13–#24 work is JS + migrations — **no new build needed**.
+  #13–#25 work is JS + migrations — **no new build needed**.
 - Last device baseline: 34/34 Maestro on 2026-09-27. Last full Jest: 113 /
   1,168 on `main` (2026-09-27). The branch has only had targeted Jest since.
 
@@ -66,12 +67,12 @@ Then tell the orchestrator → it merges the branch into `main` (§2).
       `bundle:check` on `main`; record in `docs/RESULTS.md`.
 - [ ] Owner: **push** when happy.
 
-## 3. On the merged `main` — #19–#24
+## 3. On the merged `main` — #19–#25
 
 Flows:
 
 ```
-maestro test flows/z-experiment-start.yaml flows/zc-day-details.yaml --format junit --output flows/results-19-24.xml
+maestro test flows/z-experiment-start.yaml flows/zc-day-details.yaml flows/zd-my-meals.yaml --format junit --output flows/results-19-25.xml
 ```
 
 Verdict path (backdated fixture — covers #19, #20, #21 and #23 in one import):
@@ -101,6 +102,12 @@ Manual:
       phase boundary falls, or temporarily set the device clock.)
 - [ ] **#19 PDF:** "Elimination experiments" table (term, dates, status,
       frozen verdict).
+- [ ] **#25 My meals, by hand:** the My meals list on Home with 4+ saved
+      meals (it shows ~3 rows and scrolls inside itself — check it doesn't
+      fight the Recent list's scrolling); "Save as my meal" with a name you
+      already saved → Replace; an item's name on review → edit its
+      ingredients → Save item; export a backup and import it on top (no
+      duplicate saved meals).
 - [ ] **#24 chance line, by eye:** on your real journal, every finding card
       has a "Chance check: …" line under its confidence chip, and Insights
       doesn't feel slower to open (the check re-runs the analysis ~30× per
@@ -125,7 +132,7 @@ Manual:
 ## 5. GitHub housekeeping (owner-only — the agent never moves cards)
 
 - [ ] Close / move to Done: **#1, #2, #4–#11** (2026-09-26 session), **#12**,
-      **#13–#18** (after §1), **#19–#23** (after §3), and #24+ as they ship.
+      **#13–#18** (after §1), **#19–#25** (after §3), and #26+ as they ship.
 
 ## 6. Decisions the owner may want to revisit (made as plan defaults)
 
@@ -138,6 +145,11 @@ Manual:
   the next), "more" caffeine, period.
 - Slower patterns (#21): a key that was only a hidden low-confidence 24 h
   signal can appear as a 48 h slower pattern.
+- Saved meals (#25): names unique ignoring case (a clash asks Replace);
+  backfill targets only past same-name meals with no ingredient tags and
+  never overwrites existing ingredient text (a name-only meal's text is its
+  item name, so it stays); restore keeps the device's template on a clash;
+  My meals sorted A–Z.
 - Chance check (#24): "this strong" = the card's tier or better; slides
   start 3 days from zero (a long rough streak overlapping a food eaten in
   a block still lines up at small slides, so the estimate errs high — the

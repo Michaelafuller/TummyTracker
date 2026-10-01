@@ -211,6 +211,22 @@
   lists (no low-only fallback, no cap) on the real journal and on every
   slide alike. Display-only: no number, tier, order or visibility changes;
   Insights only (not the PDF or the detail screen). Deterministic.
+- **Saved meals / "My meals" (owner-decided 2026-09-30, GitHub #25).**
+  Templates live in `saved_meal` + `saved_meal_component` (0013, backups
+  v7) and never are, or link to, a log entry. Created with "Save as my
+  meal" on meal review; listed A–Z on Home above Recent; tapping one
+  copies its items into the builder (time = now) like a Recent row;
+  "Edit" opens review in **template mode** (builder store
+  `editingSavedMealId`; no date/notes/cap notice; Save changes / Delete my
+  meal). Names unique case-insensitively (`nameKey`); a clash asks to
+  Replace. Review items are editable in place (tap the name). **Opt-in
+  backfill** after a template save whose items carry ingredient tags:
+  past same-name food entries whose tags are **only names** (their own or
+  their items' — `createMealWithComponents` always adds item names, so
+  "no tags at all" would match nothing since the builder; review
+  2026-09-30) get the template's tags merged in, in one transaction; text
+  only fills an empty `ingredientsText`. Restore: the device's template
+  wins an id or name clash.
 - **Real-SQLite repository tests (2026-09-27, GitHub #18).** `jest/expo-sqlite-node.ts`
   is a Jest-only fake `expo-sqlite` backed by Node's built-in `node:sqlite`
   (**Node ≥ 22.13 to run the tests**; no dependency). A DB test file starts
@@ -360,6 +376,13 @@ MVP entities:
     (`none|usual|more`), `period` (boolean; shown/analysed only when
     Track period is on) — all nullable (null = not logged), `createdAt`,
     `updatedAt`. Backups v6.
+
+- **savedMeal** (`saved_meal`, migration 0013 — GitHub #25)
+  - `id`, `name`, `nameKey` (trimmed lowercase, **unique**), `type`
+    (`meal|snack`), `mealSlot` (nullable), `createdAt`, `updatedAt`.
+  - Items in `saved_meal_component`: every `meal_component` column with
+    `savedMealId` instead of `entryId`. A template is never a log entry.
+    Backups v7.
 
 Conventions:
 - Timestamps stored as Unix epoch (ms) integers.

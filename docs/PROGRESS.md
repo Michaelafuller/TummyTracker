@@ -160,6 +160,16 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   Review fix: the suspect must have been eaten in the baseline, otherwise a
   "drop" while avoiding it proves nothing (new inconclusive rule + preview
   warning); the watchlist store now refreshes after a start.
+- **Saved meals / "My meals" (GitHub #25):** "Save as my meal" on meal
+  review; a My meals list on Home (tap = prefilled review like Recent,
+  Edit = review in template mode with Save changes / Delete); items on
+  review are now editable in place; new tables `saved_meal` +
+  `saved_meal_component` (0013), backups v7. Opt-in backfill gives past
+  same-name, ingredient-less meals the template's ingredients. Review fix:
+  the backfill required "no tags at all", but the builder always tags a
+  meal with its item names, so it matched nothing logged since the builder
+  (now: only-name tags count as no ingredients, merged additively; the
+  offer needs real ingredient tags). Flow `zd-my-meals`.
 - **"By chance" indicator (GitHub #24):** every Insights finding card now
   says how many findings this strong luck alone would produce: "Chance
   check: of 42 ingredients checked, luck alone would make about 1 look this
@@ -283,7 +293,7 @@ analysis.
 | 11 | ~~**Dose-response** (GH #22)~~ — *✅ 2026-09-30 (on the #19 branch)* | Servings are stored, but the engine appears to treat an ingredient as present/absent — "a splash of milk is fine, a latte isn't" is exactly what the app should find. | S spike → M | First confirm in `temporal.ts` whether servings are ignored (not verified in review). |
 | 12 | ~~**Confounder tracking** (GH #23)~~ — *✅ 2026-09-30 (device check owed; on the #19 branch)* | Sleep, stress, menstrual cycle, alcohol and caffeine drive gut symptoms and currently land on food. Even one daily "stress 1–5" helps. | M | Could fold into #2's daily check-in. Additive migration. |
 | 13 | ~~**"By chance" indicator on findings** (GH #24)~~ — *✅ 2026-09-30 (device check owed; on the #19 branch)* | Many ingredients × few logs = some spurious correlations. Show how many findings like this you'd expect by chance. | S–M | Complements the existing confidence tiers. |
-| 14 | **Saved recipes / "my meals" with ingredients** (GH #25) | Homemade and restaurant food has a name but no ingredients, blinding the ingredient engine where it matters most. | M | Re-used like Recent meals. |
+| 14 | ~~**Saved recipes / "my meals" with ingredients** (GH #25)~~ — *✅ 2026-09-30 (device check owed; on the #19 branch)* | Homemade and restaurant food has a name but no ingredients, blinding the ingredient engine where it matters most. | M | Re-used like Recent meals. |
 | 15 | **Faster logging** (GH #26) | Favourites ("usual breakfast"), log straight from the reminder notification (subsumes the reminder deep-link), one-tap "took my regular meds". Adherence and data quality die when logging is tedious. | M | |
 | 16 | **Optional app lock** (GH #27) | Sensitive health data (BMs, symptoms, medications) with no lock. | S–M | ⚠ likely `expo-local-authentication` — owner approval + CVE check. |
 | 17 | **Medication adherence view + as-needed reason** (GH #28) | "Taken 26 of 30 days" calendar; a reason field for as-needed doses ("ibuprofen — headache"). | S–M | Builds on Cycle B history. |

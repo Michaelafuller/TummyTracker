@@ -17,8 +17,8 @@
   - **Branch `worktree-agent-a93006f35a36fc943`** in the git worktree
     `C:\Users\E146796\projects\TummyTracker\.claude\worktrees\agent-a93006f35a36fc943`
     (its `node_modules` is a junction to the main checkout's) =
-    **#19 (A + B), #20, #21, #22, #23, #24**, all reviewed, unmerged, unpushed.
-    Migrations 0011 + 0012; backups v6. **This is where the burn-down
+    **#19 (A + B), #20, #21, #22, #23, #24, #25**, all reviewed, unmerged, unpushed.
+    Migrations 0011–0013; backups v7. **This is where the burn-down
     continues** — and where the newest `docs/` live (main's copies are
     stale; `docs/RESUME_HERE.md` on `main` points here).
 - **Owner's instruction (2026-09-30):** keep burning down the backlog on the
@@ -31,9 +31,8 @@
 ## 2. What's next
 
 Backlog: `docs/PROGRESS.md` → "Ranked backlog — continued" (GitHub #24–#30).
-Done so far this burn-down: #13–#24. **Next: #14 — saved recipes / "my
-meals" with ingredients (GH #25)**, then #15 faster logging
-(GH #26), #16 optional app lock (GH #27 — ⚠ likely a new dependency,
+Done so far this burn-down: #13–#25. **Next: #15 — faster logging
+(GH #26)**, #16 optional app lock (GH #27 — ⚠ likely a new dependency,
 `expo-local-authentication`: owner approval + CVE check), #17 medication
 adherence view (GH #28), #18 medication reminders (GH #29), #19 iOS pass
 (GH #30 — owner-only, no Mac here; goes to OWED.md).
