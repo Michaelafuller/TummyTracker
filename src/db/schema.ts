@@ -243,6 +243,44 @@ export type DayCheckIn = typeof dayCheckIn.$inferSelect;
 export type NewDayCheckIn = typeof dayCheckIn.$inferInsert;
 
 /**
+ * Daily confounders (GitHub #23): sleep, stress, alcohol, caffeine, period.
+ * Invariants:
+ * - One row per local calendar day (`date`, 'YYYY-MM-DD', unique); every
+ *   factor column is nullable. Null means "not logged" — never a low value.
+ *   Nothing is inferred: only an explicit tap writes a value, and clearing a
+ *   chip writes null back.
+ * - A separate table from `day_check_in` because that table requires a
+ *   fine/rough answer and can't be relaxed additively.
+ * - Never an outcome and never a log entry — `isOutcome` does not read it.
+ *   A row only marks the day *covered* and feeds the daily-factor analysis
+ *   (`src/features/analysis/factors.ts`).
+ * - `stress` is an integer 1-5 (validated in the repository, not the DB).
+ * - `period` rows are kept when period tracking is turned off in Settings;
+ *   they are simply hidden and ignored until it is turned back on.
+ */
+export const SLEEP_LEVELS = ['poor', 'ok', 'good'] as const;
+export type SleepLevel = (typeof SLEEP_LEVELS)[number];
+export const ALCOHOL_LEVELS = ['none', 'some', 'a_lot'] as const;
+export type AlcoholLevel = (typeof ALCOHOL_LEVELS)[number];
+export const CAFFEINE_LEVELS = ['none', 'usual', 'more'] as const;
+export type CaffeineLevel = (typeof CAFFEINE_LEVELS)[number];
+
+export const dayFactor = sqliteTable('day_factor', {
+  id: text('id').primaryKey(),
+  // Local calendar day 'YYYY-MM-DD' (formatDateInput) — one row per day.
+  date: text('date').notNull().unique(),
+  sleep: text('sleep', { enum: SLEEP_LEVELS }),
+  stress: integer('stress'),
+  alcohol: text('alcohol', { enum: ALCOHOL_LEVELS }),
+  caffeine: text('caffeine', { enum: CAFFEINE_LEVELS }),
+  period: integer('period', { mode: 'boolean' }),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+export type DayFactor = typeof dayFactor.$inferSelect;
+export type NewDayFactor = typeof dayFactor.$inferInsert;
+
+/**
  * An elimination experiment (GitHub #19, Cycle A). Invariants (see
  * `src/features/experiments/engine.ts` for the schedule/verdict math this
  * table drives):

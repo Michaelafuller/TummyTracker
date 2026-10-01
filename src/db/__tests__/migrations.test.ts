@@ -70,4 +70,12 @@ describe('migrations', () => {
     expect(sql).not.toMatch(/drop table/i);
     expect(sql).not.toMatch(/alter table/i);
   });
+
+  it('0012 creates the day_factor table and its unique date index, touching no existing table (GitHub #23)', () => {
+    const sql = readMigration('0012');
+    expect(sql).toMatch(/create table `day_factor`/i);
+    expect(sql).toMatch(/create unique index `day_factor_date_unique`/i);
+    expect(sql).not.toMatch(/drop table/i);
+    expect(sql).not.toMatch(/alter table/i);
+  });
 });
