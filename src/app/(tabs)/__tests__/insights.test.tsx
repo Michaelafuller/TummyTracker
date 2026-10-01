@@ -6,8 +6,10 @@ import type { NutrientOutcomeFinding, OutcomeFinding } from '@/features/analysis
 import InsightsScreen, { nutrientSentence, outcomeSentence } from '../insights';
 
 let mockEntries: unknown[] = [];
+let mockComponents: unknown[] = [];
 jest.mock('@/features/logging/useEntries', () => ({
   useAllEntries: () => mockEntries,
+  useAllMealComponents: () => mockComponents,
 }));
 
 let mockCheckIns: { date: string }[] = [];
@@ -85,6 +87,7 @@ const baseEntry = {
 
 beforeEach(() => {
   mockPush.mockClear();
+  mockComponents = [];
   mockCheckIns = [];
   mockMeds = [];
   mockMedEvents = [];
@@ -641,5 +644,150 @@ describe('reaction latency and slower patterns (GitHub #21)', () => {
 
     expect(getByText('Ingredients linked to rough outcomes')).toBeTruthy();
     expect(queryByText(/Slower patterns/)).toBeNull();
+  });
+});
+
+describe('dose-response line on food and ingredient cards (GitHub #22)', () => {
+  let seq = 0;
+  beforeEach(() => {
+    seq = 0;
+  });
+
+  /**
+   * One meal per `[servings, delayH]` pair, 72 h apart: delayH is the hours
+   * until a symptom (null = no symptom). Each meal gets one component row
+   * carrying the servings (and the tags, when given).
+   */
+  function dosedMeals(name: string, tags: string | null, spec: [number, number | null][], startH = 0) {
+    const out: unknown[] = [];
+    spec.forEach(([servings, delayH], i) => {
+      const id = `dm${seq++}`;
+      const loggedAt = (startH + i * 72) * HOUR;
+      out.push({ ...baseEntry, id, type: 'meal', name, loggedAt, tagsJson: tags });
+      mockComponents.push({
+        id: `dc${seq++}`,
+        entryId: id,
+        name,
+        barcode: null,
+        servings,
+        tagsJson: tags,
+        sortOrder: 0,
+        createdAt: 0,
+      });
+      if (delayH != null) {
+        out.push({ ...baseEntry, id: `ds${seq++}`, type: 'symptom', name: 'Symptom', loggedAt: loggedAt + delayH * HOUR, severity: 4 });
+      }
+    });
+    return out;
+  }
+  function quietRice(count: number) {
+    return Array.from({ length: count }, (_, i) => ({
+      ...baseEntry,
+      id: `qr${seq++}`,
+      type: 'meal',
+      name: 'Rice',
+      loggedAt: (1000 + i * 72) * HOUR,
+      tagsJson: '["rice"]',
+    }));
+  }
+
+  // 8 Pasta meals: the four 2-serving ones are all followed by a symptom 3 h
+  // later, the four 1-serving ones never are.
+  const CLEAR: [number, number | null][] = [
+    [1, null],
+    [2, 3],
+    [1, null],
+    [2, 3],
+    [1, null],
+    [2, 3],
+    [1, null],
+    [2, 3],
+  ];
+
+  it('adds the dose line to a food card for a clear increase, leaving the existing numbers alone', async () => {
+    mockEntries = [...dosedMeals('Pasta', null, CLEAR), ...quietRice(8)];
+
+    const { getByText } = await renderScreen(<InsightsScreen />);
+
+    expect(getByText('Foods linked to rough outcomes')).toBeTruthy();
+    expect(getByText('4 of 8 meals were followed by a rough outcome within 24 h (50% vs 25% baseline).')).toBeTruthy();
+    expect(getByText('More than 1.5 servings: 4 of 4 (100%) · 1.5 or less: 0 of 4 (0%)')).toBeTruthy();
+  });
+
+  it('adds "of foods with it" wording on an ingredient card', async () => {
+    mockEntries = [...dosedMeals('Pasta', '["gluten"]', CLEAR), ...quietRice(8)];
+
+    const { getByText, getAllByText } = await renderScreen(<InsightsScreen />);
+
+    expect(getByText('Ingredients linked to rough outcomes')).toBeTruthy();
+    expect(getByText('More than 1.5 servings of foods with it: 4 of 4 (100%) · 1.5 or less: 0 of 4 (0%)')).toBeTruthy();
+    // ... and the same meals' food card uses the food wording.
+    expect(getAllByText('More than 1.5 servings: 4 of 4 (100%) · 1.5 or less: 0 of 4 (0%)')).toHaveLength(1);
+  });
+
+  it('shows no dose line when every meal is one serving', async () => {
+    mockEntries = [
+      ...dosedMeals('Pasta', null, CLEAR.map(([, delay]): [number, number | null] => [1, delay])),
+      ...quietRice(8),
+    ];
+
+    const { getByText, queryByText } = await renderScreen(<InsightsScreen />);
+
+    expect(getByText('Foods linked to rough outcomes')).toBeTruthy();
+    expect(queryByText(/More than/)).toBeNull();
+  });
+
+  it('shows no dose line without any component rows (flat entries count as 1)', async () => {
+    mockEntries = [...dosedMeals('Pasta', null, CLEAR), ...quietRice(8)];
+    mockComponents = [];
+
+    const { getByText, queryByText } = await renderScreen(<InsightsScreen />);
+
+    expect(getByText('Foods linked to rough outcomes')).toBeTruthy();
+    expect(queryByText(/More than/)).toBeNull();
+  });
+
+  it('shows no dose line when the larger amounts are not clearly worse', async () => {
+    // larger side 2 of 4 (50%) vs smaller 2 of 4 (50%)
+    const flat: [number, number | null][] = [
+      [1, 3],
+      [2, 3],
+      [1, 3],
+      [2, 3],
+      [1, null],
+      [2, null],
+      [1, null],
+      [2, null],
+    ];
+    mockEntries = [...dosedMeals('Pasta', null, flat), ...quietRice(8)];
+
+    const { getByText, queryByText } = await renderScreen(<InsightsScreen />);
+
+    expect(getByText('Foods linked to rough outcomes')).toBeTruthy();
+    expect(queryByText(/More than/)).toBeNull();
+  });
+
+  it('uses the 48 h instances on a slower-pattern card', async () => {
+    // Symptoms ~30 h after the meal: invisible at 24 h, so only the slower
+    // section shows it. 2-serving meals are always followed; 1-serving 2 of 4.
+    const slow: [number, number | null][] = [
+      [1, 30],
+      [2, 30],
+      [1, 30],
+      [2, 30],
+      [1, null],
+      [2, 30],
+      [1, null],
+      [2, 30],
+    ];
+    mockEntries = [...dosedMeals('Onion soup', '["onion"]', slow), ...quietRice(8)];
+
+    const { getByText, getAllByText, queryByText } = await renderScreen(<InsightsScreen />);
+
+    expect(queryByText('Foods linked to rough outcomes')).toBeNull();
+    expect(getByText('Slower patterns (within 48 h)')).toBeTruthy();
+    // ingredient card + food card, both from the 48 h instances.
+    expect(getAllByText(/^More than 1\.5 servings/)).toHaveLength(2);
+    expect(getByText('More than 1.5 servings: 4 of 4 (100%) · 1.5 or less: 2 of 4 (50%)')).toBeTruthy();
   });
 });

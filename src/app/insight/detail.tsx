@@ -1,13 +1,21 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { drilldownSummary, findingInstances, type DrilldownKind } from '@/features/analysis/drilldown';
+import {
+  doseRows,
+  doseSplit,
+  formatServings,
+  groupComponentsByEntry,
+  mealAmount,
+} from '@/features/analysis/doseResponse';
 import { delayPhrase, latencyLine, latencySummary } from '@/features/analysis/latency';
 import { outcomeRateForKey, PROFILE_WINDOWS_H } from '@/features/analysis/temporal';
-import { useAllEntries } from '@/features/logging/useEntries';
+import { useAllEntries, useAllMealComponents } from '@/features/logging/useEntries';
 import { useTheme } from '@/hooks/use-theme';
 import { formatLongDate, formatTime12h } from '@/lib/datetime';
 import { parseTagsJson } from '@/lib/ingredients';
@@ -33,6 +41,8 @@ export default function InsightDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ kind?: string; value?: string; window?: string }>();
   const entries = useAllEntries();
+  const mealComponents = useAllMealComponents();
+  const componentsByEntry = useMemo(() => groupComponentsByEntry(mealComponents), [mealComponents]);
 
   const valid = isDrilldownKind(params.kind) && typeof params.value === 'string' && params.value.trim().length > 0;
 
@@ -54,6 +64,12 @@ export default function InsightDetailScreen() {
   const latency = latencySummary(
     instances.flatMap((instance) => (instance.outcomeDelayMs == null ? [] : [instance.outcomeDelayMs])),
   );
+
+  // Dose-response (#22): the split is over exactly the meals listed below, with
+  // their existing outcome flags. Numbers only — no verdict text.
+  const amountOf = (entry: LogEntry) => mealAmount(entry, componentsByEntry.get(entry.id) ?? [], kind, value);
+  const dose = doseSplit(instances, amountOf);
+  const doseText = dose ? doseRows(dose) : null;
 
   // Timing profile (#21): context only — the same key at 6 / 24 / 48 / 72 h,
   // never gated and never a finding. Longer windows also catch more unrelated
@@ -95,6 +111,19 @@ export default function InsightDetailScreen() {
           </View>
         ) : null}
 
+        {doseText ? (
+          <View style={styles.profile}>
+            <ThemedText type="smallBold">By amount</ThemedText>
+            <ThemedText type="small">{doseText.larger}</ThemedText>
+            <ThemedText type="small">{doseText.smaller}</ThemedText>
+            {kind === 'tag' ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                Amounts are servings of the foods that contain it.
+              </ThemedText>
+            ) : null}
+          </View>
+        ) : null}
+
         {instances.length === 0 ? (
           <View style={styles.centeredInline}>
             <ThemedText type="small" themeColor="textSecondary">
@@ -115,6 +144,11 @@ export default function InsightDetailScreen() {
                     {`${formatLongDate(entry.loggedAt)} · ${formatTime12h(entry.loggedAt)}`}
                   </ThemedText>
                   <ThemedText type="small">{entry.name}</ThemedText>
+                  {dose ? (
+                    <ThemedText type="small" themeColor="textSecondary">
+                      {formatServings(amountOf(entry))}
+                    </ThemedText>
+                  ) : null}
                   {outcomeDelayMs != null ? (
                     <ThemedText type="small" themeColor="danger">
                       {`Rough outcome ${delayPhrase(outcomeDelayMs)}`}

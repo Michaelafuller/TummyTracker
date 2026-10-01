@@ -12,8 +12,10 @@ jest.mock('expo-router', () => ({
 }));
 
 let mockEntries: unknown[] = [];
+let mockComponents: unknown[] = [];
 jest.mock('@/features/logging/useEntries', () => ({
   useAllEntries: () => mockEntries,
+  useAllMealComponents: () => mockComponents,
 }));
 
 let seq = 0;
@@ -55,6 +57,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockParams = { kind: 'food', value: 'Chicken Salad' };
   mockEntries = [];
+  mockComponents = [];
   seq = 0;
 });
 
@@ -198,5 +201,116 @@ describe('InsightDetailScreen — latency, window and timing profile (#21)', () 
 
     // 2 of 2 onion meals hit within 6 h; 2 of the 4 tagged meals overall.
     expect(getByText('Within 6 h: 2 of 2 meals (100%) · baseline 50%')).toBeTruthy();
+  });
+});
+
+describe('InsightDetailScreen — By amount (GitHub #22)', () => {
+  /**
+   * One meal per `[servings, followed]` pair, 72 h apart; each followed one
+   * gets a symptom 3 h later. A component row carries the servings (and tags).
+   */
+  function dosedMeals(spec: [number, boolean][], name = 'Chicken Salad', tagsJson: string | null = null) {
+    const entries: LogEntry[] = [];
+    spec.forEach(([servings, followed], i) => {
+      const t = T + i * 72 * HOUR;
+      const meal = makeEntry({ id: `dm${i}`, name, tagsJson, loggedAt: t });
+      entries.push(meal);
+      mockComponents.push({ id: `dc${i}`, entryId: meal.id, name, servings, tagsJson, sortOrder: 0 });
+      if (followed) {
+        entries.push(makeEntry({ type: 'symptom', name: 'Cramps', severity: 4, loggedAt: t + 3 * HOUR }));
+      }
+    });
+    return entries;
+  }
+
+  // 11 meals: six at 1 serving (one followed), five at 2 servings (four followed).
+  const SPLIT: [number, boolean][] = [
+    [1, false],
+    [1, false],
+    [1, false],
+    [1, false],
+    [1, false],
+    [1, true],
+    [2, true],
+    [2, true],
+    [2, true],
+    [2, true],
+    [2, false],
+  ];
+
+  it('shows the split numbers, with no verdict text', async () => {
+    mockEntries = dosedMeals(SPLIT);
+
+    const { getByText, queryByText } = await render(<InsightDetailScreen />);
+
+    expect(getByText('By amount')).toBeTruthy();
+    expect(getByText('More than 1 serving: 4 of 5 meals followed by a rough outcome (80%)')).toBeTruthy();
+    expect(getByText('1 serving or less: 1 of 6 meals followed by a rough outcome (17%)')).toBeTruthy();
+    expect(queryByText(/fine|safe|cause/i)).toBeNull();
+    // the existing summary is unchanged
+    expect(getByText('11 logs · 5 followed by a rough outcome within 24 h')).toBeTruthy();
+  });
+
+  it('shows each meal amount on its row', async () => {
+    mockEntries = dosedMeals(SPLIT);
+
+    const { getAllByText } = await render(<InsightDetailScreen />);
+
+    expect(getAllByText('1 serving')).toHaveLength(6);
+    expect(getAllByText('2 servings')).toHaveLength(5);
+  });
+
+  it('hides the block and the per-meal amounts when every meal is one serving', async () => {
+    mockEntries = dosedMeals(SPLIT.map(([, followed]): [number, boolean] => [1, followed]));
+
+    const { queryByText } = await render(<InsightDetailScreen />);
+
+    expect(queryByText('By amount')).toBeNull();
+    expect(queryByText('1 serving')).toBeNull();
+  });
+
+  it('hides the block when a side has fewer than 4 meals', async () => {
+    mockEntries = dosedMeals([
+      ...SPLIT.slice(0, 6),
+      [2, true],
+      [2, true],
+      [2, true],
+    ]);
+
+    const { queryByText } = await render(<InsightDetailScreen />);
+
+    expect(queryByText('By amount')).toBeNull();
+  });
+
+  it('an ingredient finding uses the servings of the components carrying the tag', async () => {
+    mockParams = { kind: 'tag', value: 'onion' };
+    mockEntries = dosedMeals(SPLIT, 'Stew', '["onion"]');
+    // an unrelated, larger component in each meal must not count toward the onion amount
+    mockEntries.forEach((entry, i) => {
+      const e = entry as LogEntry;
+      if (e.type === 'meal') {
+        mockComponents.push({ id: `x${i}`, entryId: e.id, name: 'Rice', servings: 9, tagsJson: '["rice"]', sortOrder: 1 });
+      }
+    });
+
+    const { getByText } = await render(<InsightDetailScreen />);
+
+    expect(getByText('By amount')).toBeTruthy();
+    expect(getByText('More than 1 serving: 4 of 5 meals followed by a rough outcome (80%)')).toBeTruthy();
+    expect(getByText('Amounts are servings of the foods that contain it.')).toBeTruthy();
+  });
+
+  it('uses the 48 h instances on a slower-pattern detail', async () => {
+    mockParams = { kind: 'food', value: 'Chicken Salad', window: '48' };
+    // symptoms 3 h later count either way; add two meals whose symptom is 30 h later
+    mockEntries = dosedMeals(SPLIT.slice(0, 11));
+    const late = makeEntry({ id: 'late', name: 'Chicken Salad', loggedAt: T + 20 * 72 * HOUR });
+    mockEntries.push(late, makeEntry({ type: 'symptom', name: 'Cramps', severity: 4, loggedAt: late.loggedAt + 30 * HOUR }));
+    mockComponents.push({ id: 'dlate', entryId: 'late', name: 'x', servings: 1, tagsJson: null, sortOrder: 0 });
+
+    const { getByText } = await render(<InsightDetailScreen />);
+
+    // 12 meals now: 7 at 1 serving (2 followed), 5 at 2 servings (4 followed)
+    expect(getByText('1 serving or less: 2 of 7 meals followed by a rough outcome (29%)')).toBeTruthy();
   });
 });

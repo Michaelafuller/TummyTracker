@@ -19,6 +19,13 @@ import {
   type OutcomeFinding,
 } from '@/features/analysis/insights';
 import { findingInstances, type DrilldownInstance } from '@/features/analysis/drilldown';
+import {
+  doseLine,
+  doseSplit,
+  groupComponentsByEntry,
+  mealAmount,
+  type DoseKind,
+} from '@/features/analysis/doseResponse';
 import { latencyLine, latencySummary } from '@/features/analysis/latency';
 import {
   analyzeMedicationDays,
@@ -31,7 +38,7 @@ import {
 } from '@/features/analysis/medications';
 import { SLOW_WINDOW_MS } from '@/features/analysis/temporal';
 import { useDayCheckIns } from '@/features/checkin/useDayCheckIns';
-import { useAllEntries } from '@/features/logging/useEntries';
+import { useAllEntries, useAllMealComponents } from '@/features/logging/useEntries';
 import { useMedicationDoses, useMedicationEvents, useMedications } from '@/features/medications/useMedicationData';
 import { WatchButton } from '@/features/watchlist/WatchButton';
 import { WatchlistSection } from '@/features/watchlist/WatchlistSection';
@@ -147,6 +154,7 @@ function Card({
   title,
   body,
   latency,
+  dose,
   sample,
   confidence,
   n,
@@ -159,6 +167,8 @@ function Card({
   body: string;
   /** Typical reaction time, e.g. "Usually about 5 h later (3–8 h)" (#21). */
   latency?: string | null;
+  /** Dose-response line, shown only for a clear increase with amount (#22). */
+  dose?: string | null;
   sample?: string;
   confidence?: ConfidenceTier;
   n?: number;
@@ -176,6 +186,11 @@ function Card({
       {latency ? (
         <ThemedText type="small" themeColor="textSecondary">
           {latency}
+        </ThemedText>
+      ) : null}
+      {dose ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          {dose}
         </ThemedText>
       ) : null}
       {sample ? (
@@ -210,6 +225,7 @@ function Card({
 export default function InsightsScreen() {
   const router = useRouter();
   const entries = useAllEntries();
+  const mealComponents = useAllMealComponents();
   const checkIns = useDayCheckIns();
   const meds = useMedications();
   const medEvents = useMedicationEvents();
@@ -232,6 +248,15 @@ export default function InsightsScreen() {
     () => analyzeMedicationDays(entries, checkIns, meds, medEvents, medDoses),
     [entries, checkIns, meds, medEvents, medDoses],
   );
+  // Dose-response (#22): servings come from the component rows, grouped once.
+  const componentsByEntry = useMemo(() => groupComponentsByEntry(mealComponents), [mealComponents]);
+  /** A card's dose line — only for a clear increase; null otherwise. */
+  const doseFor = (instances: readonly DrilldownInstance[], kind: DoseKind, value: string): string | null => {
+    const split = doseSplit(instances, (entry) =>
+      mealAmount(entry, componentsByEntry.get(entry.id) ?? [], kind, value),
+    );
+    return split?.clearIncrease ? doseLine(split, kind) : null;
+  };
   const caveatFor = (instances: Parameters<typeof confounderCaveat>[0]): string | null => {
     if (exposure.size === 0) return null;
     const caveat = confounderCaveat(instances, exposure, meds);
@@ -341,6 +366,7 @@ export default function InsightsScreen() {
                   title={finding.label}
                   body={outcomeSentence(finding)}
                   latency={latencyFor(instances)}
+                  dose={doseFor(instances, 'tag', finding.key)}
                   confidence={finding.confidence}
                   n={finding.occurrences}
                   onPress={() =>
@@ -390,6 +416,7 @@ export default function InsightsScreen() {
                   title={finding.label}
                   body={outcomeSentence(finding)}
                   latency={latencyFor(instances)}
+                  dose={doseFor(instances, 'food', finding.label)}
                   confidence={finding.confidence}
                   n={finding.occurrences}
                   onPress={() =>
@@ -410,24 +437,28 @@ export default function InsightsScreen() {
             <ThemedText type="small" themeColor="textSecondary">
               {SLOWER_INTRO}
             </ThemedText>
-            {slower.ingredientFindings.map((finding) => (
-              <Card
-                key={`ingredient-${finding.key}`}
-                title={finding.label}
-                body={outcomeSentence(finding, 48)}
-                latency={latencyFor(findingInstances(entries, 'tag', finding.key, SLOW_WINDOW_MS))}
-                confidence={finding.confidence}
-                n={finding.occurrences}
-                onPress={() =>
-                  router.push({
-                    pathname: '/insight/detail',
-                    params: { kind: 'tag', value: finding.label, window: '48' },
-                  })
-                }
-                pressLabel={`See all logs: ${finding.label}`}>
-                <BarMeter label={finding.label} rate={finding.hitRate} baseRate={finding.baseRate} />
-              </Card>
-            ))}
+            {slower.ingredientFindings.map((finding) => {
+              const instances = findingInstances(entries, 'tag', finding.key, SLOW_WINDOW_MS);
+              return (
+                <Card
+                  key={`ingredient-${finding.key}`}
+                  title={finding.label}
+                  body={outcomeSentence(finding, 48)}
+                  latency={latencyFor(instances)}
+                  dose={doseFor(instances, 'tag', finding.key)}
+                  confidence={finding.confidence}
+                  n={finding.occurrences}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/insight/detail',
+                      params: { kind: 'tag', value: finding.label, window: '48' },
+                    })
+                  }
+                  pressLabel={`See all logs: ${finding.label}`}>
+                  <BarMeter label={finding.label} rate={finding.hitRate} baseRate={finding.baseRate} />
+                </Card>
+              );
+            })}
             {slower.pairFindings.map((finding) => (
               <Card
                 key={`pair-${finding.key}`}
@@ -439,24 +470,28 @@ export default function InsightsScreen() {
                 <BarMeter label={finding.label} rate={finding.hitRate} baseRate={finding.baseRate} />
               </Card>
             ))}
-            {slower.foodFindings.map((finding) => (
-              <Card
-                key={`food-${finding.key}`}
-                title={finding.label}
-                body={outcomeSentence(finding, 48)}
-                latency={latencyFor(findingInstances(entries, 'food', finding.label, SLOW_WINDOW_MS))}
-                confidence={finding.confidence}
-                n={finding.occurrences}
-                onPress={() =>
-                  router.push({
-                    pathname: '/insight/detail',
-                    params: { kind: 'food', value: finding.label, window: '48' },
-                  })
-                }
-                pressLabel={`See all logs: ${finding.label}`}>
-                <BarMeter label={finding.label} rate={finding.hitRate} baseRate={finding.baseRate} />
-              </Card>
-            ))}
+            {slower.foodFindings.map((finding) => {
+              const instances = findingInstances(entries, 'food', finding.label, SLOW_WINDOW_MS);
+              return (
+                <Card
+                  key={`food-${finding.key}`}
+                  title={finding.label}
+                  body={outcomeSentence(finding, 48)}
+                  latency={latencyFor(instances)}
+                  dose={doseFor(instances, 'food', finding.label)}
+                  confidence={finding.confidence}
+                  n={finding.occurrences}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/insight/detail',
+                      params: { kind: 'food', value: finding.label, window: '48' },
+                    })
+                  }
+                  pressLabel={`See all logs: ${finding.label}`}>
+                  <BarMeter label={finding.label} rate={finding.hitRate} baseRate={finding.baseRate} />
+                </Card>
+              );
+            })}
           </View>
         ) : null}
 
