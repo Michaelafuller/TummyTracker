@@ -45,6 +45,25 @@ describe('medications', () => {
     // must still find it after all that.
     expect(await repo.listAllMedications()).toHaveLength(1);
   });
+
+  it('isRegular defaults to false, can be set on create, and can be updated (GitHub #26)', async () => {
+    const plain = await repo.createMedication({ name: 'Plain', isActive: true });
+    expect((await repo.getMedication(plain.id))?.isRegular).toBe(false);
+
+    const regular = await repo.createMedication({
+      name: 'Levothyroxine',
+      isActive: true,
+      isRegular: true,
+      defaultDose: 50,
+      doseUnit: 'mcg',
+    });
+    expect((await repo.getMedication(regular.id))?.isRegular).toBe(true);
+
+    await repo.updateMedication(regular.id, { isRegular: false });
+    expect((await repo.getMedication(regular.id))?.isRegular).toBe(false);
+    await repo.updateMedication(plain.id, { isRegular: true });
+    expect((await repo.getMedication(plain.id))?.isRegular).toBe(true);
+  });
 });
 
 describe('medication events + doses', () => {

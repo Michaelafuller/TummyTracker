@@ -157,6 +157,9 @@ export const medication = sqliteTable('medication', {
   startDate: integer('start_date'),
   endDate: integer('end_date'),
   isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+  // Taken every day; powers the one-tap "Took my regular meds" (GitHub #26).
+  // A regular medication carries a default dose + unit (validated in the form).
+  isRegular: integer('is_regular', { mode: 'boolean' }).notNull().default(false),
   notes: text('notes'),
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),

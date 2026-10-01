@@ -70,6 +70,7 @@ const BASE_MEDICATION: Medication = {
   startDate: 1700000000000,
   endDate: null,
   isActive: true,
+  isRegular: false,
   notes: 'with breakfast',
   createdAt: 1,
   updatedAt: 2,
@@ -180,9 +181,9 @@ describe('entriesToJson / parseBackupJson roundtrip', () => {
       [BASE_MEDICATION_EVENT],
       [BASE_MEDICATION_DOSE],
     );
-    // entriesToJson always writes the current version (7) — parseBackupJson
-    // separately still reads older v1-v6 files (tested below).
-    expect(JSON.parse(json).version).toBe(7);
+    // entriesToJson always writes the current version (8) — parseBackupJson
+    // separately still reads older v1-v7 files (tested below).
+    expect(JSON.parse(json).version).toBe(8);
 
     const result = parseBackupJson(json);
     expect(result.ok).toBe(true);
@@ -210,7 +211,7 @@ describe('entriesToJson / parseBackupJson roundtrip', () => {
     expect(result.experiments).toEqual([]);
   });
 
-  it('roundtrips entries with elimination experiments intact (v5 data, now in a v7 file)', () => {
+  it('roundtrips entries with elimination experiments intact (v5 data, now in a v8 file)', () => {
     const json = entriesToJson(
       [BASE_ENTRY],
       [BASE_COMPONENT],
@@ -220,7 +221,7 @@ describe('entriesToJson / parseBackupJson roundtrip', () => {
       [BASE_DAY_CHECK_IN],
       [BASE_EXPERIMENT],
     );
-    expect(JSON.parse(json).version).toBe(7);
+    expect(JSON.parse(json).version).toBe(8);
 
     const result = parseBackupJson(json);
     expect(result.ok).toBe(true);
@@ -358,9 +359,9 @@ describe('legacy v3 backup import (no dayCheckIns key)', () => {
 });
 
 describe('daily factors (GitHub #23, backup v6)', () => {
-  it('roundtrips daily factors intact (v6 data, now in a v7 file)', () => {
+  it('roundtrips daily factors intact (v6 data, now in a v8 file)', () => {
     const json = entriesToJson([BASE_ENTRY], [], [], [], [], [], [], [BASE_DAY_FACTOR]);
-    expect(JSON.parse(json).version).toBe(7);
+    expect(JSON.parse(json).version).toBe(8);
 
     const result = parseBackupJson(json);
     expect(result.ok).toBe(true);
@@ -501,6 +502,38 @@ describe('medication validation', () => {
     expect(result.medications[0].defaultDose).toBeNull();
     expect(result.medications[0].doseUnit).toBeNull();
   });
+
+  it('roundtrips isRegular in a v8 file (GitHub #26)', () => {
+    const regular: Medication = { ...BASE_MEDICATION, id: 'm-reg', isRegular: true };
+    const json = entriesToJson([BASE_ENTRY], [], [BASE_MEDICATION, regular]);
+    expect(JSON.parse(json).version).toBe(8);
+    const result = parseBackupJson(json);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.medications.map((m) => m.isRegular)).toEqual([false, true]);
+  });
+
+  it('imports a v7 medication (no isRegular) as not regular', () => {
+    const v7Medication = Object.fromEntries(
+      Object.entries(BASE_MEDICATION).filter(([key]) => key !== 'isRegular'),
+    );
+    const result = parseBackupJson(
+      JSON.stringify({ version: 7, entries: [BASE_ENTRY], medications: [v7Medication] }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.medications[0].isRegular).toBe(false);
+  });
+
+  it('treats a non-boolean isRegular as false', () => {
+    const odd = { ...BASE_MEDICATION, isRegular: 'yes' };
+    const result = parseBackupJson(
+      JSON.stringify({ version: 8, entries: [BASE_ENTRY], medications: [odd] }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.medications[0].isRegular).toBe(false);
+  });
 });
 
 describe('mealComponent validation', () => {
@@ -634,9 +667,9 @@ describe('saved meals (GitHub #25, backup v7)', () => {
     createdAt: 10,
   };
 
-  it('roundtrips saved meals and their items in a v7 file', () => {
+  it('roundtrips saved meals and their items in a v8 file', () => {
     const json = entriesToJson([BASE_ENTRY], [], [], [], [], [], [], [], [MEAL], [COMPONENT]);
-    expect(JSON.parse(json).version).toBe(7);
+    expect(JSON.parse(json).version).toBe(8);
 
     const result = parseBackupJson(json);
     expect(result.ok).toBe(true);

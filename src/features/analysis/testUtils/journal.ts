@@ -150,6 +150,7 @@ export function buildJournal(opts: JournalOptions): Journal {
       startDate: null,
       endDate: null,
       isActive: true,
+      isRegular: false,
       notes: null,
       createdAt: 0,
       updatedAt: 0,

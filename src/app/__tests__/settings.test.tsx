@@ -28,7 +28,7 @@ import SettingsScreen from '../settings';
 // The gathering/export path (exportBackupViaShare/buildBackupJson) is kept
 // REAL here — it runs against the expo-file-system/expo-sharing/repository
 // mocks below, exactly as the pre-service handleExport used to, so the
-// existing export-content tests keep exercising the real v7 JSON shape. Only
+// existing export-content tests keep exercising the real v8 JSON shape. Only
 // the folder-picker actions (which need a real SAF folder to do anything
 // meaningful) are replaced with jest.fn()s for the new Automatic backup tests.
 const mockChooseBackupFolder = jest.fn();
@@ -301,7 +301,7 @@ describe('SettingsScreen — Data section (day check-ins, GitHub #13)', () => {
     const [uri] = mockShareAsync.mock.calls[0];
     const { File } = jest.requireActual('expo-file-system');
     const written = JSON.parse(await new File(uri).text());
-    expect(written.version).toBe(7);
+    expect(written.version).toBe(8);
     expect(written.dayCheckIns).toEqual([
       { id: 'ci1', date: '2026-06-15', status: 'fine', createdAt: 1, updatedAt: 1 },
     ]);
@@ -450,7 +450,7 @@ describe('SettingsScreen — Data section (daily factors, GitHub #23)', () => {
     const [uri] = mockShareAsync.mock.calls[0];
     const { File } = jest.requireActual('expo-file-system');
     const written = JSON.parse(await new File(uri).text());
-    expect(written.version).toBe(7);
+    expect(written.version).toBe(8);
     expect(written.dayFactors).toEqual([row]);
   });
 

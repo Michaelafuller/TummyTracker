@@ -88,4 +88,12 @@ describe('migrations', () => {
     expect(sql).not.toMatch(/drop table/i);
     expect(sql).not.toMatch(/alter table/i);
   });
+
+  it('0014 adds medication.is_regular additively, touching nothing else (GitHub #26)', () => {
+    const sql = readMigration('0014');
+    expect(sql).toMatch(/alter table `medication` add `is_regular`/i);
+    expect(sql).toMatch(/default false/i);
+    expect(sql).not.toMatch(/drop table/i);
+    expect(sql).not.toMatch(/create table/i);
+  });
 });

@@ -47,8 +47,9 @@ export interface BackupFile {
  * Serializes entries + their mealComponent rows, the medication inventory and
  * history, the day check-in answers, and the elimination experiments (GitHub
  * #19 backup v5), the daily factors (GitHub #23 backup v6), and the saved meals
- * with their items (GitHub #25 backup v7). Version bumps to 7 but
- * `parseBackupJson` still reads v1–v6 files (missing keys) by
+ * with their items (GitHub #25 backup v7), and each medication's `isRegular`
+ * flag (GitHub #26 backup v8). Version bumps to 8 but
+ * `parseBackupJson` still reads v1–v7 files (missing keys) by
  * defaulting every new array to empty — old backups remain importable.
  */
 export function entriesToJson(
@@ -64,7 +65,7 @@ export function entriesToJson(
   savedMealComponents: SavedMealComponent[] = [],
 ): string {
   const payload: BackupFile = {
-    version: 7,
+    version: 8,
     entries,
     mealComponents,
     medications,
@@ -206,6 +207,8 @@ function normaliseMedication(v: Record<string, unknown>): Medication {
     startDate: nullable<number>('startDate'),
     endDate: nullable<number>('endDate'),
     isActive: typeof v.isActive === 'boolean' ? v.isActive : true,
+    // Absent before v8 (GitHub #26) → not regular.
+    isRegular: typeof v.isRegular === 'boolean' ? v.isRegular : false,
     notes: nullable<string>('notes'),
     createdAt: v.createdAt as number,
     updatedAt: v.updatedAt as number,

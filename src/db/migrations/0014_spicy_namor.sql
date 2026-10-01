@@ -1,0 +1,1 @@
+ALTER TABLE `medication` ADD `is_regular` integer DEFAULT false NOT NULL;

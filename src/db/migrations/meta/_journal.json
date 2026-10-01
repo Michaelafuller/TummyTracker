@@ -99,6 +99,13 @@
       "when": 1790830509840,
       "tag": "0013_simple_mantis",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1790896821983,
+      "tag": "0014_spicy_namor",
+      "breakpoints": true
     }
   ]
 }

@@ -29,6 +29,7 @@ function medicationRow(id: string, overrides: Partial<Medication> = {}): Medicat
     startDate: null,
     endDate: null,
     isActive: true,
+    isRegular: false,
     notes: null,
     createdAt: 1000,
     updatedAt: 1000,
@@ -86,6 +87,16 @@ describe('insertMedicationsPreservingIds', () => {
     expect(all.map((m) => m.id).sort()).toEqual(['m1', 'm2', 'm3']);
     // The pre-existing m2 row must be untouched, not overwritten.
     expect(all.find((m) => m.id === 'm2')?.name).toBe('Med m2');
+  });
+
+  it('preserves isRegular on restore (GitHub #26)', async () => {
+    await repo.insertMedicationsPreservingIds([
+      medicationRow('m1', { isRegular: true, defaultDose: 5, doseUnit: 'mg' }),
+      medicationRow('m2'),
+    ]);
+    const all = await repo.listAllMedications();
+    expect(all.find((m) => m.id === 'm1')?.isRegular).toBe(true);
+    expect(all.find((m) => m.id === 'm2')?.isRegular).toBe(false);
   });
 
   it('is a no-op for an empty array', async () => {
