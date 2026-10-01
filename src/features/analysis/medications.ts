@@ -81,13 +81,16 @@ export function medicationExposureDays(
 }
 
 /**
- * Covered = a local day with any log entry (any type) or a day check-in.
- * Rough = a local day with >= 1 `isOutcome` entry. A check-in only covers a
- * day, it never makes one rough (CLAUDE.md §0, #13).
+ * Covered = a local day with any log entry (any type), a day check-in, or —
+ * when `factorRows` is passed (GitHub #23; rows that logged at least one
+ * visible factor, see `visibleFactorRows`) — a daily-factor row. Rough = a
+ * local day with >= 1 `isOutcome` entry. A check-in or factor row only covers
+ * a day, it never makes one rough (CLAUDE.md §0, #13).
  */
 export function coveredAndRoughDays(
   entries: readonly LogEntry[],
   checkIns: readonly { date: string }[],
+  factorRows: readonly { date: string }[] = [],
 ): { covered: Set<string>; rough: Set<string> } {
   const covered = new Set<string>();
   const rough = new Set<string>();
@@ -97,6 +100,7 @@ export function coveredAndRoughDays(
     if (isOutcome(entry)) rough.add(key);
   }
   for (const checkIn of checkIns) covered.add(checkIn.date);
+  for (const row of factorRows) covered.add(row.date);
   return { covered, rough };
 }
 
@@ -130,7 +134,8 @@ export interface MedicationNote {
  * confidence mirrors `analyzeOutcomeRates` (Wilson lower bound over the other
  * rate = high; a margin + minimum days = medium; else low), and low findings
  * show only when no medium/high one exists, capped like foods. Findings sort
- * by excess rate descending, notes A–Z.
+ * by excess rate descending, notes A–Z. `factorRows` (daily factors, #23)
+ * only widens the covered-day pools: a day with a factor row counts as covered.
  */
 export function analyzeMedicationDays(
   entries: readonly LogEntry[],
@@ -138,9 +143,10 @@ export function analyzeMedicationDays(
   meds: readonly Medication[],
   events: readonly MedicationEvent[],
   doses: readonly MedicationDose[],
+  factorRows: readonly { date: string }[] = [],
 ): { findings: MedicationFinding[]; notes: MedicationNote[] } {
   const exposure = medicationExposureDays(meds, events, doses);
-  const { covered, rough } = coveredAndRoughDays(entries, checkIns);
+  const { covered, rough } = coveredAndRoughDays(entries, checkIns, factorRows);
 
   const highOrMedium: MedicationFinding[] = [];
   const low: MedicationFinding[] = [];
