@@ -152,6 +152,19 @@ describe('mealComponentToFormState', () => {
     expect(tags).toContain('off-tag');
   });
 
+  it('also accepts a builder draft (per-item edit, GitHub #25): a draft round-trips to itself', () => {
+    const { id: _id, entryId: _entryId, createdAt: _createdAt, ...draft } = savedComponent({ tagsJson: '["peas"]' });
+    const result = buildComponentDraft(defaultComponentFormState(mealComponentToFormState(draft)), draft.sortOrder ?? 0);
+    expect(result.valid).toBe(true);
+    expect(result.draft).toMatchObject({ name: 'Peas', servings: 2, calories: 100, tagsJson: '["peas"]' });
+  });
+
+  it('treats a sparse draft (undefined optional fields) as empty strings and servings 1', () => {
+    const state = defaultComponentFormState(mealComponentToFormState({ name: 'Plain' }));
+    expect(state).toMatchObject({ name: 'Plain', barcode: null, servings: '1', servingG: '', ingredientsText: '' });
+    expect(state.nutrition.calories).toBe('');
+  });
+
   it('sets nutritionBase to null so editing servingG does not rescale the grid', () => {
     expect(mealComponentToFormState(savedComponent()).nutritionBase).toBeNull();
   });

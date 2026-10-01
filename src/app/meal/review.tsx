@@ -146,9 +146,15 @@ export default function MealReviewScreen() {
             testID={`component-${index}`}
             style={[styles.componentRow, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
             <View style={styles.componentBody}>
-              <ThemedText type="small" numberOfLines={1}>
-                {component.name}
-              </ThemedText>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Edit ${component.name}`}
+                testID={`component-${index}-edit`}
+                onPress={() => router.push({ pathname: '/meal/component', params: { edit: String(index) } })}>
+                <ThemedText type="small" numberOfLines={1}>
+                  {component.name}
+                </ThemedText>
+              </Pressable>
               {component.calories != null ? (
                 <ThemedText type="small" themeColor="textSecondary" testID={`component-${index}-kcal`}>
                   {`${Math.round(component.calories * (component.servings ?? 1))} kcal`}

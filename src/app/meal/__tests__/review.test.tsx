@@ -1,4 +1,4 @@
-import { fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 
 import { createMealWithComponents } from '@/db/repository';
 import type { Goal, LogEntry, WatchlistItem } from '@/db/schema';
@@ -134,6 +134,30 @@ describe('MealReviewScreen', () => {
     const { getByLabelText } = await render(<MealReviewScreen />);
     await fireEvent.press(getByLabelText('Add item to this meal'));
     expect(mockPush).toHaveBeenCalledWith('/scan');
+  });
+});
+
+describe('MealReviewScreen per-item edit (GitHub #25)', () => {
+  it('tapping an item name opens the item form in edit mode for that index', async () => {
+    const { getByLabelText } = await render(<MealReviewScreen />);
+    await fireEvent.press(getByLabelText('Edit Rice'));
+    expect(mockPush).toHaveBeenCalledWith({ pathname: '/meal/component', params: { edit: '1' } });
+  });
+
+  it('every row has an edit testID', async () => {
+    const { getByTestId } = await render(<MealReviewScreen />);
+    expect(getByTestId('component-0-edit')).toBeTruthy();
+    expect(getByTestId('component-1-edit')).toBeTruthy();
+  });
+
+  it('an edited item shows its new name and the auto-name follows it', async () => {
+    const { getByDisplayValue, getByText } = await render(<MealReviewScreen />);
+    expect(getByDisplayValue('Peas + 1 more')).toBeTruthy();
+    await act(async () => {
+      useMealBuilderStore.getState().updateComponent(0, { name: 'Garden peas' });
+    });
+    expect(getByText('Garden peas')).toBeTruthy();
+    expect(getByDisplayValue('Garden peas + 1 more')).toBeTruthy();
   });
 });
 
