@@ -5,7 +5,9 @@ import { join, resolve } from 'node:path';
 
 import { parseBackupJson } from '@/lib/backup';
 import { findingInstances } from '@/features/analysis/drilldown';
+import { chanceChecks, chanceSentence } from '@/features/analysis/chance';
 import { analyzeFactorDays, factorCaveat, factorDays, factorSentence } from '@/features/analysis/factors';
+import { computeInsights } from '@/features/analysis/insights';
 import { latencyLine, latencySummary } from '@/features/analysis/latency';
 import { analyzeMedicationDays, confounderCaveat, medicationExposureDays } from '@/features/analysis/medications';
 import { currentPhase, evaluateExperiment, experimentSchedule } from '../engine';
@@ -119,6 +121,38 @@ describe('scripts/make-experiment-fixture.mjs', () => {
       parsed.dayFactors,
     );
     expect(meds.findings[0]).toMatchObject({ name: 'Ibuprofen', exposedDays: 7, exposedRough: 7 });
+  });
+
+  it('also yields the #24 chance lines: lactose could easily be chance, ibuprofen and stress rarely', () => {
+    // Lactose is eaten in one 14-day block and the rough days are one streak
+    // inside it, so from correlation alone luck lines a food up with a streak
+    // about as often — the honest answer (the experiment is the better test).
+    const parsed = parseBackupJson(generate('2026-09-28').text);
+    if (!parsed.ok) throw new Error(parsed.error);
+    const opts = { trackPeriod: false };
+    const checks = chanceChecks({
+      entries: parsed.entries,
+      checkIns: parsed.dayCheckIns,
+      meds: parsed.medications,
+      events: parsed.medicationEvents,
+      doses: parsed.medicationDoses,
+      factorRows: parsed.dayFactors,
+      trackPeriod: false,
+      families: new Set(['ingredients', 'medications', 'factors'] as const),
+    });
+
+    const lactose = computeInsights(parsed.entries).ingredientFindings[0];
+    expect(lactose).toMatchObject({ key: 'lactose', confidence: 'high' });
+    expect(chanceSentence(checks.ingredients ?? null, lactose.confidence, { one: 'ingredient', many: 'ingredients' })).toBe(
+      "Chance check: of 3 ingredients checked, luck alone would make about 1 look this strong. That's as many as you have, so this could easily be chance.",
+    );
+    expect(chanceSentence(checks.medications ?? null, 'high', { one: 'medication', many: 'medications' })).toBe(
+      'Chance check: of 1 medication checked, luck alone would make fewer than 1 look this strong.',
+    );
+    const factor = analyzeFactorDays(parsed.entries, parsed.dayCheckIns, parsed.dayFactors, opts).findings[0];
+    expect(chanceSentence(checks.factors ?? null, factor.confidence, { one: 'daily factor', many: 'daily factors' })).toBe(
+      'Chance check: of 1 daily factor checked, luck alone would make fewer than 1 look this strong.',
+    );
   });
 
   it('gives every entry and the experiment a stable, unique fixture- id', () => {

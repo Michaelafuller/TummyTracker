@@ -75,7 +75,7 @@ appId: com.tummytracker.app.dev
 - waitForAnimationToEnd
 # Confirm in the Alert (its destructive button repeats the label; the dialog
 # window is on top, so this taps the dialog's button).
-- assertVisible: "End experiment\?"
+- assertVisible: "End experiment\\?"
 - tapOn: "End experiment"
 - waitForAnimationToEnd
 - tapOn:
