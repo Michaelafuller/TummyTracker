@@ -13,6 +13,12 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import {
+  chanceChecks,
+  chanceSentence,
+  type ChanceCheck,
+  type ChanceFamily,
+} from '@/features/analysis/chance';
+import {
   analyzeSlowerPatterns,
   computeInsights,
   type NutrientOutcomeFinding,
@@ -129,6 +135,19 @@ function latencyFor(instances: readonly DrilldownInstance[]): string | null {
   return summary ? latencyLine(summary) : null;
 }
 
+/** Nouns the chance line uses for each family's "of N ... checked". */
+const CHANCE_NOUNS: Record<ChanceFamily, { one: string; many: string }> = {
+  ingredients: { one: 'ingredient', many: 'ingredients' },
+  foods: { one: 'food', many: 'foods' },
+  pairs: { one: 'combination', many: 'combinations' },
+  slowerIngredients: { one: 'ingredient', many: 'ingredients' },
+  slowerFoods: { one: 'food', many: 'foods' },
+  slowerPairs: { one: 'combination', many: 'combinations' },
+  medications: { one: 'medication', many: 'medications' },
+  factors: { one: 'daily factor', many: 'daily factors' },
+  nutrients: { one: 'nutrient', many: 'nutrients' },
+};
+
 const SLOWER_INTRO =
   'These only show up when counting outcomes up to 48 hours after eating — slower reactions.';
 
@@ -170,6 +189,7 @@ function Card({
   sample,
   confidence,
   n,
+  chance,
   unit = 'meals',
   children,
   onPress,
@@ -184,6 +204,8 @@ function Card({
   sample?: string;
   confidence?: ConfidenceTier;
   n?: number;
+  /** "By chance" check line for this card's tier (#24), shown under the confidence chip. */
+  chance?: string | null;
   /** What `n` counts — meals for food findings, days for medication findings. */
   unit?: 'meals' | 'days';
   children?: React.ReactNode;
@@ -211,6 +233,11 @@ function Card({
         </ThemedText>
       ) : null}
       {confidence != null && n != null ? <ConfidenceChip confidence={confidence} n={n} unit={unit} /> : null}
+      {chance ? (
+        <ThemedText type="small" themeColor="textSecondary" testID="chance-line">
+          {chance}
+        </ThemedText>
+      ) : null}
       {children}
     </>
   );
@@ -294,6 +321,43 @@ export default function InsightsScreen() {
   };
   const hasMedicationSection = medicationAnalysis.findings.length > 0 || medicationAnalysis.notes.length > 0;
   const hasFactorSection = factorAnalysis.findings.length > 0 || factorAnalysis.notes.length > 0;
+  // "By chance" check (#24): the same analysis re-run with the rough outcomes
+  // slid against everything else, for only the sections that show findings.
+  const chanceFamilyKey = (
+    [
+      ['ingredients', ingredientFindings.length],
+      ['foods', foodFindings.length],
+      ['pairs', pairFindings.length],
+      ['slowerIngredients', slower.ingredientFindings.length],
+      ['slowerFoods', slower.foodFindings.length],
+      ['slowerPairs', slower.pairFindings.length],
+      ['medications', medicationAnalysis.findings.length],
+      ['factors', factorAnalysis.findings.length],
+      ['nutrients', nutrientFindings.length],
+    ] as const
+  )
+    .filter(([, count]) => count > 0)
+    .map(([family]) => family)
+    .join(',');
+  const checks = useMemo(
+    () =>
+      chanceChecks({
+        entries,
+        checkIns,
+        meds,
+        events: medEvents,
+        doses: medDoses,
+        factorRows: visibleFactors,
+        trackPeriod,
+        families: new Set(chanceFamilyKey === '' ? [] : (chanceFamilyKey.split(',') as ChanceFamily[])),
+      }),
+    [entries, checkIns, meds, medEvents, medDoses, visibleFactors, trackPeriod, chanceFamilyKey],
+  );
+  /** A card's chance line; no line when the family was not asked for (cannot happen for a rendered card). */
+  const chanceFor = (family: ChanceFamily, tier: ConfidenceTier): string | null => {
+    const check: ChanceCheck | null | undefined = checks[family];
+    return check === undefined ? null : chanceSentence(check, tier, CHANCE_NOUNS[family]);
+  };
   const coverage = dayCoverage(entries, checkIns, now, COVERAGE_WINDOW_DAYS, visibleFactors);
   const roughOutcomeBuckets = weeklyOutcomes(entries, now);
   const hasRoughOutcomeData = roughOutcomeBuckets.some((b) => b.count > 0);
@@ -403,6 +467,7 @@ export default function InsightsScreen() {
                   dose={doseFor(instances, 'tag', finding.key)}
                   confidence={finding.confidence}
                   n={finding.occurrences}
+                  chance={chanceFor('ingredients', finding.confidence)}
                   onPress={() =>
                     router.push({ pathname: '/insight/detail', params: { kind: 'tag', value: finding.label } })
                   }
@@ -431,7 +496,8 @@ export default function InsightsScreen() {
                   body={outcomeSentence(finding)}
                   latency={latencyFor(instances)}
                   confidence={finding.confidence}
-                  n={finding.occurrences}>
+                  n={finding.occurrences}
+                  chance={chanceFor('pairs', finding.confidence)}>
                   <BarMeter label={finding.label} rate={finding.hitRate} baseRate={finding.baseRate} />
                   {caveats.map((line) => (
                     <CaveatLine key={line} text={line} />
@@ -457,6 +523,7 @@ export default function InsightsScreen() {
                   dose={doseFor(instances, 'food', finding.label)}
                   confidence={finding.confidence}
                   n={finding.occurrences}
+                  chance={chanceFor('foods', finding.confidence)}
                   onPress={() =>
                     router.push({ pathname: '/insight/detail', params: { kind: 'food', value: finding.label } })
                   }
@@ -488,6 +555,7 @@ export default function InsightsScreen() {
                   dose={doseFor(instances, 'tag', finding.key)}
                   confidence={finding.confidence}
                   n={finding.occurrences}
+                  chance={chanceFor('slowerIngredients', finding.confidence)}
                   onPress={() =>
                     router.push({
                       pathname: '/insight/detail',
@@ -506,7 +574,8 @@ export default function InsightsScreen() {
                 body={outcomeSentence(finding, 48)}
                 latency={latencyFor(pairInstances(entries, finding.key, SLOW_WINDOW_MS))}
                 confidence={finding.confidence}
-                n={finding.occurrences}>
+                n={finding.occurrences}
+                chance={chanceFor('slowerPairs', finding.confidence)}>
                 <BarMeter label={finding.label} rate={finding.hitRate} baseRate={finding.baseRate} />
               </Card>
             ))}
@@ -521,6 +590,7 @@ export default function InsightsScreen() {
                   dose={doseFor(instances, 'food', finding.label)}
                   confidence={finding.confidence}
                   n={finding.occurrences}
+                  chance={chanceFor('slowerFoods', finding.confidence)}
                   onPress={() =>
                     router.push({
                       pathname: '/insight/detail',
@@ -545,6 +615,7 @@ export default function InsightsScreen() {
                 body={medicationSentence(finding)}
                 confidence={finding.confidence}
                 n={finding.exposedDays}
+                chance={chanceFor('medications', finding.confidence)}
                 unit="days"
               />
             ))}
@@ -569,6 +640,7 @@ export default function InsightsScreen() {
                 body={factorSentence(finding)}
                 confidence={finding.confidence}
                 n={finding.flaggedDays}
+                chance={chanceFor('factors', finding.confidence)}
                 unit="days"
               />
             ))}
@@ -594,6 +666,7 @@ export default function InsightsScreen() {
                 sample={`Based on ${finding.sampleSize} higher-${NUTRITION_NOUNS[finding.nutrient]} meals.`}
                 confidence={finding.confidence}
                 n={finding.sampleSize}
+                chance={chanceFor('nutrients', finding.confidence)}
               />
             ))}
           </View>

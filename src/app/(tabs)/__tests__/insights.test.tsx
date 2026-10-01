@@ -1029,3 +1029,121 @@ describe('daily factors in Insights (GitHub #23)', () => {
     });
   });
 });
+
+describe('chance-check line on finding cards (GitHub #24)', () => {
+  let seq = 0;
+
+  function ingredientJournal(spanHours: number[]) {
+    // Three lactose meals, each followed an hour later by a rough symptom; three rice controls.
+    const lactose = [0, spanHours[0], spanHours[1]].map((loggedAt) => ({
+      ...baseEntry,
+      id: `ch${seq++}`,
+      type: 'meal',
+      name: 'Food',
+      loggedAt,
+      tagsJson: '["lactose"]',
+    }));
+    const rice = spanHours.slice(2).map((loggedAt) => ({
+      ...baseEntry,
+      id: `ch${seq++}`,
+      type: 'meal',
+      name: 'Food',
+      loggedAt,
+      tagsJson: '["rice"]',
+    }));
+    const outcomes = [0, spanHours[0], spanHours[1]].map((loggedAt) => ({
+      ...baseEntry,
+      id: `ch${seq++}`,
+      type: 'symptom',
+      name: 'Symptom',
+      loggedAt: loggedAt + HOUR,
+      severity: 4,
+    }));
+    return [...lactose, ...rice, ...outcomes];
+  }
+
+  it('shows a chance line under an ingredient card on a journal long enough to slide', async () => {
+    mockEntries = ingredientJournal([48 * HOUR, 96 * HOUR, 500 * HOUR, 548 * HOUR, 596 * HOUR]);
+    const { getByText, getAllByTestId } = await renderScreen(<InsightsScreen />);
+
+    expect(getByText('lactose')).toBeTruthy();
+    // The existing card content is untouched.
+    expect(getByText('Low confidence · 3 meals')).toBeTruthy();
+    const lines = getAllByTestId('chance-line');
+    expect(lines.length).toBeGreaterThan(0);
+    expect(lines[0].props.children).toMatch(/^Chance check: of \d+ ingredients? checked, luck alone would make /);
+  });
+
+  it('says the check needs more history on a journal too short to slide', async () => {
+    mockEntries = ingredientJournal([24 * HOUR, 48 * HOUR, 60 * HOUR, 72 * HOUR, 84 * HOUR]);
+    const { getByText, getAllByTestId } = await renderScreen(<InsightsScreen />);
+
+    expect(getByText('lactose')).toBeTruthy();
+    expect(getAllByTestId('chance-line')[0].props.children).toBe(
+      'Chance check: needs a couple of weeks of logs first.',
+    );
+  });
+
+  it('shows a chance line under a medication card', async () => {
+    const dayAt = (offset: number, hour = 12) => new Date(2026, 2, 1 + offset, hour).getTime();
+    const rows: unknown[] = [];
+    const add = (offset: number, rough: boolean) => {
+      rows.push({ ...baseEntry, id: `cm${seq++}`, type: 'meal', name: `Meal ${offset}`, loggedAt: dayAt(offset) });
+      if (rough) {
+        rows.push({
+          ...baseEntry,
+          id: `cm${seq++}`,
+          type: 'symptom',
+          name: 'Symptom',
+          loggedAt: dayAt(offset, 18),
+          severity: 4,
+        });
+      }
+    };
+    for (let i = 0; i < 20; i++) add(i, i < 12);
+    for (let i = 0; i < 20; i++) add(100 + i, i < 5);
+    mockMeds = [
+      {
+        id: 'ibu',
+        name: 'Ibuprofen',
+        defaultDose: null,
+        doseUnit: null,
+        frequency: null,
+        startDate: null,
+        endDate: null,
+        isActive: true,
+        notes: null,
+        createdAt: 0,
+        updatedAt: 0,
+      },
+    ];
+    for (let i = 0; i < 20; i++) {
+      const eventId = `cev${seq++}`;
+      mockMedEvents.push({ id: eventId, takenAt: dayAt(i), timeKnown: true, notes: null, createdAt: 0, updatedAt: 0 });
+      mockMedDoses.push({
+        id: `cdo${seq++}`,
+        eventId,
+        medicationId: 'ibu',
+        dose: 1,
+        doseUnit: 'tablet',
+        createdAt: 0,
+        updatedAt: 0,
+      });
+    }
+    mockEntries = rows;
+
+    const { getByText, getAllByTestId } = await renderScreen(<InsightsScreen />);
+    expect(getByText('High confidence · 20 days')).toBeTruthy();
+    const lines = getAllByTestId('chance-line');
+    expect(lines).toHaveLength(1);
+    expect(lines[0].props.children).toMatch(
+      /^Chance check: of 1 medication checked, luck alone would make (fewer than 1|about \d+) look this strong\./,
+    );
+  });
+
+  it('shows no chance line when there are no findings', async () => {
+    mockEntries = [];
+    const { queryAllByTestId } = await renderScreen(<InsightsScreen />);
+    expect(queryAllByTestId('chance-line')).toHaveLength(0);
+  });
+});
