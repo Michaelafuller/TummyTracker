@@ -339,6 +339,13 @@ MVP entities:
     (≤ 1 active), `verdictJson` (frozen verdict at finish, else null),
     `endedAt`, `createdAt`, `updatedAt`. Backups v5.
 
+- **dayFactor** (`day_factor`, migration 0012 — GitHub #23)
+  - `id`, `date` ('YYYY-MM-DD', **unique**), `sleep` (`poor|ok|good`),
+    `stress` (1–5), `alcohol` (`none|some|a_lot`), `caffeine`
+    (`none|usual|more`), `period` (boolean; shown/analysed only when
+    Track period is on) — all nullable (null = not logged), `createdAt`,
+    `updatedAt`. Backups v6.
+
 Conventions:
 - Timestamps stored as Unix epoch (ms) integers.
 - `loggedAt` is user-editable (they may backfill or correct a meal's time).
