@@ -1,7 +1,7 @@
 // Pure helpers for saved meals / "My meals" (GitHub #25). No React, no I/O.
 // A saved meal is a template: it never is, or links to, a log entry.
 
-import { FOOD_TYPES, type LogEntry, type SavedMeal, type SavedMealComponent } from '@/db/schema';
+import { FOOD_TYPES, type LogEntry, type MealSlot, type SavedMeal, type SavedMealComponent } from '@/db/schema';
 import { mergeTags, normalizeTag, parseTagsJson } from '@/lib/ingredients';
 import type { MealComponentDraft } from '@/lib/mealAggregate';
 
@@ -106,4 +106,35 @@ export function groupSavedMeals(
       meal,
       components: [...(byMeal.get(meal.id) ?? [])].sort((a, b) => a.sortOrder - b.sortOrder),
     }));
+}
+
+/**
+ * The meal slot a local hour of the day suggests (GitHub #26): 05:00-10:59
+ * breakfast, 11:00-15:59 lunch, 16:00-21:59 dinner, otherwise none. Used only
+ * to order "My meals" on Home; it never pre-fills or logs anything.
+ */
+export function slotForHour(hour: number): MealSlot | null {
+  if (hour >= 5 && hour < 11) return 'breakfast';
+  if (hour >= 11 && hour < 16) return 'lunch';
+  if (hour >= 16 && hour < 22) return 'dinner';
+  return null;
+}
+
+function compareSavedMeals(a: SavedMealWithComponents, b: SavedMealWithComponents): number {
+  return a.meal.nameKey.localeCompare(b.meal.nameKey) || a.meal.name.localeCompare(b.meal.name);
+}
+
+/**
+ * "My meals" ordered for a meal slot (GitHub #26): saved meals whose own slot
+ * is `slot` first (A-Z), then the rest (A-Z). With no slot the list is
+ * returned unchanged (already A-Z from `groupSavedMeals`).
+ */
+export function orderSavedMealsForSlot(
+  items: readonly SavedMealWithComponents[],
+  slot: MealSlot | null,
+): SavedMealWithComponents[] {
+  if (slot == null) return [...items];
+  const matching = items.filter((item) => item.meal.mealSlot === slot).sort(compareSavedMeals);
+  const rest = items.filter((item) => item.meal.mealSlot !== slot).sort(compareSavedMeals);
+  return [...matching, ...rest];
 }

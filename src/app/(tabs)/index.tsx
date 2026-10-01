@@ -1,6 +1,6 @@
-import { useFocusEffect, Link, useRouter } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, AppState, Pressable, StyleSheet } from 'react-native';
+import { useFocusEffect, Link } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AppState, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { KeyboardShiftView } from '@/components/keyboard-aware-screen';
@@ -8,7 +8,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import type { LogEntry } from '@/db/schema';
-import { getMealComponents, hasAnyLogEntry, listRecentFoodEntries } from '@/db/repository';
+import { hasAnyLogEntry, listRecentFoodEntries } from '@/db/repository';
 import { BackupNudge } from '@/features/backup/BackupNudge';
 import { DayCheckInCard } from '@/features/checkin/DayCheckInCard';
 import { useDayCheckInResponses } from '@/features/checkin/useDayCheckInResponses';
@@ -17,24 +17,31 @@ import { useExperimentNotificationResponses } from '@/features/experiments/useEx
 import { useMealBuilderStore } from '@/features/logging/mealBuilderStore';
 import { MyMealsSection } from '@/features/logging/MyMealsSection';
 import { RecentFoodPicker } from '@/features/logging/RecentFoodPicker';
+import { useBuilderLaunchers } from '@/features/logging/useBuilderLaunchers';
 import { useSavedMeals } from '@/features/logging/useSavedMeals';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDateInput } from '@/lib/datetime';
-import { entryToComponentDrafts } from '@/lib/mealAggregate';
-import { savedMealToDrafts, type SavedMealWithComponents } from '@/lib/savedMeals';
+import { orderSavedMealsForSlot, slotForHour } from '@/lib/savedMeals';
 
 export default function HomeScreen() {
   const theme = useTheme();
-  const router = useRouter();
-  const loadBuilder = useMealBuilderStore((s) => s.load);
-  const loadSavedMealForEdit = useMealBuilderStore((s) => s.loadSavedMealForEdit);
   const clearBuilder = useMealBuilderStore((s) => s.clear);
   const savedMeals = useSavedMeals();
   const [recents, setRecents] = useState<LogEntry[]>([]);
   const [today, setToday] = useState(() => formatDateInput(Date.now()));
   const [now, setNow] = useState(() => Date.now());
   const [hasData, setHasData] = useState(false);
-  const recentTapInFlight = useRef(false);
+  const {
+    onRecentTap: handleRecentTap,
+    onMyMealTap: handleMyMealTap,
+    onMyMealEdit: handleMyMealEdit,
+  } = useBuilderLaunchers();
+  // My meals ordered by the meal the time of day suggests (GitHub #26); `now`
+  // refreshes on focus and on returning to the foreground.
+  const orderedSavedMeals = useMemo(
+    () => orderSavedMealsForSlot(savedMeals, slotForHour(new Date(now).getHours())),
+    [savedMeals, now],
+  );
 
   // Mounted here (not the root): Home is the initial tab, so it's mounted
   // whenever the app is, and only after the migration gate — the write
@@ -67,70 +74,6 @@ export default function HomeScreen() {
     });
     return () => subscription.remove();
   }, []);
-
-  const handleRecentTap = useCallback(
-    async (entry: LogEntry) => {
-      // Guard against a fast second tap (same row or another) while the first
-      // is still loading — without this, both taps race to loadBuilder/push.
-      if (recentTapInFlight.current) {
-        return;
-      }
-      recentTapInFlight.current = true;
-      try {
-        // Copy, never edit (owner decision): re-loading a past entry starts a
-        // new draft meal seeded with its items, never touches the saved row.
-        const rows = await getMealComponents(entry.id);
-        loadBuilder(entryToComponentDrafts(entry, rows), {
-          name: entry.name,
-          type: entry.type,
-          mealSlot: entry.mealSlot,
-        });
-        router.push('/meal/review');
-      } catch {
-        Alert.alert("Couldn't open that meal", 'Something went wrong loading it — try again.');
-      } finally {
-        recentTapInFlight.current = false;
-      }
-    },
-    [loadBuilder, router],
-  );
-
-  // Tapping a saved meal ("My meals", GitHub #25) behaves exactly like a Recent
-  // row: its items are COPIED into a fresh builder session (time = now), the
-  // template itself is never touched or linked to the meal that gets logged.
-  const handleMyMealTap = useCallback(
-    (item: SavedMealWithComponents) => {
-      if (recentTapInFlight.current) {
-        return;
-      }
-      recentTapInFlight.current = true;
-      try {
-        loadBuilder(savedMealToDrafts(item.components), {
-          name: item.meal.name,
-          type: item.meal.type,
-          mealSlot: item.meal.mealSlot,
-        });
-        router.push('/meal/review');
-      } catch {
-        Alert.alert("Couldn't open that meal", 'Something went wrong loading it — try again.');
-      } finally {
-        recentTapInFlight.current = false;
-      }
-    },
-    [loadBuilder, router],
-  );
-
-  const handleMyMealEdit = useCallback(
-    (item: SavedMealWithComponents) => {
-      loadSavedMealForEdit(item.meal.id, savedMealToDrafts(item.components), {
-        name: item.meal.name,
-        type: item.meal.type,
-        mealSlot: item.meal.mealSlot,
-      });
-      router.push('/meal/review');
-    },
-    [loadSavedMealForEdit, router],
-  );
 
   const handleStartNewMeal = useCallback(() => {
     // Latent-bug fix (HANDOFF.md §1.6): abandoning the builder mid-flow left
@@ -219,7 +162,7 @@ export default function HomeScreen() {
 
           <DayCheckInCard date={today} />
 
-          <MyMealsSection items={savedMeals} onLog={handleMyMealTap} onEdit={handleMyMealEdit} />
+          <MyMealsSection items={orderedSavedMeals} onLog={handleMyMealTap} onEdit={handleMyMealEdit} />
 
           {recents.length > 0 && (
             <ThemedView style={styles.recentSection}>

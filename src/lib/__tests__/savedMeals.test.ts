@@ -3,10 +3,13 @@ import {
   backfillTargets,
   ingredientTagsOf,
   groupSavedMeals,
+  orderSavedMealsForSlot,
   savedMealNameKey,
   savedMealSlug,
   savedMealToDrafts,
+  slotForHour,
   validateSavedMealName,
+  type SavedMealWithComponents,
 } from '../savedMeals';
 
 function entry(overrides: Partial<LogEntry>): LogEntry {
@@ -209,5 +212,86 @@ describe('groupSavedMeals', () => {
     const grouped = groupSavedMeals(meals, [component({ savedMealId: 'ghost' })]);
     expect(grouped.map((g) => g.components.length)).toEqual([0, 0]);
     expect(meals.map((m) => m.id)).toEqual(['b', 'a']);
+  });
+});
+
+describe('slotForHour (GitHub #26)', () => {
+  it.each([
+    [0, null],
+    [4, null],
+    [5, 'breakfast'],
+    [10, 'breakfast'],
+    [11, 'lunch'],
+    [15, 'lunch'],
+    [16, 'dinner'],
+    [21, 'dinner'],
+    [22, null],
+    [23, null],
+  ])('hour %i -> %s', (hour, slot) => {
+    expect(slotForHour(hour)).toBe(slot);
+  });
+
+  it('maps the minute boundaries via the integer hour (04:59 none, 05:00 breakfast, 10:59 breakfast, 11:00 lunch, 15:59 lunch, 16:00 dinner, 21:59 dinner, 22:00 none)', () => {
+    const hourOf = (h: number, m: number) => new Date(2026, 8, 30, h, m).getHours();
+    expect([hourOf(4, 59), hourOf(5, 0), hourOf(10, 59), hourOf(11, 0)].map(slotForHour)).toEqual([
+      null,
+      'breakfast',
+      'breakfast',
+      'lunch',
+    ]);
+    expect([hourOf(15, 59), hourOf(16, 0), hourOf(21, 59), hourOf(22, 0)].map(slotForHour)).toEqual([
+      'lunch',
+      'dinner',
+      'dinner',
+      null,
+    ]);
+  });
+});
+
+describe('orderSavedMealsForSlot (GitHub #26)', () => {
+  const item = (name: string, mealSlot: SavedMeal['mealSlot']): SavedMealWithComponents => ({
+    meal: { id: name, name, nameKey: name.toLowerCase(), type: 'meal', mealSlot, createdAt: 1, updatedAt: 1 },
+    components: [],
+  });
+  const items = [
+    item('Apple', 'dinner'),
+    item('Bagel', 'breakfast'),
+    item('Cereal', 'breakfast'),
+    item('Daal', null),
+    item('Eggs', 'lunch'),
+  ];
+
+  it('puts meals saved with the slot first (A-Z), then the rest (A-Z)', () => {
+    expect(orderSavedMealsForSlot(items, 'breakfast').map((i) => i.meal.name)).toEqual([
+      'Bagel',
+      'Cereal',
+      'Apple',
+      'Daal',
+      'Eggs',
+    ]);
+    expect(orderSavedMealsForSlot(items, 'dinner').map((i) => i.meal.name)).toEqual([
+      'Apple',
+      'Bagel',
+      'Cereal',
+      'Daal',
+      'Eggs',
+    ]);
+  });
+
+  it('leaves the list unchanged with no slot, and does not mutate its input', () => {
+    const before = items.map((i) => i.meal.name);
+    expect(orderSavedMealsForSlot(items, null).map((i) => i.meal.name)).toEqual(before);
+    orderSavedMealsForSlot(items, 'lunch');
+    expect(items.map((i) => i.meal.name)).toEqual(before);
+  });
+
+  it('still sorts A-Z within each group when the input was not sorted', () => {
+    const shuffled = [items[4], items[2], items[0], items[1]];
+    expect(orderSavedMealsForSlot(shuffled, 'breakfast').map((i) => i.meal.name)).toEqual([
+      'Bagel',
+      'Cereal',
+      'Apple',
+      'Eggs',
+    ]);
   });
 });

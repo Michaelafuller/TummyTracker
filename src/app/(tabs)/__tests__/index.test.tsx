@@ -397,8 +397,25 @@ describe('HomeScreen My meals (GitHub #25)', () => {
     );
   }
 
+  // My meals are now ordered by the time of day (GitHub #26), so the A-Z
+  // expectations below pin the clock to 02:00 (no slot suggested) — otherwise
+  // they would flip with the hour the suite happens to run at.
+  let nowSpy: jest.SpyInstance;
   beforeEach(() => {
     (listRecentFoodEntries as jest.Mock).mockResolvedValue([BASE_ENTRY]);
+    nowSpy = jest.spyOn(Date, 'now').mockReturnValue(new Date(2026, 8, 30, 2, 0).getTime());
+  });
+  afterEach(() => {
+    nowSpy.mockRestore();
+  });
+
+  it('puts meals saved for the time-of-day slot first (breakfast hours)', async () => {
+    setMeals();
+    nowSpy.mockReturnValue(new Date(2026, 8, 30, 8, 0).getTime());
+    const { getAllByTestId, findByLabelText } = await render(<HomeScreen />);
+    await findByLabelText('Re-log Oatmeal');
+    const rowIds = getAllByTestId(/^my-meal-(?!.*-edit$)/).map((node) => node.props.testID as string);
+    expect(rowIds).toEqual(['my-meal-toast', 'my-meal-oatmeal-bowl']);
   });
 
   it('hides the section when there are no saved meals', async () => {
