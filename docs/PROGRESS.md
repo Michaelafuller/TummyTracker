@@ -22,6 +22,11 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
 
 ## Status
 
+> **Owed device work is consolidated in `docs/OWED.md`** (run order, every
+> flow and manual check). The per-item "Owed device check" bullets below are
+> the detail; OWED.md is the list to work from.
+
+
 - **On `main`** through the 2026-09-26 session (see below). Feature surface:
   manual & barcode entry, multi-item meal builder with re-log-from-history,
   "Add item" and a servings stepper; browse/edit with a day/week/month
