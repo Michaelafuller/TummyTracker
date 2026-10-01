@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path';
 
 import { parseBackupJson } from '@/lib/backup';
 import { findingInstances } from '@/features/analysis/drilldown';
+import { latencyLine, latencySummary } from '@/features/analysis/latency';
 import { analyzeMedicationDays, confounderCaveat, medicationExposureDays } from '@/features/analysis/medications';
 import { currentPhase, evaluateExperiment, experimentSchedule } from '../engine';
 
@@ -86,6 +87,17 @@ describe('scripts/make-experiment-fixture.mjs', () => {
     const exposure = medicationExposureDays(parsed.medications, parsed.medicationEvents, parsed.medicationDoses);
     const caveat = confounderCaveat(findingInstances(parsed.entries, 'tag', 'lactose'), exposure, parsed.medications);
     expect(caveat).toMatchObject({ name: 'Ibuprofen', overlapping: 7, hits: 12 });
+  });
+
+  it('also yields the #21 latency line on the lactose finding (meal 12:00 → bad BM 15:00)', () => {
+    const parsed = parseBackupJson(generate('2026-09-28').text);
+    if (!parsed.ok) throw new Error(parsed.error);
+    const delays = findingInstances(parsed.entries, 'tag', 'lactose')
+      .map((instance) => instance.outcomeDelayMs)
+      .filter((delay): delay is number => delay != null);
+    const summary = latencySummary(delays);
+    expect(summary).not.toBeNull();
+    expect(latencyLine(summary!)).toBe('Usually about 3 h later');
   });
 
   it('gives every entry and the experiment a stable, unique fixture- id', () => {

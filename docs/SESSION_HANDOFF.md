@@ -5,7 +5,7 @@
 > Written 2026-09-27 at the end of a long Opus session (2026-09-26 → 27) so the
 > next session can continue without the transcript. `docs/HANDOFF.md` is a
 > *different* file: the execute-session spec for Sonnet — it currently holds the
-> finished medications-in-the-engine (GH #20) spec and gets overwritten by the next plan.
+> finished reaction-latency (GH #21) spec and gets overwritten by the next plan.
 > **Updated 2026-09-27 (later session):** GH #13–#18 shipped — see §1/§2.
 
 ## 1. Where things stand
@@ -43,6 +43,8 @@
   targeted tests, rungs clean. **Both cycles merge to main only after the
   owner's #13–#18 device run.** **GH #20** also on this branch — plan
   `91f68ee`, Sonnet `a3bba1f..ffefbfe`, review fix + fixture/flow/docs.
+  **GH #21** too — plan `69d65a0`, Sonnet `1c03d5a..e8c1c58` (second run; the
+  first died on a network error with nothing written), fixture/flow/docs.
 - **Typed routes:** `.expo/types/router.d.ts` (gitignored) only regenerates
   under `npx expo start`; a new route won't typecheck on a machine that
   hasn't run Metro since. Sonnet hand-added `/outcome/[id]` locally; the next
@@ -63,9 +65,10 @@
 
 The ranked backlog is `docs/PROGRESS.md` → "📌 Pinned — next up" (#1–7) and
 "Ranked backlog — continued" (#8–19). Each item names its GitHub issue.
-**#1–#9 (GH #12–#20) are done** in code (#13–#20 owe device checks; #19 and
-#20 are on the unmerged worktree branch until the owner's device run). Next:
-**#10 — Reaction latency + multiple windows (GH #21)**. Plan session first.
+**#1–#10 (GH #12–#21) are done** in code (#13–#21 owe device checks;
+#19–#21 are on the unmerged worktree branch until the owner's device run).
+Next: **#11 — Dose-response (GH #22)** — an S spike first: confirm whether
+`temporal.ts` ignores servings. Plan session first.
 - **Full Jest re-baselined 2026-09-27: 113 suites / 1,168 tests green**
   (`docs/RESULTS.md` addendum).
 

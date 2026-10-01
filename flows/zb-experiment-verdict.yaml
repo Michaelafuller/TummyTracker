@@ -10,6 +10,8 @@ appId: com.tummytracker.app.dev
 #   - #20 (same fixture): Insights shows "Medications linked to rough days"
 #     with the ibuprofen finding, and the lactose ingredient card carries the
 #     confounder caveat
+#   - #21 (same fixture): the lactose card shows its latency line
+#     ("Usually about 3 h later": meals at 12:00, bad BMs at 15:00)
 ---
 - launchApp
 - runFlow: _helpers/reconnect-dev-client.yaml
@@ -64,6 +66,7 @@ appId: com.tummytracker.app.dev
       text: "7 of the 12 meals followed by a rough outcome were eaten while you were taking Ibuprofen\."
     direction: UP
     centerElement: true
+- assertVisible: "Usually about 3 h later"
 - scrollUntilVisible:
     element:
       text: "Medications linked to rough days"

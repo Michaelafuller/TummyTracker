@@ -165,6 +165,17 @@
   followed by a rough outcome were eaten while you were taking X"), shown
   when ≥ 2 and ≥ half of the hit meals fall in one medication's window.
   Insights only (not the PDF or "What came before").
+- **Reaction latency + a second window (owner-decided 2026-09-28, GitHub
+  #21).** Every existing finding stays at 24 h. Latency ("Usually about 5 h
+  later (3–8 h)") = nearest-rank median + 25th–75th percentile of hours from
+  each hit meal to its first rough outcome, shown with ≥ 3 hits (Insights
+  cards, finding detail, PDF). One extra window only: **"Slower patterns
+  (within 48 h)"** lists ingredient/food/combination findings that reach
+  medium/high at 48 h and aren't shown at 24 h — never low (trying windows
+  per food finds spurious triggers by chance; long windows push the baseline
+  toward 100 %). The detail screen's 6/24/48/72 h timing profile is context
+  only and never creates findings. Everything else (What came before,
+  medication caveats, experiments, watchlist, PDF findings) stays at 24 h.
 - **Real-SQLite repository tests (2026-09-27, GitHub #18).** `jest/expo-sqlite-node.ts`
   is a Jest-only fake `expo-sqlite` backed by Node's built-in `node:sqlite`
   (**Node ≥ 22.13 to run the tests**; no dependency). A DB test file starts
