@@ -1,7 +1,8 @@
 appId: com.tummytracker.app.dev
 # ZC — Day details on the Home check-in card (GitHub #23, 2026-09-30).
-#   - "Add details" opens one-tap chips for today; Sleep: Poor + Stress: 4
-#   - Collapsed, the row summarizes them: "Stress 4 · Poor sleep"
+#   - "Add details" opens the "Today's details" screen (device-run fix
+#     2026-10-02: inline chips overflowed Home); Sleep: Poor + Stress: 4
+#   - Back on Home (Done), the row summarizes them: "Stress 4 · Poor sleep"
 #   - Tapping a selected chip clears it (back to unknown)
 #   - Persists across a relaunch
 #   - Period chips appear only after Settings → "Track period" is switched on
@@ -15,18 +16,23 @@ appId: com.tummytracker.app.dev
 - assertVisible: "How was today?"
 - tapOn: "Add details for today"
 - waitForAnimationToEnd
+- assertVisible: "Today's details"
 - assertNotVisible: "Period: Yes"
 - tapOn: "Sleep: Poor"
 - tapOn: "Stress: 4"
-- tapOn: "Hide details for today"
+- tapOn:
+    id: "day-details-done"
 - waitForAnimationToEnd
 - assertVisible: "Stress 4 · Poor sleep"
 
-# Clearing a chip: Stress back to unknown.
-- tapOn: "Add details for today"
+# Clearing a chip: Stress back to unknown. (With a summary the row's label is
+# "Edit details for today: …", so tap it by testID.)
+- tapOn:
+    id: "day-factors-toggle"
 - waitForAnimationToEnd
 - tapOn: "Stress: 4"
-- tapOn: "Hide details for today"
+- tapOn:
+    id: "day-details-done"
 - waitForAnimationToEnd
 - assertVisible: "Poor sleep"
 - assertNotVisible: "Stress 4 · Poor sleep"
@@ -37,7 +43,7 @@ appId: com.tummytracker.app.dev
 - runFlow: _helpers/reconnect-dev-client.yaml
 - assertVisible: "Poor sleep"
 
-# Period chips only once tracking is on.
+# Period chips only once tracking is on — and reachable (the bug this screen fixes).
 - tapOn:
     id: "open-settings"
 - waitForAnimationToEnd
@@ -51,11 +57,20 @@ appId: com.tummytracker.app.dev
 - waitForAnimationToEnd
 - back
 - waitForAnimationToEnd
-- tapOn: "Add details for today"
+- tapOn:
+    id: "day-factors-toggle"
 - waitForAnimationToEnd
-# The Period row sits below Caffeine, under the fold.
 - scrollUntilVisible:
     element:
       text: "Period: Yes"
     direction: DOWN
     centerElement: true
+- tapOn: "Period: Yes"
+- scrollUntilVisible:
+    element:
+      id: "day-details-done"
+    direction: DOWN
+- tapOn:
+    id: "day-details-done"
+- waitForAnimationToEnd
+- assertVisible: ".*Period.*"
