@@ -1,6 +1,5 @@
 import { fireEvent, render } from '@testing-library/react-native';
 
-import { setDayFactors } from '@/db/repository';
 import { usePrefsStore } from '@/features/prefs/prefsStore';
 import { recordDayCheckIn } from '../dayCheckInService';
 import { DayCheckInCard } from '../DayCheckInCard';
@@ -16,11 +15,6 @@ jest.mock('@/lib/haptics', () => ({
 
 jest.mock('../dayCheckInService', () => ({
   recordDayCheckIn: jest.fn().mockResolvedValue(undefined),
-}));
-
-// Today's day-details chips (GitHub #23) read and write the day_factor table.
-jest.mock('@/db/repository', () => ({
-  setDayFactors: jest.fn().mockResolvedValue(undefined),
 }));
 
 let mockFactors: unknown[] = [];
@@ -106,91 +100,33 @@ describe('DayCheckInCard', () => {
 });
 
 describe('DayCheckInCard — day details (GitHub #23)', () => {
-  it('is collapsed by default: an "Add details" link and no chips', async () => {
+  it('shows an "Add details" row when nothing is set', async () => {
     const { getByLabelText, getByText, queryByTestId } = await render(<DayCheckInCard date="2026-06-15" />);
     expect(getByLabelText('Add details for today')).toBeTruthy();
     expect(getByText('Add details')).toBeTruthy();
+    // The chips live on /day-details now, never inline on Home.
     expect(queryByTestId('day-factors')).toBeNull();
   });
 
-  it('expands to sleep, stress, alcohol and caffeine chips — and no period chips by default', async () => {
-    const { getByLabelText, queryByLabelText } = await render(<DayCheckInCard date="2026-06-15" />);
-    await fireEvent.press(getByLabelText('Add details for today'));
-
-    for (const label of [
-      'Sleep: Poor',
-      'Sleep: OK',
-      'Sleep: Good',
-      'Stress: 1',
-      'Stress: 5',
-      'Alcohol: None',
-      'Alcohol: Some',
-      'Alcohol: A lot',
-      'Caffeine: None',
-      'Caffeine: Usual',
-      'Caffeine: More',
-    ]) {
-      expect(getByLabelText(label)).toBeTruthy();
-    }
-    expect(queryByLabelText('Period: Yes')).toBeNull();
-    expect(queryByLabelText('Period: No')).toBeNull();
+  it('pressing the row pushes /day-details with today\'s date', async () => {
+    const { getByTestId } = await render(<DayCheckInCard date="2026-06-15" />);
+    await fireEvent.press(getByTestId('day-factors-toggle'));
+    expect(mockPush).toHaveBeenCalledWith({ pathname: '/day-details', params: { date: '2026-06-15' } });
   });
 
-  it('collapses again with "Hide details"', async () => {
-    const { getByLabelText, queryByTestId } = await render(<DayCheckInCard date="2026-06-15" />);
-    await fireEvent.press(getByLabelText('Add details for today'));
-    expect(queryByTestId('day-factors')).not.toBeNull();
-    await fireEvent.press(getByLabelText('Hide details for today'));
-    expect(queryByTestId('day-factors')).toBeNull();
-  });
-
-  it('tapping a chip saves only that field for today, immediately', async () => {
-    const { getByLabelText } = await render(<DayCheckInCard date="2026-06-15" />);
-    await fireEvent.press(getByLabelText('Add details for today'));
-
-    await fireEvent.press(getByLabelText('Stress: 4'));
-    expect(setDayFactors).toHaveBeenLastCalledWith('2026-06-15', { stress: 4 });
-
-    await fireEvent.press(getByLabelText('Sleep: Poor'));
-    expect(setDayFactors).toHaveBeenLastCalledWith('2026-06-15', { sleep: 'poor' });
-
-    await fireEvent.press(getByLabelText('Alcohol: A lot'));
-    expect(setDayFactors).toHaveBeenLastCalledWith('2026-06-15', { alcohol: 'a_lot' });
-
-    await fireEvent.press(getByLabelText('Caffeine: More'));
-    expect(setDayFactors).toHaveBeenLastCalledWith('2026-06-15', { caffeine: 'more' });
-    expect(setDayFactors).toHaveBeenCalledTimes(4);
-  });
-
-  it('shows the selected chip from today\'s row and clears it when tapped again', async () => {
+  it('summarizes the set details in the row and labels it as an edit', async () => {
     mockFactors = [factorRow({ stress: 4, sleep: 'poor' })];
-    const { getByLabelText } = await render(<DayCheckInCard date="2026-06-15" />);
-    await fireEvent.press(getByLabelText('Add details for today'));
-
-    expect(getByLabelText('Stress: 4').props.accessibilityState.selected).toBe(true);
-    expect(getByLabelText('Stress: 3').props.accessibilityState.selected).toBe(false);
-    expect(getByLabelText('Sleep: Poor').props.accessibilityState.selected).toBe(true);
-
-    await fireEvent.press(getByLabelText('Stress: 4'));
-    expect(setDayFactors).toHaveBeenLastCalledWith('2026-06-15', { stress: null });
-    await fireEvent.press(getByLabelText('Sleep: Poor'));
-    expect(setDayFactors).toHaveBeenLastCalledWith('2026-06-15', { sleep: null });
-  });
-
-  it('changing a selected chip to another value sets the new value (not a clear)', async () => {
-    mockFactors = [factorRow({ stress: 4 })];
-    const { getByLabelText } = await render(<DayCheckInCard date="2026-06-15" />);
-    await fireEvent.press(getByLabelText('Add details for today'));
-    await fireEvent.press(getByLabelText('Stress: 2'));
-    expect(setDayFactors).toHaveBeenLastCalledWith('2026-06-15', { stress: 2 });
-  });
-
-  it('summarizes the set details in the collapsed row', async () => {
-    mockFactors = [factorRow({ stress: 4, sleep: 'poor' })];
-    const { getByText, getByLabelText } = await render(<DayCheckInCard date="2026-06-15" />);
+    const { getByText, getByLabelText, queryByLabelText } = await render(<DayCheckInCard date="2026-06-15" />);
     expect(getByText('Stress 4 · Poor sleep')).toBeTruthy();
-    // The link keeps its label so it stays findable.
-    expect(getByLabelText('Add details for today')).toBeTruthy();
+    expect(getByLabelText('Edit details for today: Stress 4 · Poor sleep')).toBeTruthy();
+    expect(queryByLabelText('Add details for today')).toBeNull();
+  });
+
+  it('pressing the summary row also pushes /day-details', async () => {
+    mockFactors = [factorRow({ stress: 4 })];
+    const { getByTestId } = await render(<DayCheckInCard date="2026-06-15" />);
+    await fireEvent.press(getByTestId('day-factors-toggle'));
+    expect(mockPush).toHaveBeenCalledWith({ pathname: '/day-details', params: { date: '2026-06-15' } });
   });
 
   it('ignores a factor row for a different date', async () => {
@@ -203,27 +139,6 @@ describe('DayCheckInCard — day details (GitHub #23)', () => {
     mockFactors = [factorRow({})];
     const { getByText } = await render(<DayCheckInCard date="2026-06-15" />);
     expect(getByText('Add details')).toBeTruthy();
-  });
-
-  it('shows period chips only when tracking is enabled, and saves a boolean', async () => {
-    usePrefsStore.setState({ trackPeriod: true });
-    const { getByLabelText } = await render(<DayCheckInCard date="2026-06-15" />);
-    await fireEvent.press(getByLabelText('Add details for today'));
-
-    await fireEvent.press(getByLabelText('Period: Yes'));
-    expect(setDayFactors).toHaveBeenLastCalledWith('2026-06-15', { period: true });
-    await fireEvent.press(getByLabelText('Period: No'));
-    expect(setDayFactors).toHaveBeenLastCalledWith('2026-06-15', { period: false });
-  });
-
-  it('a "No" period selection clears when tapped again (null, not false)', async () => {
-    usePrefsStore.setState({ trackPeriod: true });
-    mockFactors = [factorRow({ period: false })];
-    const { getByLabelText } = await render(<DayCheckInCard date="2026-06-15" />);
-    await fireEvent.press(getByLabelText('Add details for today'));
-    expect(getByLabelText('Period: No').props.accessibilityState.selected).toBe(true);
-    await fireEvent.press(getByLabelText('Period: No'));
-    expect(setDayFactors).toHaveBeenLastCalledWith('2026-06-15', { period: null });
   });
 
   it('keeps period out of the summary while tracking is off', async () => {
@@ -239,10 +154,9 @@ describe('DayCheckInCard — day details (GitHub #23)', () => {
     expect(getByText('Stress 2 · Period')).toBeTruthy();
   });
 
-  it('does not touch the fine/rough check-in', async () => {
-    const { getByLabelText } = await render(<DayCheckInCard date="2026-06-15" />);
-    await fireEvent.press(getByLabelText('Add details for today'));
-    await fireEvent.press(getByLabelText('Stress: 5'));
+  it('opening details does not touch the fine/rough check-in', async () => {
+    const { getByTestId } = await render(<DayCheckInCard date="2026-06-15" />);
+    await fireEvent.press(getByTestId('day-factors-toggle'));
     expect(recordDayCheckIn).not.toHaveBeenCalled();
   });
 });
