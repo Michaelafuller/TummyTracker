@@ -189,6 +189,15 @@ describe('BrowseScreen Meds filter (Cycle B)', () => {
     expect(await findByText('Omeprazole 20 mg')).toBeTruthy();
   });
 
+  it('shows a dose reason after the amount in the Journal (GitHub #28)', async () => {
+    mockMedicationDoses = [
+      makeMedicationDose({ id: 'd1', eventId: 'evt1', medicationId: 'med1', dose: 200, doseUnit: 'mg', reason: 'headache' }),
+    ];
+    const { findByText } = await render(<BrowseScreen />);
+
+    expect(await findByText('Omeprazole 200 mg — headache')).toBeTruthy();
+  });
+
   it('"Meds" shows only the medication row', async () => {
     const { getByLabelText, findByText, queryByText } = await render(<BrowseScreen />);
 

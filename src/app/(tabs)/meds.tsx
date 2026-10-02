@@ -1,5 +1,5 @@
-import { useRouter } from 'expo-router';
-import { useMemo } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -14,7 +14,7 @@ import { useMedicationDoses, useMedicationEvents, useMedications } from '@/featu
 import { useTheme } from '@/hooks/use-theme';
 import { formatTime12h } from '@/lib/datetime';
 import { medicationEventsToJournalItems, type JournalItem } from '@/lib/journal';
-import { formatDoseSummary } from '@/lib/medications';
+import { adherenceLine, adherenceSummary, formatDoseSummary } from '@/lib/medications';
 
 const RECENT_DOSES_LIMIT = 5;
 
@@ -32,6 +32,15 @@ export default function MedicationsScreen() {
   const events = useMedicationEvents();
   const doses = useMedicationDoses();
 
+  // Read once per focus (not every render) so the "last 30 days" window
+  // follows the calendar day if the tab was left open past midnight.
+  const [now, setNow] = useState(() => Date.now());
+  useFocusEffect(
+    useCallback(() => {
+      setNow(Date.now());
+    }, []),
+  );
+
   const active = medications.filter((med) => med.isActive);
   const inactive = medications.filter((med) => !med.isActive);
 
@@ -43,8 +52,20 @@ export default function MedicationsScreen() {
     [events, doses, medications],
   );
 
+  // "Logged on N of the last 30 days" per ACTIVE medication (GitHub #28).
+  // Only ever reads logged doses — a day without one is simply unknown.
+  const adherenceLines = useMemo(() => {
+    const lines = new Map<string, string>();
+    for (const med of medications) {
+      if (!med.isActive) continue;
+      lines.set(med.id, adherenceLine(med, adherenceSummary(med, events, doses, now)));
+    }
+    return lines;
+  }, [medications, events, doses, now]);
+
   function renderRow(med: Medication) {
     const summary = formatDoseSummary(med);
+    const adherence = adherenceLines.get(med.id);
     return (
       <Pressable
         key={med.id}
@@ -60,6 +81,11 @@ export default function MedicationsScreen() {
           {summary ? (
             <ThemedText type="small" themeColor="textSecondary">
               {summary}
+            </ThemedText>
+          ) : null}
+          {adherence ? (
+            <ThemedText type="small" themeColor="textSecondary" testID={`adherence-${med.id}`}>
+              {adherence}
             </ThemedText>
           ) : null}
         </View>

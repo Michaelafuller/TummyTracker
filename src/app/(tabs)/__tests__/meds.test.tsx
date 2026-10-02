@@ -205,3 +205,66 @@ describe('MedicationsScreen regular meds button (GitHub #26)', () => {
     expect(second.queryByTestId('regular-meds-log')).toBeNull();
   });
 });
+
+describe('MedicationsScreen adherence lines (GitHub #28)', () => {
+  const NOW = new Date(2026, 9, 15, 12, 0).getTime(); // Thu 2026-10-15
+  const daysAgoAt = (n: number, h = 12) => new Date(2026, 9, 15 - n, h, 0).getTime();
+
+  beforeEach(() => {
+    jest.spyOn(Date, 'now').mockReturnValue(NOW);
+  });
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  function logDays(medicationId: string, days: number[]) {
+    days.forEach((n, i) => {
+      const eventId = `ev-${medicationId}-${i}`;
+      mockEvents.push(makeEvent({ id: eventId, takenAt: daysAgoAt(n) }));
+      mockDoses.push(makeDose({ id: `do-${medicationId}-${i}`, eventId, medicationId }));
+    });
+  }
+
+  it('shows "Logged on N of the last 30 days" for a regular medication and "N days in the last 30" for an as-needed one', async () => {
+    mockMedications = [
+      makeMedication({ id: 'reg', name: 'Omeprazole', defaultDose: 20, doseUnit: 'mg', isRegular: true }),
+      makeMedication({ id: 'prn', name: 'Ibuprofen', isRegular: false }),
+    ];
+    // 26 distinct days incl. the window's first day (29 days ago) -> full 30-day denominator.
+    logDays('reg', [29, ...Array.from({ length: 25 }, (_, i) => i)]);
+    logDays('prn', [1, 6, 12]);
+
+    const { findByTestId } = await renderScreen(<MedicationsScreen />);
+
+    expect((await findByTestId('adherence-reg')).props.children).toBe('Logged on 26 of the last 30 days');
+    expect((await findByTestId('adherence-prn')).props.children).toBe('Logged on 3 days in the last 30');
+  });
+
+  it('says "No doses logged in the last 30 days" when a medication has none', async () => {
+    mockMedications = [makeMedication({ id: 'prn', name: 'Ibuprofen', isRegular: false })];
+    const { findByTestId } = await renderScreen(<MedicationsScreen />);
+    expect((await findByTestId('adherence-prn')).props.children).toBe('No doses logged in the last 30 days');
+  });
+
+  it('a younger regular medication is measured from its first logged dose', async () => {
+    mockMedications = [makeMedication({ id: 'reg', defaultDose: 20, doseUnit: 'mg', isRegular: true })];
+    logDays('reg', [9, 4, 0]);
+    const { findByTestId } = await renderScreen(<MedicationsScreen />);
+    expect((await findByTestId('adherence-reg')).props.children).toBe('Logged on 3 of the last 10 days');
+  });
+
+  it('inactive medications get no adherence line', async () => {
+    mockMedications = [makeMedication({ id: 'old', name: 'Old Med', isActive: false })];
+    logDays('old', [1]);
+    const { queryByTestId } = await renderScreen(<MedicationsScreen />);
+    expect(queryByTestId('adherence-old')).toBeNull();
+  });
+
+  it('Recent doses show a dose reason after the amount', async () => {
+    mockMedications = [makeMedication({ id: 'prn', name: 'Ibuprofen', isRegular: false })];
+    mockEvents = [makeEvent({ id: 'evt1', takenAt: daysAgoAt(1) })];
+    mockDoses = [makeDose({ id: 'd1', eventId: 'evt1', medicationId: 'prn', dose: 200, doseUnit: 'mg', reason: 'headache' })];
+    const { findByText } = await renderScreen(<MedicationsScreen />);
+    expect(await findByText('Ibuprofen 200 mg \u2014 headache')).toBeTruthy();
+  });
+});

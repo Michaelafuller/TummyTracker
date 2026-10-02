@@ -406,7 +406,7 @@ export function summarizeMedicationUse(
 
 // ---------------------------------------------------------------------------
 // Adherence view + as-needed reasons (GitHub #28). Everything below only reads
-// logged dose rows — a day without a dose is unknown, never "missed" — and
+// logged dose rows — a day without a dose is simply unknown — and
 // reuses the day-counting helpers above so the Meds tab line and the PDF agree.
 // ---------------------------------------------------------------------------
 
@@ -471,8 +471,8 @@ export function adherenceSummary(
 }
 
 /**
- * The adherence wording (GitHub #28). Never "missed"/"skipped" and never a
- * percentage: "Logged on 26 of the last 30 days", "Logged on 4 of the last 10
+ * The adherence wording (GitHub #28): logged days only, never a
+ * percentage. "Logged on 26 of the last 30 days", "Logged on 4 of the last 10
  * days" (a younger regular medication), "Logged on 4 days in the last 30"
  * (as-needed), or "No doses logged in the last 30 days".
  */

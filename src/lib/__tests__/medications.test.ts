@@ -786,7 +786,7 @@ describe('adherenceLine', () => {
     expect(adherenceLine(asNeeded, { daysWithDose: 0, denominator: null })).toBe('No doses logged in the last 30 days');
   });
 
-  it('never uses missed / skipped wording or a percentage', () => {
+  it('uses neutral logged-days wording and no percentage', () => {
     const lines = [
       adherenceLine(regular, { daysWithDose: 26, denominator: 30 }),
       adherenceLine(regular, { daysWithDose: 4, denominator: 10 }),
