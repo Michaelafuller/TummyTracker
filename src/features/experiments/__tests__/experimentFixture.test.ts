@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { parseBackupJson } from '@/lib/backup';
+import { rederiveRowTags } from '@/lib/tagBackfill';
 import { findingInstances } from '@/features/analysis/drilldown';
 import { chanceChecks, chanceSentence } from '@/features/analysis/chance';
 import { analyzeFactorDays, factorCaveat, factorDays, factorSentence } from '@/features/analysis/factors';
@@ -18,6 +19,9 @@ import { currentPhase, evaluateExperiment, experimentSchedule } from '../engine'
 // importing its pure builder the test runs the real CLI — the exact thing
 // the owner runs — and checks the file it writes.
 const SCRIPT = resolve(__dirname, '../../../../scripts/make-experiment-fixture.mjs');
+
+const RAW_LACTOSE_SENTENCE = "Chance check: of 3 ingredients checked, luck alone would make fewer than 1 look this strong.";
+const BACKFILLED_LACTOSE_SENTENCE = "Chance check: of 6 ingredients checked, luck alone would make fewer than 1 look this strong.";
 
 let dir: string;
 
@@ -123,10 +127,10 @@ describe('scripts/make-experiment-fixture.mjs', () => {
     expect(meds.findings[0]).toMatchObject({ name: 'Ibuprofen', exposedDays: 7, exposedRough: 7 });
   });
 
-  it('also yields the #24 chance lines: lactose could easily be chance, ibuprofen and stress rarely', () => {
-    // Lactose is eaten in one 14-day block and the rough days are one streak
-    // inside it, so from correlation alone luck lines a food up with a streak
-    // about as often — the honest answer (the experiment is the better test).
+  it('also yields the #24 chance lines: lactose rarely by chance, ibuprofen and stress rarely', () => {
+    // Raw backup, as imported before the app's tag backfill: the lactose meals
+    // carry one tag, the plain meals two ("rice", "chicken") that sit on exactly
+    // the same meals, so the chance check counts them as ONE finding.
     const parsed = parseBackupJson(generate('2026-09-28').text);
     if (!parsed.ok) throw new Error(parsed.error);
     const opts = { trackPeriod: false };
@@ -144,7 +148,7 @@ describe('scripts/make-experiment-fixture.mjs', () => {
     const lactose = computeInsights(parsed.entries).ingredientFindings[0];
     expect(lactose).toMatchObject({ key: 'lactose', confidence: 'high' });
     expect(chanceSentence(checks.ingredients ?? null, lactose.confidence, { one: 'ingredient', many: 'ingredients' })).toBe(
-      "Chance check: of 3 ingredients checked, luck alone would make about 1 look this strong. That's as many as you have, so this could easily be chance.",
+      RAW_LACTOSE_SENTENCE,
     );
     expect(chanceSentence(checks.medications ?? null, 'high', { one: 'medication', many: 'medications' })).toBe(
       'Chance check: of 1 medication checked, luck alone would make fewer than 1 look this strong.',
@@ -153,6 +157,40 @@ describe('scripts/make-experiment-fixture.mjs', () => {
     expect(chanceSentence(checks.factors ?? null, factor.confidence, { one: 'daily factor', many: 'daily factors' })).toBe(
       'Chance check: of 1 daily factor checked, luck alone would make fewer than 1 look this strong.',
     );
+  });
+
+  it('with the app tag backfill applied, the four look-alike lactose tags count once (device run 2026-10-02)', () => {
+    // The app re-derives tags from the ingredient text on start: "Milky pasta"
+    // then carries lactose, pasta, milk and cheese — four tags on exactly the
+    // same meals. Before the look-alike rule, found = 4 beat ~1.3 expected and
+    // dropped the "could easily be chance" warning for the wrong reason.
+    const parsed = parseBackupJson(generate('2026-09-28').text);
+    if (!parsed.ok) throw new Error(parsed.error);
+    const entries = parsed.entries.map((e) => {
+      const grown = rederiveRowTags(e.tagsJson, e.ingredientsText);
+      return grown === null ? e : { ...e, tagsJson: grown };
+    });
+    const milky = entries.find((e) => e.name === 'Milky pasta');
+    expect(JSON.parse(milky?.tagsJson ?? '[]')).toEqual(['lactose', 'pasta', 'milk', 'cheese']);
+
+    const insights = computeInsights(entries);
+    expect(insights.ingredientFindings.map((f) => f.key)).toEqual(
+      expect.arrayContaining(['lactose', 'pasta', 'milk', 'cheese']),
+    );
+    const checks = chanceChecks({
+      entries,
+      checkIns: parsed.dayCheckIns,
+      meds: parsed.medications,
+      events: parsed.medicationEvents,
+      doses: parsed.medicationDoses,
+      factorRows: parsed.dayFactors,
+      trackPeriod: false,
+      families: new Set(['ingredients'] as const),
+    });
+    expect(checks.ingredients?.found.high).toBe(1);
+    expect(
+      chanceSentence(checks.ingredients ?? null, 'high', { one: 'ingredient', many: 'ingredients' }),
+    ).toBe(BACKFILLED_LACTOSE_SENTENCE);
   });
 
   it('gives every entry and the experiment a stable, unique fixture- id', () => {

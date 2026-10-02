@@ -20,6 +20,7 @@ import {
   outcomeRateCandidates,
   SLOW_WINDOW_MS,
   tagHitRates,
+  type OutcomeCandidates,
   type OutcomeFinding,
   type OutcomeKey,
 } from './temporal';
@@ -95,7 +96,7 @@ const foodKeysOf = (meal: LogEntry): OutcomeKey[] => {
 export function ingredientCandidates(
   entries: readonly LogEntry[],
   windowMs: number = DEFAULT_WINDOW_MS,
-): { checked: number; candidates: OutcomeFinding[] } {
+): OutcomeCandidates {
   return outcomeRateCandidates(entries, ingredientKeysOf, { windowMs });
 }
 
@@ -115,7 +116,7 @@ export function analyzeFoodOutcomes(
 export function foodCandidates(
   entries: readonly LogEntry[],
   windowMs: number = DEFAULT_WINDOW_MS,
-): { checked: number; candidates: OutcomeFinding[] } {
+): OutcomeCandidates {
   return outcomeRateCandidates(entries, foodKeysOf, { minOccurrences: MIN_FOOD_OCCURRENCES, windowMs });
 }
 
@@ -202,7 +203,7 @@ function interactionFilter(
 export function pairAnalysis(
   entries: readonly LogEntry[],
   windowMs: number = DEFAULT_WINDOW_MS,
-): { checked: number; candidates: OutcomeFinding[]; shown: OutcomeFinding[] } {
+): OutcomeCandidates & { shown: OutcomeFinding[] } {
   const raw = outcomeRateCandidates(entries, pairKeysOf(entries), {
     minOccurrences: MIN_PAIR_OCCURRENCES,
     windowMs,
@@ -211,6 +212,7 @@ export function pairAnalysis(
   return {
     checked: raw.checked,
     candidates: raw.candidates.filter(passes),
+    signatures: raw.signatures,
     // The fallback is applied BEFORE the interaction filter, as it always was.
     shown: displayOutcomeFindings(raw.candidates).filter(passes).slice(0, MAX_PAIR_FINDINGS),
   };
@@ -220,9 +222,9 @@ export function pairAnalysis(
 export function pairCandidates(
   entries: readonly LogEntry[],
   windowMs: number = DEFAULT_WINDOW_MS,
-): { checked: number; candidates: OutcomeFinding[] } {
-  const { checked, candidates } = pairAnalysis(entries, windowMs);
-  return { checked, candidates };
+): OutcomeCandidates {
+  const { checked, candidates, signatures } = pairAnalysis(entries, windowMs);
+  return { checked, candidates, signatures };
 }
 
 export interface NutrientOutcomeFinding {
@@ -267,9 +269,12 @@ export function analyzeNutrientOutcomes(entries: readonly LogEntry[]): NutrientO
 export function nutrientCandidates(entries: readonly LogEntry[]): {
   checked: number;
   candidates: NutrientOutcomeFinding[];
+  /** Per nutrient, the sorted high-side meal ids joined (see `OutcomeCandidates.signatures`). */
+  signatures: Map<string, string>;
 } {
   const food = entries.filter(isFood);
   const candidates: NutrientOutcomeFinding[] = [];
+  const signatures = new Map<string, string>();
   let checked = 0;
 
   for (const nutrient of NUTRITION_FIELDS) {
@@ -305,9 +310,10 @@ export function nutrientCandidates(entries: readonly LogEntry[]): {
       sampleSize: high.length,
       confidence,
     });
+    signatures.set(nutrient, high.map((e) => e.id).sort().join('|'));
   }
 
-  return { checked, candidates };
+  return { checked, candidates, signatures };
 }
 
 export interface InsightsSummary {

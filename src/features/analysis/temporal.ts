@@ -131,6 +131,12 @@ export interface OutcomeCandidates {
    * included) — unsorted (first-seen key order) and uncapped.
    */
   candidates: OutcomeFinding[];
+  /**
+   * Per candidate key, the sorted ids of the meals the finding is about,
+   * joined — two candidates with the same signature cover exactly the same
+   * meals (look-alikes). The chance check counts them once (chance.ts).
+   */
+  signatures: Map<string, string>;
 }
 
 /**
@@ -160,7 +166,7 @@ export function outcomeRateCandidates(
     keysByMeal.set(e.id, keys);
   }
 
-  if (eligibleMeals.length === 0) return { checked: 0, candidates: [] };
+  if (eligibleMeals.length === 0) return { checked: 0, candidates: [], signatures: new Map() };
 
   const mealOutcomeMap = mealsFollowedByOutcome(entries, eligibleMeals, windowMs);
 
@@ -179,6 +185,7 @@ export function outcomeRateCandidates(
 
   let checked = 0;
   const candidates: OutcomeFinding[] = [];
+  const signatures = new Map<string, string>();
   for (const [key, group] of byKey.entries()) {
     if (group.meals.length < minOccurrences) continue;
     checked++;
@@ -205,8 +212,9 @@ export function outcomeRateCandidates(
       baseRate: Math.round(baseRate * 100) / 100,
       confidence,
     });
+    signatures.set(key, group.meals.map((m) => m.id).sort().join('|'));
   }
-  return { checked, candidates };
+  return { checked, candidates, signatures };
 }
 
 /**

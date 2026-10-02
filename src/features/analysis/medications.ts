@@ -176,8 +176,15 @@ export function compareMedicationDays(
   rough: ReadonlySet<string>,
   meds: readonly Medication[],
   exposure: ReadonlyMap<string, ReadonlySet<string>>,
-): { checked: number; candidates: MedicationFinding[]; notes: MedicationNote[] } {
+): {
+  checked: number;
+  candidates: MedicationFinding[];
+  notes: MedicationNote[];
+  /** Per medication id, the sorted covered exposed day keys joined (look-alike detection, chance.ts). */
+  signatures: Map<string, string>;
+} {
   let checked = 0;
+  const signatures = new Map<string, string>();
   const candidates: MedicationFinding[] = [];
   const notes: MedicationNote[] = [];
 
@@ -232,9 +239,10 @@ export function compareMedicationDays(
       otherRate,
       confidence,
     });
+    signatures.set(med.id, [...days].filter((key) => covered.has(key)).sort().join('|'));
   }
 
-  return { checked, candidates, notes };
+  return { checked, candidates, notes, signatures };
 }
 
 export interface ConfounderCaveat {

@@ -385,3 +385,77 @@ describe('chanceChecks: calendar gaps never make noise look trustworthy (review 
     expect(chanceSentence(withGap, 'low', NOUN)).toContain('could easily be chance');
   });
 });
+
+describe('chanceChecks: look-alike findings count once (device run 2026-10-02)', () => {
+  const HOUR = 60 * 60 * 1000;
+
+  /** 40 days, one lunch a day; `tagsFor(day)` picks its tags; days in `hitDays` get a rough symptom 3 h later. */
+  function journal(tagsFor: (day: number) => string[], hitDays: (day: number) => boolean): LogEntry[] {
+    const entries: LogEntry[] = [];
+    for (let d = 0; d < 40; d++) {
+      entries.push(
+        makeEntry({ type: 'meal', name: `Lunch ${d}`, loggedAt: dayAt(d, 12), tagsJson: JSON.stringify(tagsFor(d)) }),
+      );
+      if (hitDays(d)) {
+        entries.push(makeEntry({ type: 'symptom', severity: 4, loggedAt: dayAt(d, 12) + 3 * HOUR }));
+      }
+    }
+    return entries;
+  }
+
+  function ingredientCheck(entries: LogEntry[]): ChanceCheck {
+    const result = chanceChecks({
+      entries,
+      checkIns: [],
+      meds: [],
+      events: [],
+      doses: [],
+      factorRows: [],
+      trackPeriod: false,
+      families: new Set<ChanceFamily>(['ingredients']),
+    });
+    return result.ingredients as ChanceCheck;
+  }
+
+  const hit = (d: number) => d % 4 === 0;
+
+  it('two tags on exactly the same meals count as one finding, on the real journal and on every slide', () => {
+    const twins = ingredientCheck(journal((d) => (hit(d) ? ['a', 'b'] : ['x']), hit));
+    const single = ingredientCheck(journal((d) => (hit(d) ? ['a'] : ['x']), hit));
+
+    expect(single.found.high).toBe(1);
+    expect(twins.found).toEqual(single.found); // 1, not 2
+    expect(twins.checked).toBe(single.checked + 1); // still the raw number of things compared
+    expect(twins.expected).toEqual(single.expected); // every slide counts the pair once too
+    expect(twins.slides).toBe(single.slides);
+  });
+
+  it('tags with different meal sets are not merged, even with equal counts', () => {
+    const entries = journal(
+      (d) => (d % 4 === 0 ? ['a'] : d % 4 === 1 ? ['b'] : ['x']),
+      (d) => d % 4 === 0 || d % 4 === 1,
+    );
+    const check = ingredientCheck(entries);
+    expect(check.found.high).toBe(2);
+  });
+
+  it('two medications always taken on the same days count once', () => {
+    const base = buildJournal({ seed: 1, days: 60, tagPool: 8, outcomeProb: 0.25, medCount: 1, medOnRoughDays: true });
+    const twin = {
+      ...base.meds[0],
+      id: 'med-twin',
+      name: 'Twin',
+    };
+    const twinDoses = base.doses.map((dose) => ({ ...dose, id: `${dose.id}-twin`, medicationId: twin.id }));
+    const run = (j: typeof base) =>
+      chanceChecks({ ...j, trackPeriod: false, families: new Set<ChanceFamily>(['medications']) }).medications as ChanceCheck;
+
+    const single = run(base);
+    const pair = run({ ...base, meds: [...base.meds, twin], doses: [...base.doses, ...twinDoses] });
+
+    expect(single.found.high).toBe(1);
+    expect(pair.found).toEqual(single.found);
+    expect(pair.checked).toBe(single.checked + 1);
+    expect(pair.expected).toEqual(single.expected);
+  });
+});

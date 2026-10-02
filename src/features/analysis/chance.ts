@@ -17,7 +17,13 @@ import type { ConfidenceTier } from '@/lib/stats';
 import { compareFactorDays, factorDays, type FactorRow } from './factors';
 import { foodCandidates, ingredientCandidates, nutrientCandidates, pairAnalysis } from './insights';
 import { compareMedicationDays, coveredAndRoughDays, medicationExposureDays } from './medications';
-import { displayOutcomeFindings, isOutcome, SLOW_WINDOW_MS, type OutcomeFinding } from './temporal';
+import {
+  displayOutcomeFindings,
+  isOutcome,
+  SLOW_WINDOW_MS,
+  type OutcomeCandidates,
+  type OutcomeFinding,
+} from './temporal';
 
 /** Slides are at least this many whole days away from zero (clears the 48 h window). */
 export const MIN_SLIDE_DAYS = 3;
@@ -131,6 +137,29 @@ interface Counted {
   found: Tally;
 }
 
+const TIER_RANK: Record<ConfidenceTier, number> = { low: 0, medium: 1, high: 2 };
+
+/**
+ * Candidates that cover exactly the same units (meals or days) are look-alikes
+ * (e.g. four tags that sit on the same meals) and count as ONE finding, at the
+ * best tier among them (identical units give identical rates; the max is only
+ * a safeguard). `signatures` maps a candidate's id to its unit-set signature; a
+ * candidate without one is never merged. Applied identically to the real
+ * journal and to every slide.
+ */
+function distinctTiers(
+  candidates: readonly { id: string; confidence: ConfidenceTier }[],
+  signatures: ReadonlyMap<string, string>,
+): ConfidenceTier[] {
+  const best = new Map<string, ConfidenceTier>();
+  for (const { id, confidence } of candidates) {
+    const signature = signatures.get(id) ?? `unique:${id}`;
+    const current = best.get(signature);
+    if (current === undefined || TIER_RANK[confidence] > TIER_RANK[current]) best.set(signature, confidence);
+  }
+  return [...best.values()];
+}
+
 /** Candidates at each tier or better: `low` counts all, `medium` medium+high, `high` high only. */
 function tally(tiers: readonly ConfidenceTier[]): Tally {
   const high = tiers.filter((t) => t === 'high').length;
@@ -148,16 +177,16 @@ function slowerTally(tiers: readonly ConfidenceTier[]): Tally {
  * 48 h candidates at medium or better whose key is NOT among the same
  * journal's shown 24 h findings of that kind — mirroring `analyzeSlowerPatterns`.
  */
-function slowerCounted(
-  slow: { checked: number; candidates: OutcomeFinding[] },
-  shown24: readonly OutcomeFinding[],
-): Counted {
+function slowerCounted(slow: OutcomeCandidates, shown24: readonly OutcomeFinding[]): Counted {
   const shownKeys = new Set(shown24.map((f) => f.key));
-  const tiers = slow.candidates.filter((f) => !shownKeys.has(f.key)).map((f) => f.confidence);
-  return { checked: slow.checked, found: slowerTally(tiers) };
+  const novel = slow.candidates.filter((f) => !shownKeys.has(f.key));
+  return { checked: slow.checked, found: slowerTally(distinctTiers(novel.map(outcomeId), slow.signatures)) };
 }
 
-const tiersOf = (candidates: readonly { confidence: ConfidenceTier }[]) => candidates.map((c) => c.confidence);
+const outcomeId = (f: OutcomeFinding) => ({ id: f.key, confidence: f.confidence });
+
+/** The tally of a meal-level candidate list, look-alikes counted once. */
+const outcomeFound = (r: OutcomeCandidates): Tally => tally(distinctTiers(r.candidates.map(outcomeId), r.signatures));
 
 /**
  * Counts for every requested meal-level family on one journal (the real one or
@@ -173,7 +202,7 @@ function mealLevelCounts(
 
   if (families.has('ingredients') || families.has('slowerIngredients')) {
     const day = ingredientCandidates(entries);
-    if (families.has('ingredients')) out.ingredients = { checked: day.checked, found: tally(tiersOf(day.candidates)) };
+    if (families.has('ingredients')) out.ingredients = { checked: day.checked, found: outcomeFound(day) };
     if (families.has('slowerIngredients')) {
       out.slowerIngredients = slowerCounted(
         ingredientCandidates(entries, SLOW_WINDOW_MS),
@@ -183,19 +212,23 @@ function mealLevelCounts(
   }
   if (families.has('foods') || families.has('slowerFoods')) {
     const day = foodCandidates(entries);
-    if (families.has('foods')) out.foods = { checked: day.checked, found: tally(tiersOf(day.candidates)) };
+    if (families.has('foods')) out.foods = { checked: day.checked, found: outcomeFound(day) };
     if (families.has('slowerFoods')) {
       out.slowerFoods = slowerCounted(foodCandidates(entries, SLOW_WINDOW_MS), displayOutcomeFindings(day.candidates));
     }
   }
   if (families.has('pairs') || families.has('slowerPairs')) {
     const day = pairAnalysis(entries);
-    if (families.has('pairs')) out.pairs = { checked: day.checked, found: tally(tiersOf(day.candidates)) };
+    if (families.has('pairs')) out.pairs = { checked: day.checked, found: outcomeFound(day) };
     if (families.has('slowerPairs')) out.slowerPairs = slowerCounted(pairAnalysis(entries, SLOW_WINDOW_MS), day.shown);
   }
   if (families.has('nutrients')) {
     const r = nutrientCandidates(entries);
-    out.nutrients = { checked: r.checked, found: tally(tiersOf(r.candidates)) };
+    const nutrientTiers = distinctTiers(
+      r.candidates.map((f) => ({ id: f.nutrient, confidence: f.confidence })),
+      r.signatures,
+    );
+    out.nutrients = { checked: r.checked, found: tally(nutrientTiers) };
   }
   return out;
 }
@@ -284,8 +317,24 @@ export function chanceChecks(input: {
         const m = wantMeds ? compareMedicationDays(covered, roughSet, input.meds, exposure) : null;
         const f = wantFactors ? compareFactorDays(covered, roughSet, days) : null;
         return {
-          meds: m && { checked: m.checked, found: tally(tiersOf(m.candidates)) },
-          factors: f && { checked: f.checked, found: tally(tiersOf(f.candidates)) },
+          meds: m && {
+            checked: m.checked,
+            found: tally(
+              distinctTiers(
+                m.candidates.map((x) => ({ id: x.medicationId, confidence: x.confidence })),
+                m.signatures,
+              ),
+            ),
+          },
+          factors: f && {
+            checked: f.checked,
+            found: tally(
+              distinctTiers(
+                f.candidates.map((x) => ({ id: x.key, confidence: x.confidence })),
+                f.signatures,
+              ),
+            ),
+          },
         };
       };
       const real = countAt(rough);

@@ -104,7 +104,7 @@ describe('outcome-rate candidates', () => {
       (JSON.parse(m.tagsJson ?? '[]') as string[]).map((t) => ({ key: t, label: t }));
     expect(outcomeRateCandidates(entries, keysOf).checked).toBe(2);
     expect(outcomeRateCandidates(entries, keysOf, { minOccurrences: 4 }).checked).toBe(1);
-    expect(outcomeRateCandidates([], keysOf)).toEqual({ checked: 0, candidates: [] });
+    expect(outcomeRateCandidates([], keysOf)).toEqual({ checked: 0, candidates: [], signatures: new Map() });
   });
 });
 
@@ -184,6 +184,7 @@ describe('compareMedicationDays', () => {
       checked: 0,
       candidates: [],
       notes: [],
+      signatures: new Map(),
     });
   });
 });
@@ -212,6 +213,6 @@ describe('compareFactorDays', () => {
     const { covered, rough } = coveredAndRoughDays(j.entries, j.checkIns, visible);
     // stress and sleep are logged on every day; nothing else is logged.
     expect(compareFactorDays(covered, rough, days).checked).toBe(2);
-    expect(compareFactorDays(covered, rough, new Map())).toEqual({ checked: 0, candidates: [], notes: [] });
+    expect(compareFactorDays(covered, rough, new Map())).toEqual({ checked: 0, candidates: [], notes: [], signatures: new Map() });
   });
 });

@@ -259,8 +259,15 @@ export function compareFactorDays(
   covered: ReadonlySet<string>,
   rough: ReadonlySet<string>,
   days: ReadonlyMap<FactorKey, FactorDays>,
-): { checked: number; candidates: FactorFinding[]; notes: FactorNote[] } {
+): {
+  checked: number;
+  candidates: FactorFinding[];
+  notes: FactorNote[];
+  /** Per factor key, the sorted covered flagged day keys joined (look-alike detection, chance.ts). */
+  signatures: Map<string, string>;
+} {
   let checked = 0;
+  const signatures = new Map<string, string>();
   const candidates: FactorFinding[] = [];
   const notes: FactorNote[] = [];
 
@@ -329,9 +336,10 @@ export function compareFactorDays(
       baseRate,
       confidence,
     });
+    signatures.set(key, [...factor.flagged].filter((day) => covered.has(day)).sort().join('|'));
   }
 
-  return { checked, candidates, notes };
+  return { checked, candidates, notes, signatures };
 }
 
 export interface FactorCaveat {
