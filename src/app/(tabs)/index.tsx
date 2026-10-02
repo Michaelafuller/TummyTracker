@@ -14,6 +14,7 @@ import { DayCheckInCard } from '@/features/checkin/DayCheckInCard';
 import { useDayCheckInResponses } from '@/features/checkin/useDayCheckInResponses';
 import { ExperimentHomeCard } from '@/features/experiments/ExperimentHomeCard';
 import { useExperimentNotificationResponses } from '@/features/experiments/useExperimentNotificationResponses';
+import { useMedReminderResponses } from '@/features/medications/useMedReminderResponses';
 import { useMealBuilderStore } from '@/features/logging/mealBuilderStore';
 import { MyMealsSection } from '@/features/logging/MyMealsSection';
 import { RecentFoodPicker } from '@/features/logging/RecentFoodPicker';
@@ -50,6 +51,7 @@ export default function HomeScreen() {
   useDayCheckInResponses();
   useExperimentNotificationResponses();
   useMealReminderResponses();
+  useMedReminderResponses();
 
   useFocusEffect(
     useCallback(() => {

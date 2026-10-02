@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { StyleSheet } from 'react-native';
 
@@ -26,6 +26,7 @@ import { reasonSuggestionsByMedication } from '@/lib/medications';
  */
 export default function NewMedicationEntryScreen() {
   const router = useRouter();
+  const { medicationIds } = useLocalSearchParams<{ medicationIds?: string }>();
   const medications = useMedications();
   const allEvents = useMedicationEvents();
   const allDoses = useMedicationDoses();
@@ -40,6 +41,18 @@ export default function NewMedicationEntryScreen() {
   const [now] = useState(() => Date.now());
 
   const activeMeds = medications.filter((med) => med.isActive);
+
+  // From a medication reminder's tap (GitHub #29): those medications start
+  // ticked. Unknown or inactive ids are ignored (they never get a line);
+  // without the param the form is exactly as before. Selecting a line only
+  // pre-ticks it — nothing is saved until the user presses Save.
+  const preselected = new Set((medicationIds ?? '').split(',').filter((id) => id.length > 0));
+  const initialState = defaultEntryState(activeMeds, now);
+  if (preselected.size > 0) {
+    initialState.lines = initialState.lines.map((line) =>
+      preselected.has(line.medicationId) ? { ...line, selected: true } : line,
+    );
+  }
 
   async function handleSubmit({ event, doses }: MedicationEntrySavePayload) {
     setSubmitting(true);
@@ -69,7 +82,7 @@ export default function NewMedicationEntryScreen() {
       <MedicationEntryForm
         medications={medications}
         reasonSuggestions={reasonSuggestions}
-        initial={defaultEntryState(activeMeds, now)}
+        initial={initialState}
         onSubmit={handleSubmit}
         submitLabel="Save"
         submitting={submitting}

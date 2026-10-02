@@ -15,8 +15,10 @@ afterEach(() => {
 
 const mockPush = jest.fn();
 const mockBack = jest.fn();
+let mockParams: { medicationIds?: string } = {};
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush, back: mockBack }),
+  useLocalSearchParams: () => mockParams,
 }));
 
 jest.mock('@/db/repository', () => ({
@@ -51,6 +53,7 @@ function makeMedication(overrides: Partial<Medication> = {}): Medication {
 beforeEach(() => {
   jest.clearAllMocks();
   mockMedications = [];
+  mockParams = {};
 });
 
 describe('NewMedicationEntryScreen', () => {
@@ -93,5 +96,51 @@ describe('NewMedicationEntryScreen', () => {
 
     expect(createMedicationEvent).not.toHaveBeenCalled();
     expect(mockBack).not.toHaveBeenCalled();
+  });
+
+  describe('preselecting from a medication reminder (GitHub #29)', () => {
+    it('ticks the medications named in the param, so Save logs exactly those', async () => {
+      mockMedications = [
+        makeMedication({ id: 'a', name: 'Levothyroxine', defaultDose: 50, doseUnit: 'mcg' }),
+        makeMedication({ id: 'b', name: 'Vitamin D', defaultDose: 1000, doseUnit: 'unit' }),
+        makeMedication({ id: 'c', name: 'Omeprazole', defaultDose: 20, doseUnit: 'mg' }),
+      ];
+      mockParams = { medicationIds: 'a,b' };
+      (createMedicationEvent as jest.Mock).mockResolvedValue({});
+
+      const { findByLabelText } = await render(<NewMedicationEntryScreen />);
+      await fireEvent.press(await findByLabelText('Save'));
+
+      expect(createMedicationEvent).toHaveBeenCalledTimes(1);
+      const [, doses] = (createMedicationEvent as jest.Mock).mock.calls[0];
+      expect(doses).toEqual([
+        { medicationId: 'a', dose: 50, doseUnit: 'mcg', reason: null },
+        { medicationId: 'b', dose: 1000, doseUnit: 'unit', reason: null },
+      ]);
+    });
+
+    it('ignores unknown and inactive ids', async () => {
+      mockMedications = [
+        makeMedication({ id: 'a', name: 'Active' }),
+        makeMedication({ id: 'inactive', name: 'Inactive', isActive: false }),
+      ];
+      mockParams = { medicationIds: 'ghost,inactive,a,' };
+      (createMedicationEvent as jest.Mock).mockResolvedValue({});
+
+      const { findByLabelText, queryByTestId } = await render(<NewMedicationEntryScreen />);
+      expect(queryByTestId('dose-line-inactive')).toBeNull();
+      await fireEvent.press(await findByLabelText('Save'));
+
+      const [, doses] = (createMedicationEvent as jest.Mock).mock.calls[0];
+      expect(doses.map((d: { medicationId: string }) => d.medicationId)).toEqual(['a']);
+    });
+
+    it('starts everything unselected without the param, exactly as before', async () => {
+      mockMedications = [makeMedication({ id: 'a' })];
+      const { findByLabelText } = await render(<NewMedicationEntryScreen />);
+
+      await fireEvent.press(await findByLabelText('Save'));
+      expect(createMedicationEvent).not.toHaveBeenCalled();
+    });
   });
 });
