@@ -7,27 +7,27 @@
 > `main` *before* the merge, then §2, then §3 on the merged `main`.
 > Device setup and flow-authoring rules: `docs/SESSION_HANDOFF.md` §4.
 
-Status at a glance (2026-09-30):
+Status at a glance (2026-10-01):
 
-- `main` = `f6e6593`, **3 commits ahead of `origin/main`** (`b2e3c66` flows for
-  #16–#18, `39224e7` the #19 Cycle A plan, `f6e6593` `docs/RESUME_HERE.md`) —
-  docs/flows only, not pushed. The merge won't be a fast-forward (main has
-  `f6e6593`), but it can't conflict: RESUME_HERE.md is a new file — delete it
-  in the merge.
-- Branch `worktree-agent-a93006f35a36fc943` (worktree
-  `.claude/worktrees/agent-a93006f35a36fc943`) = #19–#26, #28 and #29 on top of
-  `39224e7`, reviewed, **unmerged, unpushed**; adds migrations **0011**
-  (`experiment`), **0012** (`day_factor`) and **0013** (`saved_meal`,
-  `saved_meal_component`), **0014** (`medication.is_regular`), **0015**
-  (`medication_dose.reason`), **0016** (`medication_reminder`) and backups
-  **v5 → v10**.
+- **§1 and §2 are done.** `main` now holds everything: #13–#26, #28 and #29
+  (merge `f60dafd`), with migrations **0011–0016** and backups **v10**.
+  **Not pushed** — about 90 commits ahead of `origin/main`; the owner pushes.
+- The old worktree `.claude/worktrees/agent-a93006f35a36fc943` is obsolete
+  (its branch is merged). Don't `git worktree remove` it blindly: its
+  `node_modules` is a junction to the main checkout's — unlink the junction
+  first, or let the app's worktree cleanup handle it.
 - Device: Pixel 5, dev client = the 2026-08-29 EAS development build. All
-  #13–#29 work is JS + migrations — **no new build needed** (#27, which
-  would need one, is deferred).
-- Last device baseline: 34/34 Maestro on 2026-09-27. Last full Jest: 113 /
-  1,168 on `main` (2026-09-27). The branch has only had targeted Jest since.
+  work is JS + migrations — **no new build needed** (#27, which would need
+  one, is deferred).
+- Last device run: §1's 11/11 on 2026-10-01 (the 34/34 full baseline is from
+  2026-09-27). Last full Jest: **144 / 2,035 on merged `main`** (2026-10-01).
+- **Next: §3** on the merged `main`, then the owner's two follow-up ideas
+  (check-in confirmation, Select all on med entries) as one small cycle.
 
-## 1. On `main`, before the merge — #13–#18
+## 1. On `main`, before the merge — #13–#18 — ✅ DONE 2026-10-01
+
+All 11 flows pass (two flow-side fixes, `82b2593`); the owner's five hand
+checks below all passed. See `docs/RESULTS.md`.
 
 Flows (written while the phone was disconnected — expect small flow-side
 fixes on the first run):
@@ -41,29 +41,29 @@ Cheap regression guards worth adding to that run: `g-datetime-picker`,
 
 Manual (by hand on the phone):
 
-- [ ] **#13 day check-in:** Settings → Day check-in on, time 1–2 min ahead,
+- [x] **#13 day check-in:** Settings → Day check-in on, time 1–2 min ahead,
       background the app, tap **Rough day** in the shade → app opens, Home
       card shows "Rough day noted."; notification gone.
-- [ ] **#14 automatic backups:** choose a folder (e.g. Documents/TummyTracker)
+- [x] **#14 automatic backups:** choose a folder (e.g. Documents/TummyTracker)
       → a `tummytracker-auto-*.json` appears; relaunch same day → no second
       file; move the phone's date +1 day → a new file (restore the date);
       with 8+ auto files the oldest auto one is pruned and other files are
       untouched; import an auto file via Settings → Import data.
-- [ ] **#16 pickers:** every date/time picker — entry edit, meal review, BM,
+- [x] **#16 pickers:** every date/time picker — entry edit, meal review, BM,
       symptom, medication entry + inventory dates, Settings/Goals time chips —
       pick, cancel, pick again (moved off the deprecated `onChange`).
-- [ ] **#16 camera denied:** "Enter manually" from Home Scan and from meal
+- [x] **#16 camera denied:** "Enter manually" from Home Scan and from meal
       review's "Add item" (also `y-scan-no-camera`).
-- [ ] **#17 PDF:** two meds (one custom unit, one inactive with an old dose)
+- [x] **#17 PDF:** two meds (one custom unit, one inactive with an old dose)
       + one active with none → Create PDF, 30 days → Medications table ("N of
       30", "No doses logged in this range", amounts), dose rows in the Journal
       by time, no "missed"/"skipped" anywhere.
 
 Then tell the orchestrator → it merges the branch into `main` (§2).
 
-## 2. Merge (the orchestrator does this, on the owner's word)
+## 2. Merge (the orchestrator does this, on the owner's word) — ✅ DONE 2026-10-01 (`f60dafd`)
 
-- [ ] Merge `worktree-agent-a93006f35a36fc943` into `main` (a normal merge —
+- [x] Merge `worktree-agent-a93006f35a36fc943` into `main` (a normal merge —
       `main` has `f6e6593` and maybe §1 flow fixes); delete
       `docs/RESUME_HERE.md`; re-run typecheck,
       lint, a **full `npm test`** (first full run since 113/1,168) and

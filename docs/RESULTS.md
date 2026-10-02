@@ -1,5 +1,29 @@
 # RESULTS.md — Full regression 2026-09-27 (GitHub #12: re-baseline after the 2026-09-26 session + `hideKeyboard` audit)
 
+## Addendum — §1 device run + merge, 2026-10-01 (OWED.md §1–§2)
+
+- **Device run of #13–#18 on `main` (`82b2593`): 11/11 flows pass** —
+  `t-day-check-in`, `u-backup-nudge`, `v-what-came-before`, `q-reuse-adjust`,
+  `s-medication-entry`, `y-scan-no-camera`, `w-report-medications`,
+  `x-atomic-saves`, plus regression guards `g-datetime-picker`,
+  `h-recent-foods`, `nav-tabs`. Two **flow-side** fixes (x tapped a tab from a
+  pushed screen; v asserted a below-the-fold button). **App regressions: 0.**
+- **Owner's hand checks: all pass** — #13 check-in from the shade, #14
+  automatic backups, #16 pickers (pick/cancel/pick), #16 camera denied → manual
+  entry, #17 PDF medications table. Owner ideas logged for a follow-up cycle:
+  a visible confirmation when the check-in is answered from the notification;
+  "Select all" on the medication entry form.
+- **Merge (`f60dafd`):** the burn-down branch (#19–#26, #28, #29) into `main`,
+  clean. **Full `npm test`: 144 suites / 2,035 tests, all passed** (31 s) —
+  after `20a7740` keeps Jest out of `.claude/` worktrees (a plain `npm test`
+  had collected the worktree's copy too: 288 suites, 2 failing on the stale
+  copy). Typecheck (after Metro regenerated the typed routes), lint (0
+  warnings) and `bundle:check` clean.
+- Run environment: Metro started **detached** (`Start-Process`) — a
+  session-tracked background Metro is killed at the background time limit
+  mid-run. Reconnect the dev client over USB with the deep link in
+  `flows/_helpers/reconnect-dev-client.yaml` (Fetch only finds LAN servers).
+
 ## Addendum — full Jest re-baseline 2026-09-27 (after GH #13–#18)
 
 - **Full `npm test` at `2f1915f`: 113 suites / 1,168 tests, all passed**
