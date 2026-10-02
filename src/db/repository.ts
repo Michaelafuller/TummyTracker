@@ -33,6 +33,7 @@ import {
   medication,
   medicationDose,
   medicationEvent,
+  medicationReminder,
   savedMeal,
   savedMealComponent,
   SLEEP_LEVELS,
@@ -48,6 +49,7 @@ import {
   type Medication,
   type MedicationDose,
   type MedicationEvent,
+  type MedicationReminder,
   type NewLogEntry,
   type NewMealComponent,
   type NewMedication,
@@ -610,6 +612,31 @@ export async function insertMedicationDosesPreservingIds(
   const toInsert = rows.filter((row) => !existingIds.has(row.id));
   for (const insertBatch of chunk(toInsert, RESTORE_CHUNK_SIZE)) {
     await db.insert(medicationDose).values(insertBatch);
+  }
+  return { inserted: toInsert.length, skipped: rows.length - toInsert.length };
+}
+
+/** All medication_reminder rows — used by the backup export (GitHub #29 backup v10). */
+export async function listAllMedicationReminders(): Promise<MedicationReminder[]> {
+  return db.select().from(medicationReminder).orderBy(asc(medicationReminder.createdAt));
+}
+
+/** Same chunked, id-preserving skip-if-exists behavior as {@link insertMedicationsPreservingIds}, for medication_reminder rows. */
+export async function insertMedicationRemindersPreservingIds(
+  rows: MedicationReminder[],
+): Promise<{ inserted: number; skipped: number }> {
+  if (rows.length === 0) return { inserted: 0, skipped: 0 };
+  const existingIds = new Set<string>();
+  for (const idBatch of chunk(rows.map((row) => row.id), RESTORE_CHUNK_SIZE)) {
+    const existing = await db
+      .select({ id: medicationReminder.id })
+      .from(medicationReminder)
+      .where(inArray(medicationReminder.id, idBatch));
+    for (const row of existing) existingIds.add(row.id);
+  }
+  const toInsert = rows.filter((row) => !existingIds.has(row.id));
+  for (const insertBatch of chunk(toInsert, RESTORE_CHUNK_SIZE)) {
+    await db.insert(medicationReminder).values(insertBatch);
   }
   return { inserted: toInsert.length, skipped: rows.length - toInsert.length };
 }

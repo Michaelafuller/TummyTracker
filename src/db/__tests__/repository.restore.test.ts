@@ -1,6 +1,6 @@
 // Repository tests: backup-restore id-preserving inserts (docs/HANDOFF.md §3
 // "Restore" — the 2026-09-26 bound-variable class + skip-if-exists semantics).
-import type { DayCheckIn, Medication, MedicationDose, MedicationEvent } from '../schema';
+import type { DayCheckIn, Medication, MedicationDose, MedicationEvent, MedicationReminder } from '../schema';
 import * as repo from '../repository';
 import { closeTestDb, migrateTestDb, resetTestDb } from '../testUtils/testDb';
 
@@ -201,5 +201,50 @@ describe('insertDayCheckInsPreservingIds', () => {
 
   it('is a no-op for an empty array', async () => {
     expect(await repo.insertDayCheckInsPreservingIds([])).toEqual({ inserted: 0, skipped: 0 });
+  });
+});
+
+function reminderRow(id: string, overrides: Partial<MedicationReminder> = {}): MedicationReminder {
+  return {
+    id,
+    medicationId: 'm1',
+    hour: 8,
+    minute: 0,
+    daysMask: 127,
+    enabled: true,
+    createdAt: 1000,
+    updatedAt: 1000,
+    ...overrides,
+  };
+}
+
+describe('insertMedicationRemindersPreservingIds (GitHub #29)', () => {
+  it('inserts new rows preserving id and every field, and skips an id that already exists', async () => {
+    const first = await repo.insertMedicationRemindersPreservingIds([
+      reminderRow('r1', { hour: 7, minute: 45, daysMask: 31, enabled: false }),
+      reminderRow('r2'),
+    ]);
+    expect(first).toEqual({ inserted: 2, skipped: 0 });
+
+    const second = await repo.insertMedicationRemindersPreservingIds([
+      reminderRow('r1', { hour: 23 }),
+      reminderRow('r3'),
+    ]);
+    expect(second).toEqual({ inserted: 1, skipped: 1 });
+
+    const all = await repo.listAllMedicationReminders();
+    expect(all.map((r) => r.id).sort()).toEqual(['r1', 'r2', 'r3']);
+    // The device's existing r1 was not overwritten by the backup's r1.
+    expect(all.find((r) => r.id === 'r1')).toMatchObject({ hour: 7, minute: 45, daysMask: 31, enabled: false });
+  });
+
+  it('is a no-op for an empty array', async () => {
+    expect(await repo.insertMedicationRemindersPreservingIds([])).toEqual({ inserted: 0, skipped: 0 });
+  });
+
+  it('chunks a large restore without dropping or duplicating rows', async () => {
+    const rows = Array.from({ length: 1200 }, (_, i) => reminderRow(`r-${i}`));
+    expect(await repo.insertMedicationRemindersPreservingIds(rows)).toEqual({ inserted: 1200, skipped: 0 });
+    expect(await repo.listAllMedicationReminders()).toHaveLength(1200);
   });
 });

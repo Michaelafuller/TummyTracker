@@ -18,6 +18,7 @@ import {
   type Medication,
   type MedicationDose,
   type MedicationEvent,
+  type MedicationReminder,
   type SavedMeal,
   type SavedMealComponent,
 } from '@/db/schema';
@@ -41,6 +42,8 @@ export interface BackupFile {
   /** Absent before v7 (pre saved-meals, GitHub #25) and treated as [] on import. */
   savedMeals?: SavedMeal[];
   savedMealComponents?: SavedMealComponent[];
+  /** Absent before v10 (pre medication-reminders, GitHub #29) and treated as [] on import. */
+  medicationReminders?: MedicationReminder[];
 }
 
 /**
@@ -49,8 +52,8 @@ export interface BackupFile {
  * #19 backup v5), the daily factors (GitHub #23 backup v6), and the saved meals
  * with their items (GitHub #25 backup v7), and each medication's `isRegular`
  * flag (GitHub #26 backup v8), and each dose's optional `reason` (GitHub #28
- * backup v9). Version bumps to 9 but
- * `parseBackupJson` still reads v1–v8 files (missing keys) by
+ * backup v9), and the medication reminder schedule (GitHub #29 backup v10).
+ * Version bumps to 10 but `parseBackupJson` still reads v1–v9 files (missing keys) by
  * defaulting every new array to empty — old backups remain importable.
  */
 export function entriesToJson(
@@ -64,9 +67,10 @@ export function entriesToJson(
   dayFactors: DayFactor[] = [],
   savedMeals: SavedMeal[] = [],
   savedMealComponents: SavedMealComponent[] = [],
+  medicationReminders: MedicationReminder[] = [],
 ): string {
   const payload: BackupFile = {
-    version: 9,
+    version: 10,
     entries,
     mealComponents,
     medications,
@@ -77,6 +81,7 @@ export function entriesToJson(
     dayFactors,
     savedMeals,
     savedMealComponents,
+    medicationReminders,
   };
   return JSON.stringify(payload, null, 2);
 }
@@ -148,6 +153,7 @@ export type ParseResult =
       dayFactors: DayFactor[];
       savedMeals: SavedMeal[];
       savedMealComponents: SavedMealComponent[];
+      medicationReminders: MedicationReminder[];
     }
   | { ok: false; error: string };
 
@@ -289,6 +295,40 @@ function normaliseDayCheckIn(v: Record<string, unknown>): DayCheckIn {
     id: v.id as string,
     date: v.date as string,
     status: v.status as DayCheckIn['status'],
+    createdAt: v.createdAt as number,
+    updatedAt: v.updatedAt as number,
+  };
+}
+
+/**
+ * A reminder whose time or weekday mask is out of range is DROPPED on import
+ * (never fatal — a hand-edited file shouldn't block the rest of a restore),
+ * which is why this is a predicate over the raw row and the parse loop below
+ * skips rather than rejects.
+ */
+function isValidMedicationReminder(v: unknown): v is MedicationReminder {
+  if (!v || typeof v !== 'object') return false;
+  const r = v as Record<string, unknown>;
+  if (!isString(r.id) || r.id.length === 0) return false;
+  if (!isString(r.medicationId) || r.medicationId.length === 0) return false;
+  if (typeof r.hour !== 'number' || !Number.isInteger(r.hour) || r.hour < 0 || r.hour > 23) return false;
+  if (typeof r.minute !== 'number' || !Number.isInteger(r.minute) || r.minute < 0 || r.minute > 59) return false;
+  if (typeof r.daysMask !== 'number' || !Number.isInteger(r.daysMask) || r.daysMask < 1 || r.daysMask > 127) {
+    return false;
+  }
+  if (typeof r.createdAt !== 'number') return false;
+  if (typeof r.updatedAt !== 'number') return false;
+  return true;
+}
+
+function normaliseMedicationReminder(v: Record<string, unknown>): MedicationReminder {
+  return {
+    id: v.id as string,
+    medicationId: v.medicationId as string,
+    hour: v.hour as number,
+    minute: v.minute as number,
+    daysMask: v.daysMask as number,
+    enabled: typeof v.enabled === 'boolean' ? v.enabled : true,
     createdAt: v.createdAt as number,
     updatedAt: v.updatedAt as number,
   };
@@ -563,6 +603,18 @@ export function parseBackupJson(text: string): ParseResult {
     savedMealComponents.push(normaliseSavedMealComponent(rawSavedMealComponents[i] as Record<string, unknown>));
   }
 
+  // Absent before v10 — default to [] so v1–v9 backups remain importable.
+  // Rows with an out-of-range time or weekday mask are dropped, not fatal.
+  const rawMedicationReminders: unknown[] = Array.isArray(root.medicationReminders)
+    ? (root.medicationReminders as unknown[])
+    : [];
+  const medicationReminders: MedicationReminder[] = [];
+  for (const raw of rawMedicationReminders) {
+    if (isValidMedicationReminder(raw)) {
+      medicationReminders.push(normaliseMedicationReminder(raw as unknown as Record<string, unknown>));
+    }
+  }
+
   return {
     ok: true,
     entries,
@@ -575,6 +627,7 @@ export function parseBackupJson(text: string): ParseResult {
     dayFactors,
     savedMeals,
     savedMealComponents,
+    medicationReminders,
   };
 }
 

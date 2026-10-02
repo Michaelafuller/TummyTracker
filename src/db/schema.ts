@@ -221,6 +221,33 @@ export type MedicationDose = typeof medicationDose.$inferSelect;
 export type NewMedicationDose = typeof medicationDose.$inferInsert;
 
 /**
+ * A scheduled medication reminder (GitHub #29). Several per medication. A
+ * reminder only ever schedules a local notification — it never writes a dose
+ * (invariant): only the notification's explicit "Took them" tap does, through
+ * `createMedicationEvent`. Rows are replaced wholesale with their medication's
+ * save (one sync transaction), so a row has no identity worth preserving
+ * across an edit beyond its id for backup restore.
+ */
+export const medicationReminder = sqliteTable(
+  'medication_reminder',
+  {
+    id: text('id').primaryKey(),
+    medicationId: text('medication_id').notNull(),
+    hour: integer('hour').notNull(), // 0-23
+    minute: integer('minute').notNull(), // 0-59
+    /** Bit 0 = Monday ... bit 6 = Sunday; 127 = every day. Never 0. */
+    daysMask: integer('days_mask').notNull().default(127),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [index('medication_reminder_medication_id_idx').on(table.medicationId)],
+);
+
+export type MedicationReminder = typeof medicationReminder.$inferSelect;
+export type NewMedicationReminder = typeof medicationReminder.$inferInsert;
+
+/**
  * A day check-in answer (GitHub #13, "fine day / rough day"). Invariants:
  * - One row per local calendar day (`date`, 'YYYY-MM-DD', unique) — answering
  *   again the same day updates that row's `status`; it never inserts a

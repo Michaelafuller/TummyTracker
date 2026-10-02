@@ -22,6 +22,7 @@ import {
   listAllMealComponents,
   listAllMedicationDoses,
   listAllMedicationEvents,
+  listAllMedicationReminders,
   listAllMedications,
   listAllSavedMealComponents,
   listAllSavedMeals,
@@ -53,6 +54,7 @@ jest.mock('@/db/repository', () => ({
   listAllMealComponents: jest.fn(),
   listAllMedicationDoses: jest.fn(),
   listAllMedicationEvents: jest.fn(),
+  listAllMedicationReminders: jest.fn(),
   listAllMedications: jest.fn(),
   listLogEntries: jest.fn(),
 }));
@@ -109,6 +111,7 @@ beforeEach(() => {
   (listAllMedications as jest.Mock).mockResolvedValue([]);
   (listAllMedicationEvents as jest.Mock).mockResolvedValue([]);
   (listAllMedicationDoses as jest.Mock).mockResolvedValue([]);
+  (listAllMedicationReminders as jest.Mock).mockResolvedValue([]);
   (listAllDayCheckIns as jest.Mock).mockResolvedValue([]);
   (listAllDayFactors as jest.Mock).mockResolvedValue([]);
   (listAllExperiments as jest.Mock).mockResolvedValue([]);
@@ -125,11 +128,11 @@ afterEach(() => {
 });
 
 describe('buildBackupJson', () => {
-  it('gathers every table into the existing v8 JSON shape', async () => {
+  it('gathers every table into the existing v10 JSON shape', async () => {
     (listLogEntries as jest.Mock).mockResolvedValue([{ id: 'e1' }]);
     const json = await buildBackupJson();
     const parsed = JSON.parse(json);
-    expect(parsed.version).toBe(9);
+    expect(parsed.version).toBe(10);
     expect(parsed.entries).toEqual([{ id: 'e1' }]);
     expect(parsed).toHaveProperty('mealComponents');
     expect(parsed).toHaveProperty('medications');
@@ -138,6 +141,8 @@ describe('buildBackupJson', () => {
     expect(parsed).toHaveProperty('dayFactors');
     expect(parsed).toHaveProperty('savedMeals');
     expect(parsed).toHaveProperty('savedMealComponents');
+    expect(parsed).toHaveProperty('medicationReminders');
+    expect(listAllMedicationReminders).toHaveBeenCalled();
     expect(listAllSavedMeals).toHaveBeenCalled();
     expect(listAllDayFactors).toHaveBeenCalled();
     expect(listAllExperiments).toHaveBeenCalled();
@@ -180,7 +185,7 @@ describe('backUpToFolderNow', () => {
     expect(files).toHaveLength(1);
     expect(files[0].name).toMatch(/^tummytracker-auto-\d{4}-\d{2}-\d{2}-\d{6}\.json$/);
     const written = JSON.parse(await files[0].text());
-    expect(written.version).toBe(9);
+    expect(written.version).toBe(10);
     expect(usePrefsStore.getState().lastBackupAt).not.toBeNull();
     expect(usePrefsStore.getState().lastAutoBackupAt).toBe(usePrefsStore.getState().lastBackupAt);
     expect(usePrefsStore.getState().autoBackupError).toBeNull();

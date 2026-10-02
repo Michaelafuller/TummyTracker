@@ -7,6 +7,7 @@ import type {
   Medication,
   MedicationDose,
   MedicationEvent,
+  MedicationReminder,
   SavedMeal,
   SavedMealComponent,
 } from '@/db/schema';
@@ -182,9 +183,9 @@ describe('entriesToJson / parseBackupJson roundtrip', () => {
       [BASE_MEDICATION_EVENT],
       [BASE_MEDICATION_DOSE],
     );
-    // entriesToJson always writes the current version (9) — parseBackupJson
+    // entriesToJson always writes the current version (10) — parseBackupJson
     // separately still reads older v1-v8 files (tested below).
-    expect(JSON.parse(json).version).toBe(9);
+    expect(JSON.parse(json).version).toBe(10);
 
     const result = parseBackupJson(json);
     expect(result.ok).toBe(true);
@@ -222,7 +223,7 @@ describe('entriesToJson / parseBackupJson roundtrip', () => {
       [BASE_DAY_CHECK_IN],
       [BASE_EXPERIMENT],
     );
-    expect(JSON.parse(json).version).toBe(9);
+    expect(JSON.parse(json).version).toBe(10);
 
     const result = parseBackupJson(json);
     expect(result.ok).toBe(true);
@@ -362,7 +363,7 @@ describe('legacy v3 backup import (no dayCheckIns key)', () => {
 describe('daily factors (GitHub #23, backup v6)', () => {
   it('roundtrips daily factors intact (v6 data, now in a v9 file)', () => {
     const json = entriesToJson([BASE_ENTRY], [], [], [], [], [], [], [BASE_DAY_FACTOR]);
-    expect(JSON.parse(json).version).toBe(9);
+    expect(JSON.parse(json).version).toBe(10);
 
     const result = parseBackupJson(json);
     expect(result.ok).toBe(true);
@@ -504,10 +505,10 @@ describe('medication validation', () => {
     expect(result.medications[0].doseUnit).toBeNull();
   });
 
-  it('roundtrips isRegular in a v9 file (GitHub #26)', () => {
+  it('roundtrips isRegular (GitHub #26)', () => {
     const regular: Medication = { ...BASE_MEDICATION, id: 'm-reg', isRegular: true };
     const json = entriesToJson([BASE_ENTRY], [], [BASE_MEDICATION, regular]);
-    expect(JSON.parse(json).version).toBe(9);
+    expect(JSON.parse(json).version).toBe(10);
     const result = parseBackupJson(json);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -541,7 +542,7 @@ describe('medication dose reason (GitHub #28, backup v9)', () => {
   it('roundtrips a dose reason in a v9 file', () => {
     const withReason: MedicationDose = { ...BASE_MEDICATION_DOSE, reason: 'headache' };
     const json = entriesToJson([BASE_ENTRY], [], [BASE_MEDICATION], [BASE_MEDICATION_EVENT], [withReason]);
-    expect(JSON.parse(json).version).toBe(9);
+    expect(JSON.parse(json).version).toBe(10);
     const result = parseBackupJson(json);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -703,7 +704,7 @@ describe('saved meals (GitHub #25, backup v7)', () => {
 
   it('roundtrips saved meals and their items in a v9 file', () => {
     const json = entriesToJson([BASE_ENTRY], [], [], [], [], [], [], [], [MEAL], [COMPONENT]);
-    expect(JSON.parse(json).version).toBe(9);
+    expect(JSON.parse(json).version).toBe(10);
 
     const result = parseBackupJson(json);
     expect(result.ok).toBe(true);
@@ -772,5 +773,63 @@ describe('saved meals (GitHub #25, backup v7)', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error).toMatch(/saved meal component at index 0/i);
+  });
+});
+
+describe('medication reminders (GitHub #29, backup v10)', () => {
+  const REMINDER: MedicationReminder = {
+    id: 'r1',
+    medicationId: 'm1',
+    hour: 8,
+    minute: 30,
+    daysMask: 31,
+    enabled: false,
+    createdAt: 1,
+    updatedAt: 2,
+  };
+
+  it('roundtrips reminders through a v10 file, preserving ids and fields', () => {
+    const json = entriesToJson([BASE_ENTRY], [], [], [], [], [], [], [], [], [], [REMINDER]);
+    expect(JSON.parse(json).version).toBe(10);
+    const result = parseBackupJson(json);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.medicationReminders).toEqual([REMINDER]);
+  });
+
+  it('imports a v9 file (no medicationReminders key) with none', () => {
+    const result = parseBackupJson(JSON.stringify({ version: 9, entries: [BASE_ENTRY] }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.medicationReminders).toEqual([]);
+  });
+
+  it('drops rows with an out-of-range hour, minute or weekday mask, keeping the good ones', () => {
+    const bad = [
+      { ...REMINDER, id: 'bad-hour', hour: 24 },
+      { ...REMINDER, id: 'bad-hour-neg', hour: -1 },
+      { ...REMINDER, id: 'bad-minute', minute: 60 },
+      { ...REMINDER, id: 'bad-frac', minute: 1.5 },
+      { ...REMINDER, id: 'zero-mask', daysMask: 0 },
+      { ...REMINDER, id: 'big-mask', daysMask: 128 },
+      { ...REMINDER, id: 'no-med', medicationId: '' },
+      { ...REMINDER, id: 'str-hour', hour: '8' },
+    ];
+    const good = { ...REMINDER, id: 'good', daysMask: 127, enabled: true };
+    const result = parseBackupJson(
+      JSON.stringify({ version: 10, entries: [BASE_ENTRY], medicationReminders: [...bad, good] }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.medicationReminders.map((r) => r.id)).toEqual(['good']);
+  });
+
+  it('defaults a non-boolean enabled to true', () => {
+    const result = parseBackupJson(
+      JSON.stringify({ version: 10, entries: [BASE_ENTRY], medicationReminders: [{ ...REMINDER, enabled: 'no' }] }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.medicationReminders[0].enabled).toBe(true);
   });
 });

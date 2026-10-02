@@ -104,4 +104,12 @@ describe('migrations', () => {
     expect(sql).not.toMatch(/drop table/i);
     expect(sql).not.toMatch(/create table/i);
   });
+
+  it('0016 creates the medication_reminder table and its index, touching no existing table (GitHub #29)', () => {
+    const sql = readMigration('0016');
+    expect(sql).toMatch(/create table `medication_reminder`/i);
+    expect(sql).toMatch(/create index `medication_reminder_medication_id_idx`/i);
+    expect(sql).not.toMatch(/drop table/i);
+    expect(sql).not.toMatch(/alter table/i);
+  });
 });

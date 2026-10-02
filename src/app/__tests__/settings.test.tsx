@@ -7,6 +7,7 @@ import {
   insertDayCheckInsPreservingIds,
   insertDayFactorsPreservingIds,
   insertExperimentsPreservingIds,
+  insertMedicationRemindersPreservingIds,
   insertSavedMealsPreservingIds,
   listAllDayCheckIns,
   listAllDayFactors,
@@ -87,6 +88,8 @@ jest.mock('@/db/repository', () => ({
   listAllSavedMeals: jest.fn(),
   listAllSavedMealComponents: jest.fn(),
   insertSavedMealsPreservingIds: jest.fn(),
+  listAllMedicationReminders: jest.fn(),
+  insertMedicationRemindersPreservingIds: jest.fn(),
 }));
 
 jest.mock('@/features/notifications/service', () => ({
@@ -151,6 +154,7 @@ beforeEach(() => {
   (listAllSavedMeals as jest.Mock).mockResolvedValue([]);
   (listAllSavedMealComponents as jest.Mock).mockResolvedValue([]);
   (insertSavedMealsPreservingIds as jest.Mock).mockResolvedValue({ inserted: 0, skipped: 0 });
+  (insertMedicationRemindersPreservingIds as jest.Mock).mockResolvedValue({ inserted: 0, skipped: 0 });
   (ensureNotificationPermission as jest.Mock).mockResolvedValue(true);
 });
 
@@ -301,7 +305,7 @@ describe('SettingsScreen — Data section (day check-ins, GitHub #13)', () => {
     const [uri] = mockShareAsync.mock.calls[0];
     const { File } = jest.requireActual('expo-file-system');
     const written = JSON.parse(await new File(uri).text());
-    expect(written.version).toBe(9);
+    expect(written.version).toBe(10);
     expect(written.dayCheckIns).toEqual([
       { id: 'ci1', date: '2026-06-15', status: 'fine', createdAt: 1, updatedAt: 1 },
     ]);
@@ -450,7 +454,7 @@ describe('SettingsScreen — Data section (daily factors, GitHub #23)', () => {
     const [uri] = mockShareAsync.mock.calls[0];
     const { File } = jest.requireActual('expo-file-system');
     const written = JSON.parse(await new File(uri).text());
-    expect(written.version).toBe(9);
+    expect(written.version).toBe(10);
     expect(written.dayFactors).toEqual([row]);
   });
 
@@ -767,5 +771,31 @@ describe('SettingsScreen — Automatic backup section (Android only, GitHub #14)
 
     await waitFor(() => expect(mockTurnOffAutoBackup).toHaveBeenCalled());
     expect(await findByLabelText('Choose backup folder')).toBeTruthy();
+  });
+});
+
+describe('SettingsScreen — Data section (medication reminders, GitHub #29)', () => {
+  it('import passes the backup reminder rows through to the id-preserving insert', async () => {
+    const backup = {
+      version: 10,
+      entries: [],
+      medicationReminders: [
+        { id: 'r1', medicationId: 'm1', hour: 8, minute: 0, daysMask: 127, enabled: true, createdAt: 1, updatedAt: 1 },
+      ],
+    };
+    mockPickFileAsync.mockResolvedValue({
+      canceled: false,
+      result: { text: async () => JSON.stringify(backup) },
+    });
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+
+    const { findByLabelText } = await renderScreen(<SettingsScreen />);
+    await fireEvent.press(await findByLabelText('Import data'));
+
+    await waitFor(() =>
+      expect(Alert.alert).toHaveBeenCalledWith('Import complete', 'Imported 0 entries (0 already existed).'),
+    );
+    expect(insertMedicationRemindersPreservingIds).toHaveBeenCalledWith(backup.medicationReminders);
+    (Alert.alert as jest.Mock).mockRestore();
   });
 });

@@ -19,6 +19,7 @@ import {
   insertMealComponents,
   insertMedicationDosesPreservingIds,
   insertMedicationEventsPreservingIds,
+  insertMedicationRemindersPreservingIds,
   insertMedicationsPreservingIds,
   listAllExperiments,
   listAllMedicationDoses,
@@ -230,6 +231,10 @@ export default function SettingsScreen() {
       await insertMedicationDosesPreservingIds(
         dosesForRestoredEvents(parsed.medicationDoses, eventResult.insertedIds),
       );
+
+      // Medication reminder schedule (GitHub #29): ids preserved, an id that
+      // already exists on the device is skipped.
+      await insertMedicationRemindersPreservingIds(parsed.medicationReminders);
 
       const medSummary =
         parsed.medications.length > 0
