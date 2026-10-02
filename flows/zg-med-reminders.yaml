@@ -1,0 +1,106 @@
+appId: com.tummytracker.app.dev
+# ZG — Medication reminders, the form side (GitHub #29, 2026-10-02). Written
+# while the phone was disconnected — expect small flow-side fixes on the
+# first run.
+#   - Vitamin D with no default dose: add a reminder (08:00, every day) → the
+#     "Add a default dose…" hint shows (no "Took them" button without one)
+#   - Untick Sunday, save; reopen → the reminder is still there, Sunday off,
+#     Monday on
+#   - Give it a dose + unit → the hint goes away
+#   - Remove the reminder, save; reopen → no reminder rows
+# Notifications firing, grouping, "Took them" and tap-to-open need real time
+# to pass and the notification shade — manual checks in docs/OWED.md.
+---
+- launchApp:
+    clearState: true
+    permissions:
+      notifications: allow
+- runFlow: _helpers/reconnect-dev-client.yaml
+
+- tapOn:
+    id: "tab-meds"
+- waitForAnimationToEnd
+
+# --- A medication with a reminder but no default dose ---
+- tapOn: "Add medication"
+- waitForAnimationToEnd
+- tapOn: "Medication name"
+- inputText: "Vitamin D"
+- runFlow: _helpers/dismiss-keyboard.yaml
+- scrollUntilVisible:
+    element:
+      id: "reminder-add"
+    direction: DOWN
+    centerElement: true
+- tapOn:
+    id: "reminder-add"
+- waitForAnimationToEnd
+- assertVisible:
+    id: "reminder-0"
+- assertVisible:
+    id: "reminder-took-hint"
+- assertVisible:
+    id: "reminder-0-day-6"
+    selected: true
+- tapOn:
+    id: "reminder-0-day-6"
+- assertVisible:
+    id: "reminder-0-day-6"
+    selected: false
+- scrollUntilVisible:
+    element:
+      text: "Save"
+    direction: DOWN
+- tapOn: "Save"
+- waitForAnimationToEnd
+
+# --- Reopen: the reminder persisted, Sunday off, Monday on ---
+- tapOn: "Edit Vitamin D"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      id: "reminder-0"
+    direction: DOWN
+    centerElement: true
+- assertVisible:
+    id: "reminder-0-day-6"
+    selected: false
+- assertVisible:
+    id: "reminder-0-day-0"
+    selected: true
+
+# --- A default dose + unit removes the hint ---
+- scrollUntilVisible:
+    element:
+      text: "Default dose"
+    direction: UP
+- tapOn: "Default dose"
+- inputText: "1000"
+- runFlow: _helpers/dismiss-keyboard.yaml
+- tapOn: "unit"
+- scrollUntilVisible:
+    element:
+      id: "reminder-0"
+    direction: DOWN
+    centerElement: true
+- assertNotVisible:
+    id: "reminder-took-hint"
+
+# --- Remove it, save, reopen: gone ---
+- tapOn:
+    id: "reminder-0-remove"
+- scrollUntilVisible:
+    element:
+      text: "Save changes"
+    direction: DOWN
+- tapOn: "Save changes"
+- waitForAnimationToEnd
+- tapOn: "Edit Vitamin D"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      id: "reminder-add"
+    direction: DOWN
+    centerElement: true
+- assertNotVisible:
+    id: "reminder-0"
