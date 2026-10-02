@@ -1,102 +1,96 @@
-# HANDOFF.md — Execute session: two §3 device-run findings (chance look-alikes, watchlist in backups)
+# HANDOFF.md — Execute session: the owner's two device-run ideas
 
-> **Read first:** this file only. `CLAUDE.md` is auto-loaded (§0: the #24
-> chance-check rules; the backup restore rules of #13/#23/#25/#29). **You
-> are on `main`** in the main checkout `C:\Users\E146796\projects\TummyTracker`.
-> Leave `flows/zb-experiment-verdict.yaml` (an uncommitted orchestrator edit)
-> alone — don't stage it.
+> **Read first:** this file only. `CLAUDE.md` is auto-loaded (§0: the #13 day
+> check-in rules; medications #6–#11/#26/#28). **You are on `main`** in the
+> main checkout `C:\Users\E146796\projects\TummyTracker`. A Metro dev server
+> may be running from this checkout — leave it alone.
 >
-> **Pure JS/TS** — no dependency, no schema change (the watchlist table
-> exists), no permission, no native change.
+> **Pure JS/TS UI** — no dependency, no schema, no permission, no native change.
 
-**Planned 2026-10-02 (Opus, owner-decided)** from the §3 device run
-(`docs/OWED.md`):
+**Planned 2026-10-02 (Opus; the owner asked for both after the §1 device
+run).**
 
-1. **Chance check counts look-alikes once.** On the device fixture, the
-   "Milky pasta" meals carry `lactose, pasta, milk, cheese` — four tags with
-   exactly the same meals, so they are four identical findings. The #24
-   chance line compared "found = 4" with ~1.3 expected and dropped its
-   "could easily be chance" warning — the verdict depended on how many tags a
-   meal carries, not on the evidence. Owner: **candidates that cover exactly
-   the same units (meals or days) count as ONE finding** in the chance
-   check, on the real journal and on every slide alike.
-2. **Backups carry the watchlist.** Today a restore silently loses the
-   watched ingredients. Owner: **export them (backup v11) and restore them;
-   the device's own entry wins on a clash.**
+- **A. Visible confirmation for a check-in answered from the notification.**
+  Tapping "Fine day" / "Rough day" in the notification shade opens the app
+  and records the answer (`useDayCheckInResponses`), but nothing says it was
+  recorded unless you look at the card. Show a brief banner on Home.
+- **B. "Select all" on the medication entry form.** Ticking several meds one
+  by one is tedious.
+
+Plan-session judgments (flag them; owner may override):
+- A's banner text: **"✓ Rough day recorded"** / **"✓ Fine day recorded"**,
+  plus " for <Mon D>" when the answered date isn't today (a late tap on
+  yesterday's notification). `tapFeedback('success')` when it appears. It
+  hides itself after **4 s** or when tapped. **Only for notification
+  answers** — Home-card taps already highlight the chosen button.
+- A's banner sits at the top of Home's content (above the hero),
+  `accessibilityRole="alert"`, `accessibilityLiveRegion="polite"`,
+  `testID="check-in-recorded-banner"`.
+- A only shows when the record actually succeeded (a failed write shows
+  nothing new — today's silent failure behaviour stays).
+- B: a "Select all" link (`accessibilityLabel="Select all medications"`,
+  `testID="select-all-medications"`) at the top of the Medications field;
+  when every line is selected it reads **"Clear all"**
+  (`accessibilityLabel="Clear all medications"`). Select all ticks every
+  line, keeping each line's dose/unit/reason as they are; Clear all unticks
+  every line (values kept, as a single untick does today). Hidden when
+  there's only one line.
 
 ## 0. Invariants
 
-- **Display-only for #1:** no finding, card, tier, order, number or
-  visibility changes — only the chance line's `found` / `expected` counting.
-  The sentence wording, `checked` (still the raw number of things compared)
-  and the flag rule (`round(expected) >= found`) are unchanged.
-- **Same counting on real and slid journals** (the #24 rule).
-- Synchronous repository transactions; stage by path; LF; no `@ts-ignore` /
-  lint disables / bare `any`.
+- **A notification answer is still recorded for `content.data.date`, never
+  "now"** (CLAUDE.md §0, #13) — the banner only reads what was recorded.
+- No dose is ever written by B — it only changes the form's selection.
+- Existing behaviour unchanged otherwise; every interactive element has an
+  `accessibilityLabel` + `testID`; stage by path; LF; no `@ts-ignore` / lint
+  disables / bare `any`.
 
-## 1. Chance check: one finding per identical unit set
+## A. Check-in confirmation
 
-- Each family's candidate source also reports, per candidate, a
-  **signature** = the sorted ids of the units the finding is about, joined:
-  - ingredients / foods / pairs (any window): the meal ids in the group
-    (`outcomeRateCandidates` already builds `group.meals`);
-  - nutrients: the high-side meal ids;
-  - medications: the covered exposed day keys; factors: the covered flagged
-    day keys.
-  Return it **alongside** the existing results (e.g. a `signatures:
-  Map<key, string>` next to `candidates`) — do NOT add a field to
-  `OutcomeFinding` / `MedicationFinding` / `FactorFinding` /
-  `NutrientOutcomeFinding` (they're rendered and tested widely).
-- `chance.ts`: `tally` (and `slowerTally` via the same path) groups the
-  counted candidates by signature and counts each group once, at the
-  **best** tier among its members (identical units ⇒ the same rates, but take
-  the max to be safe). Applies to `found` and to every slide.
-- Tests (`chance.test.ts`):
-  - Two tags that always co-occur count once: a journal where `a` and `b`
-    are on exactly the same meals → `found.high` is 1, not 2; same for a slide.
-  - Different meal sets with equal counts are NOT merged.
-  - Meds: two medications always taken on the same days count once.
-  - **The device fixture with the app's tag backfill applied**
-    (`rederiveRowTags` from `src/lib/tagBackfill.ts` over the parsed entries,
-    as the app does on start) — pin the resulting ingredient chance sentence
-    in `src/features/experiments/__tests__/experimentFixture.test.ts` next to
-    the existing #24 test (keep that one; it pins the raw-backup case). Paste
-    both sentences in your summary.
-  - Every existing chance test passes unchanged (if one changes, explain why
-    — it should only be one whose journal had identical-set tags).
+- A tiny zustand store `src/features/checkin/checkInFeedbackStore.ts`:
+  `{ recorded: { date: string; status: DayStatus; at: number } | null;
+  show(...); clear() }`.
+- `useDayCheckInResponses`: after `recordDayCheckIn` **resolves**, call
+  `show({ date, status, at: Date.now() })`. On a thrown record, don't.
+- `src/features/checkin/CheckInRecordedBanner.tsx`: reads the store; renders
+  nothing when null; otherwise the banner (themed like the app's other
+  notices), fires `tapFeedback('success')` once per `at`, auto-clears after
+  4 s (clear the timer on unmount / on a newer `at`), clears on tap.
+  Pure helper for the text in `dayCheckInModel.ts`:
+  `recordedBannerText(status, date, todayKey)`.
+- Mount it at the top of Home (`src/app/(tabs)/index.tsx`).
 
-Commit: `fix(analysis): count look-alike findings once in the chance check`.
+Tests: text helper (fine/rough, today vs another day); the hook calls
+`show` only after a successful record (and not on failure) — extend
+`useDayCheckInResponses.test.ts`; the banner renders, fires feedback once,
+hides after 4 s (fake timers) and on tap; Home renders the banner (mock the
+store or set it).
 
-## 2. Watchlist in backups (v11)
+Commit: `feat(checkin): confirm a check-in answered from the notification`.
 
-- `src/lib/backup.ts`: `BackupFile.watchlistItems?` ("Absent before v11"),
-  `entriesToJson` gains it (default `[]`), version 11; `parseBackupJson`
-  normalises rows (id + non-empty term + createdAt number; re-normalise the
-  term with the watchlist's own normaliser from `src/lib/watchlist.ts`; drop
-  bad rows; de-dupe by term, first wins).
-- Repository: `listAllWatchlistItems()` (if `listWatchlistItems` isn't
-  already the full list, reuse it) and
-  `insertWatchlistItemsPreservingIds(items)` — skip an item whose **id or
-  term** already exists on the device; chunked like the other restore
-  helpers; real-SQLite tests.
-- Export (`src/features/backup/backupService.ts`) and import
-  (`src/app/settings.tsx`, next to the other `insert…PreservingIds` calls)
-  wire it through; after import, refresh the in-memory watchlist store the
-  way other watchlist writes do (find how `useWatchlistStore` reloads).
-- Tests: v11 round trip, a v10 file imports with no watchlist, clash by term
-  keeps the device's row, settings import calls the insert.
+## B. Select all
 
-Commit: `feat(backup): include the watchlist (backup v11)`.
+- Pure helpers in `src/lib/medicationEntry.ts`:
+  `allLinesSelected(state)` and `setAllLinesSelected(state, selected)`.
+- `MedicationEntryForm.tsx`: the link per the judgment above, wired to the
+  helpers.
 
-## 3. Definition of done
+Tests: helpers (all/none/mixed, values preserved); form: Select all ticks
+every line (reason fields appear on as-needed lines), label flips to Clear
+all, Clear all unticks, hidden with one line; saving after Select all
+writes every medication with its default dose (existing save path).
+
+Commit: `feat(meds): Select all / Clear all on the dose entry form`.
+
+## Definition of done
 
 - `npm run typecheck`, `npm run lint` (0 warnings), the **full `npm test`**
-  (check `FAIL` lines and the `Test Suites:` count), `npm run bundle:check`.
+  (check `FAIL` lines and `Test Suites:`), `npm run bundle:check`.
 - Don't run Maestro / EAS / adb; don't edit `flows/`, `CLAUDE.md`, `docs/`;
-  don't push. A Metro server may be running from this checkout — leave it.
-- Existing tests may change only where the spec changes behaviour (backup
-  10 → 11 assertions, mocks gaining the new repository functions) — list each.
+  don't push.
+- Existing tests change only where needed (e.g. Home's test gaining a store
+  mock) — list each with the reason.
 - Two commits as above, each ending
   `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`.
-- Summary: files per commit + hashes, rung results, full-suite counts, the
-  two fixture sentences, every existing test touched and why, deviations.
+- Summary: files per commit + hashes, rung results, full-suite counts,
+  existing tests touched and why, deviations.
