@@ -6,7 +6,7 @@ appId: com.tummytracker.app.dev
 #     "Add a default dose…" hint shows (no "Took them" button without one)
 #   - Untick Sunday, save; reopen → the reminder is still there, Sunday off,
 #     Monday on
-#   - Give it a dose + unit → the hint goes away
+#   - Give it a dose + unit (25 mcg) → the hint goes away
 #   - Remove the reminder, save; reopen → no reminder rows
 # Notifications firing, grouping, "Took them" and tap-to-open need real time
 # to pass and the notification shade — manual checks in docs/OWED.md.
@@ -75,9 +75,10 @@ appId: com.tummytracker.app.dev
       text: "Default dose"
     direction: UP
 - tapOn: "Default dose"
-- inputText: "1000"
+- inputText: "25"
 - runFlow: _helpers/dismiss-keyboard.yaml
-- tapOn: "unit"
+# "mcg", not "unit": tapOn "unit" matched the "Unit" section label, not the chip.
+- tapOn: "mcg"
 - scrollUntilVisible:
     element:
       id: "reminder-0"

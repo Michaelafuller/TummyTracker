@@ -100,7 +100,7 @@ appId: com.tummytracker.app.dev
 - tapOn: "Save meal"
 - waitForAnimationToEnd
 
-# --- Edit: 2 servings, Save changes ---
+# --- Edit: 2 servings (the stepper moves in 0.5s), Save changes ---
 - scrollUntilVisible:
     element:
       id: "my-meal-mom-s-lasagna-edit"
@@ -111,6 +111,8 @@ appId: com.tummytracker.app.dev
 - assertVisible:
     id: "review-template-heading"
 - assertNotVisible: "Save meal"
+- tapOn:
+    id: "component-0-servings-inc"
 - tapOn:
     id: "component-0-servings-inc"
 - assertVisible:

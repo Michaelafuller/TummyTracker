@@ -53,4 +53,9 @@ appId: com.tummytracker.app.dev
 - waitForAnimationToEnd
 - tapOn: "Add details for today"
 - waitForAnimationToEnd
-- assertVisible: "Period: Yes"
+# The Period row sits below Caffeine, under the fold.
+- scrollUntilVisible:
+    element:
+      text: "Period: Yes"
+    direction: DOWN
+    centerElement: true
