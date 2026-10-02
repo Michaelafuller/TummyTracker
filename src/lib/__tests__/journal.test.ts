@@ -228,6 +228,21 @@ describe('medicationEventsToJournalItems', () => {
     ]);
   });
 
+  it('appends " — reason" to a dose that has one and leaves the others alone (GitHub #28)', () => {
+    const events = [makeEvent({ id: 'evt1' })];
+    const doses = [
+      makeDose({ id: 'd1', eventId: 'evt1', medicationId: 'medA', dose: 20, doseUnit: 'mg' }),
+      makeDose({ id: 'd2', eventId: 'evt1', medicationId: 'medB', dose: 200, doseUnit: 'mg', reason: 'headache' }),
+    ];
+    const meds = [
+      makeMedication({ id: 'medA', name: 'Omeprazole' }),
+      makeMedication({ id: 'medB', name: 'Ibuprofen' }),
+    ];
+
+    const items = medicationEventsToJournalItems(events, doses, meds);
+    expect((items[0] as { summary: string }).summary).toBe('Omeprazole 20 mg · Ibuprofen 200 mg — headache');
+  });
+
   it('joins multiple doses in one event with " · "', () => {
     const events = [makeEvent({ id: 'evt1' })];
     const doses = [

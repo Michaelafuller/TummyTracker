@@ -311,6 +311,25 @@ describe('buildReportHtml — medications (GitHub #17)', () => {
     expect(html).toContain('Omeprazole 20 mg');
   });
 
+  it('shows a dose reason in the Journal row but keeps the Medications amounts amount-only (GitHub #28)', () => {
+    const med = makeMedication({ id: 'med1', name: 'Ibuprofen', isActive: true });
+    const event = makeMedicationEvent({ id: 'evt1', takenAt: NOW });
+    const dose = makeMedicationDose({
+      id: 'd1',
+      eventId: 'evt1',
+      medicationId: 'med1',
+      dose: 200,
+      doseUnit: 'mg',
+      reason: 'headache',
+    });
+
+    const html = buildReportHtml([], NOW, 30, { meds: [med], events: [event], doses: [dose] });
+
+    expect(html).toContain('Ibuprofen 200 mg — headache');
+    expect(html).toContain('200 mg ×1');
+    expect(html).not.toContain('200 mg — headache ×');
+  });
+
   it('shows "time not set" for a medication event without a known time', () => {
     const med = makeMedication({ id: 'med1', name: 'Omeprazole', isActive: true });
     const event = makeMedicationEvent({ id: 'evt1', takenAt: NOW, timeKnown: false });

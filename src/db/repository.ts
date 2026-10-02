@@ -622,6 +622,8 @@ export interface MedicationDoseInput {
   medicationId: string;
   dose: number;
   doseUnit: string;
+  /** Why an as-needed dose was taken (GitHub #28) — already trimmed, null when none. */
+  reason?: string | null;
 }
 
 /**
