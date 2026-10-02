@@ -1,8 +1,11 @@
 // Thin repository over Drizzle for log entries. Keeps DB access in one place so
 // screens/components stay free of query details. Pure validation/shaping lives in
 // lib/ and features/logging/formModel; this module just persists.
-import { asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 
+import { validateReminder, type ReminderInput } from '@/features/medications/reminderModel';
+import { DEFAULT_PROTOCOL, type EliminationChoice, type ExperimentVerdict } from '@/features/experiments/engine';
+import { formatDateInput } from '@/lib/datetime';
 import { chunk } from '@/lib/array';
 import { createId } from '@/lib/id';
 import {
@@ -12,12 +15,18 @@ import {
   unionComponentTags,
   type MealComponentDraft,
 } from '@/lib/mealAggregate';
-import { serializeTags } from '@/lib/ingredients';
+import { mergeTags, parseTagsJson, serializeTags } from '@/lib/ingredients';
+import { backfillTargets, groupSavedMeals, savedMealNameKey, type SavedMealWithComponents } from '@/lib/savedMeals';
 import type { TagBackfillRowUpdate } from '@/lib/tagBackfill';
 import type { NutritionField } from '@/lib/validation';
+import { normalizeWatchTerm } from '@/lib/watchlist';
 import { db } from './client';
 import {
+  ALCOHOL_LEVELS,
+  CAFFEINE_LEVELS,
   dayCheckIn,
+  dayFactor,
+  experiment,
   FOOD_TYPES,
   goal,
   logEntry,
@@ -25,9 +34,15 @@ import {
   medication,
   medicationDose,
   medicationEvent,
+  medicationReminder,
+  savedMeal,
+  savedMealComponent,
+  SLEEP_LEVELS,
   watchlistItem,
   type DayCheckIn,
+  type DayFactor,
   type DayStatus,
+  type Experiment,
   type Goal,
   type GoalDirection,
   type LogEntry,
@@ -35,11 +50,16 @@ import {
   type Medication,
   type MedicationDose,
   type MedicationEvent,
+  type MedicationReminder,
   type NewLogEntry,
   type NewMealComponent,
   type NewMedication,
   type NewMedicationDose,
+  type NewMedicationReminder,
   type NewMedicationEvent,
+  type NewSavedMealComponent,
+  type SavedMeal,
+  type SavedMealComponent,
   type WatchlistItem,
 } from './schema';
 
@@ -454,11 +474,22 @@ export async function removeGoal(nutrient: NutritionField): Promise<void> {
   await db.delete(goal).where(eq(goal.nutrient, nutrient));
 }
 
-/** Fields a caller supplies on create — id and timestamps are filled in here. */
-export type CreateMedicationInput = Omit<NewMedication, 'id' | 'createdAt' | 'updatedAt'>;
+/**
+ * Fields a caller supplies on create — id and timestamps are filled in here.
+ * `reminders` (GitHub #29) are written in the SAME transaction as the medication.
+ */
+export type CreateMedicationInput = Omit<NewMedication, 'id' | 'createdAt' | 'updatedAt'> & {
+  reminders?: readonly ReminderInput[];
+};
 
-/** Fields a caller may patch. id/createdAt are immutable; updatedAt is managed here. */
-export type UpdateMedicationInput = Partial<Omit<NewMedication, 'id' | 'createdAt' | 'updatedAt'>>;
+/**
+ * Fields a caller may patch. id/createdAt are immutable; updatedAt is managed
+ * here. `reminders`, when PRESENT (even empty), replaces this medication's
+ * reminder rows wholesale in the same transaction; when absent they are left alone.
+ */
+export type UpdateMedicationInput = Partial<Omit<NewMedication, 'id' | 'createdAt' | 'updatedAt'>> & {
+  reminders?: readonly ReminderInput[];
+};
 
 /** Every medication, active first, then alphabetical by name (HANDOFF.md #5 list order). */
 export async function listMedications(): Promise<Medication[]> {
@@ -470,28 +501,81 @@ export async function getMedication(id: string): Promise<Medication | undefined>
   return rows[0];
 }
 
+/** Builds the reminder rows for one medication; throws on an unusable reminder BEFORE any write starts. */
+function buildReminderRows(medicationId: string, reminders: readonly ReminderInput[], now: number): NewMedicationReminder[] {
+  return reminders.map((reminder) => {
+    const error = validateReminder(reminder);
+    if (error) throw new Error(`Invalid medication reminder: ${error}`);
+    return {
+      id: createId(),
+      medicationId,
+      hour: reminder.hour,
+      minute: reminder.minute,
+      daysMask: reminder.daysMask,
+      enabled: reminder.enabled,
+      createdAt: now,
+      updatedAt: now,
+    };
+  });
+}
+
 export async function createMedication(input: CreateMedicationInput): Promise<Medication> {
   const now = Date.now();
+  const { reminders, ...fields } = input;
   const row: NewMedication = {
-    ...input,
+    ...fields,
     id: createId(),
     createdAt: now,
     updatedAt: now,
   };
-  await db.insert(medication).values(row);
+  const reminderRows = buildReminderRows(row.id, reminders ?? [], now);
+
+  // Sync callback — see createLogEntries' comment above for why.
+  db.transaction((tx) => {
+    tx.insert(medication).values(row).run();
+    if (reminderRows.length > 0) {
+      tx.insert(medicationReminder).values(reminderRows).run();
+    }
+  });
   return row as Medication;
 }
 
 /**
  * Patches a medication's own fields. Never touches `medication_dose` rows
  * (invariant, HANDOFF.md §0) — a dose snapshots its own dose/unit at log time,
- * so editing the medication here can never rewrite history.
+ * so editing the medication here can never rewrite history. When `reminders`
+ * is given, that medication's reminder rows are replaced in the same
+ * transaction (GitHub #29).
  */
 export async function updateMedication(id: string, patch: UpdateMedicationInput): Promise<void> {
-  await db
-    .update(medication)
-    .set({ ...patch, updatedAt: Date.now() })
-    .where(eq(medication.id, id));
+  const now = Date.now();
+  const { reminders, ...fields } = patch;
+  const reminderRows = reminders ? buildReminderRows(id, reminders, now) : null;
+
+  // Sync callback — see createLogEntries' comment above for why.
+  db.transaction((tx) => {
+    tx.update(medication)
+      .set({ ...fields, updatedAt: now })
+      .where(eq(medication.id, id))
+      .run();
+    if (reminderRows) {
+      tx.delete(medicationReminder).where(eq(medicationReminder.medicationId, id)).run();
+      if (reminderRows.length > 0) {
+        tx.insert(medicationReminder).values(reminderRows).run();
+      }
+    }
+  });
+}
+
+/**
+ * Reminder rows (GitHub #29) — all of them, or one medication's — ordered by
+ * time of day, then creation. Inactive medications' rows are included: they
+ * are kept (just not scheduled).
+ */
+export async function listMedicationReminders(medicationId?: string): Promise<MedicationReminder[]> {
+  const query = db.select().from(medicationReminder);
+  const filtered = medicationId === undefined ? query : query.where(eq(medicationReminder.medicationId, medicationId));
+  return filtered.orderBy(asc(medicationReminder.hour), asc(medicationReminder.minute), asc(medicationReminder.createdAt));
 }
 
 /**
@@ -520,7 +604,7 @@ export async function listAllMedicationDoses(): Promise<MedicationDose[]> {
 /**
  * Bound-variable-safe batch size for the id-preserving restore helpers below
  * (HANDOFF.md §2). SQLite caps bound variables at 32,766 — `medication_dose`
- * (7 cols) hits it at ~4,700 rows on a single INSERT, and the existence
+ * (8 cols) hits it at ~4,000 rows on a single INSERT, and the existence
  * `inArray(...)` lookup faces the same cap on very large restores. 500 keeps
  * every statement well under that ceiling regardless of column count.
  */
@@ -598,6 +682,31 @@ export async function insertMedicationDosesPreservingIds(
   return { inserted: toInsert.length, skipped: rows.length - toInsert.length };
 }
 
+/** All medication_reminder rows — used by the backup export (GitHub #29 backup v10). */
+export async function listAllMedicationReminders(): Promise<MedicationReminder[]> {
+  return db.select().from(medicationReminder).orderBy(asc(medicationReminder.createdAt));
+}
+
+/** Same chunked, id-preserving skip-if-exists behavior as {@link insertMedicationsPreservingIds}, for medication_reminder rows. */
+export async function insertMedicationRemindersPreservingIds(
+  rows: MedicationReminder[],
+): Promise<{ inserted: number; skipped: number }> {
+  if (rows.length === 0) return { inserted: 0, skipped: 0 };
+  const existingIds = new Set<string>();
+  for (const idBatch of chunk(rows.map((row) => row.id), RESTORE_CHUNK_SIZE)) {
+    const existing = await db
+      .select({ id: medicationReminder.id })
+      .from(medicationReminder)
+      .where(inArray(medicationReminder.id, idBatch));
+    for (const row of existing) existingIds.add(row.id);
+  }
+  const toInsert = rows.filter((row) => !existingIds.has(row.id));
+  for (const insertBatch of chunk(toInsert, RESTORE_CHUNK_SIZE)) {
+    await db.insert(medicationReminder).values(insertBatch);
+  }
+  return { inserted: toInsert.length, skipped: rows.length - toInsert.length };
+}
+
 /** Fields a caller supplies on create — id and timestamps are filled in here. */
 export type CreateMedicationEventInput = Omit<NewMedicationEvent, 'id' | 'createdAt' | 'updatedAt'>;
 
@@ -606,6 +715,8 @@ export interface MedicationDoseInput {
   medicationId: string;
   dose: number;
   doseUnit: string;
+  /** Why an as-needed dose was taken (GitHub #28) — already trimmed, null when none. */
+  reason?: string | null;
 }
 
 /**
@@ -627,6 +738,7 @@ export async function createMedicationEvent(
   };
   const doseRows: NewMedicationDose[] = doses.map((dose) => ({
     ...dose,
+    reason: dose.reason ?? null,
     id: createId(),
     eventId: eventRow.id,
     createdAt: now,
@@ -658,6 +770,7 @@ export async function updateMedicationEvent(
   const now = Date.now();
   const doseRows: NewMedicationDose[] = doses.map((dose) => ({
     ...dose,
+    reason: dose.reason ?? null,
     id: createId(),
     eventId: id,
     createdAt: now,
@@ -771,4 +884,526 @@ export async function insertDayCheckInsPreservingIds(
     await db.insert(dayCheckIn).values(insertBatch);
   }
   return { inserted: toInsert.length, skipped: rows.length - toInsert.length };
+}
+
+/** The factor columns a caller may patch — id/date/timestamps are managed here. */
+export type DayFactorPatch = Partial<
+  Pick<DayFactor, 'sleep' | 'stress' | 'alcohol' | 'caffeine' | 'period'>
+>;
+
+const DAY_FACTOR_KEYS = ['sleep', 'stress', 'alcohol', 'caffeine', 'period'] as const;
+
+/** Throws on any patched value outside its range (null is always allowed: it clears the field). */
+function validateDayFactorPatch(patch: DayFactorPatch): void {
+  const enumOk = (value: unknown, levels: readonly string[]) =>
+    value === null || (typeof value === 'string' && levels.includes(value));
+  if (patch.sleep !== undefined && !enumOk(patch.sleep, SLEEP_LEVELS)) {
+    throw new Error(`setDayFactors: invalid sleep "${String(patch.sleep)}".`);
+  }
+  if (patch.alcohol !== undefined && !enumOk(patch.alcohol, ALCOHOL_LEVELS)) {
+    throw new Error(`setDayFactors: invalid alcohol "${String(patch.alcohol)}".`);
+  }
+  if (patch.caffeine !== undefined && !enumOk(patch.caffeine, CAFFEINE_LEVELS)) {
+    throw new Error(`setDayFactors: invalid caffeine "${String(patch.caffeine)}".`);
+  }
+  if (
+    patch.stress !== undefined &&
+    patch.stress !== null &&
+    !(Number.isInteger(patch.stress) && patch.stress >= 1 && patch.stress <= 5)
+  ) {
+    throw new Error(`setDayFactors: invalid stress "${String(patch.stress)}" — expected an integer 1-5.`);
+  }
+  if (patch.period !== undefined && patch.period !== null && typeof patch.period !== 'boolean') {
+    throw new Error(`setDayFactors: invalid period "${String(patch.period)}".`);
+  }
+}
+
+/** This day's logged factors, or undefined when nothing has been logged for it yet. */
+export async function getDayFactors(date: string): Promise<DayFactor | undefined> {
+  const rows = await db.select().from(dayFactor).where(eq(dayFactor.date, date)).limit(1);
+  return rows[0];
+}
+
+/**
+ * Sets (or clears) daily factors for one local day (GitHub #23). Only the
+ * fields present in `patch` are written — the others keep their values; a
+ * `null` value clears that field back to "not logged". One row per `date`
+ * (unique): the first write inserts, later writes update in place, all in a
+ * single statement. Every value is validated BEFORE anything is written, so
+ * an invalid patch writes nothing. An empty patch is a no-op (no row is
+ * created).
+ */
+export async function setDayFactors(date: string, patch: DayFactorPatch): Promise<void> {
+  if (!DATE_KEY_RE.test(date)) {
+    throw new Error(`setDayFactors: invalid date "${date}" — expected YYYY-MM-DD.`);
+  }
+  validateDayFactorPatch(patch);
+  const changes: DayFactorPatch = {};
+  for (const key of DAY_FACTOR_KEYS) {
+    if (patch[key] !== undefined) Object.assign(changes, { [key]: patch[key] });
+  }
+  if (Object.keys(changes).length === 0) return;
+
+  const now = Date.now();
+  await db
+    .insert(dayFactor)
+    .values({ id: createId(), date, createdAt: now, updatedAt: now, ...changes })
+    .onConflictDoUpdate({ target: dayFactor.date, set: { ...changes, updatedAt: now } });
+}
+
+/** All day_factor rows, newest date first — used by the backup export and the analysis screens. */
+export async function listAllDayFactors(): Promise<DayFactor[]> {
+  return db.select().from(dayFactor).orderBy(desc(dayFactor.date));
+}
+
+/**
+ * Inserts pre-built day_factor rows PRESERVING their ids — mirrors
+ * {@link insertDayCheckInsPreservingIds}: a row is skipped if its `date`
+ * already exists on the device *or* its `id` does (the device's own row for
+ * a day wins, whole — rows are never field-merged), and duplicate dates
+ * inside `rows` are de-duplicated first (first wins) so a malformed backup
+ * can't violate the `date` unique index mid-restore.
+ */
+export async function insertDayFactorsPreservingIds(
+  rows: DayFactor[],
+): Promise<{ inserted: number; skipped: number }> {
+  if (rows.length === 0) return { inserted: 0, skipped: 0 };
+
+  const seenDates = new Set<string>();
+  const deduped: DayFactor[] = [];
+  for (const row of rows) {
+    if (seenDates.has(row.date)) continue;
+    seenDates.add(row.date);
+    deduped.push(row);
+  }
+
+  const existingIds = new Set<string>();
+  const existingDates = new Set<string>();
+  for (const idBatch of chunk(deduped.map((row) => row.id), RESTORE_CHUNK_SIZE)) {
+    const existing = await db.select({ id: dayFactor.id }).from(dayFactor).where(inArray(dayFactor.id, idBatch));
+    for (const row of existing) existingIds.add(row.id);
+  }
+  for (const dateBatch of chunk(deduped.map((row) => row.date), RESTORE_CHUNK_SIZE)) {
+    const existing = await db
+      .select({ date: dayFactor.date })
+      .from(dayFactor)
+      .where(inArray(dayFactor.date, dateBatch));
+    for (const row of existing) existingDates.add(row.date);
+  }
+
+  const toInsert = deduped.filter((row) => !existingIds.has(row.id) && !existingDates.has(row.date));
+  for (const insertBatch of chunk(toInsert, RESTORE_CHUNK_SIZE)) {
+    await db.insert(dayFactor).values(insertBatch);
+  }
+  return { inserted: toInsert.length, skipped: rows.length - toInsert.length };
+}
+
+/** Thrown by {@link startExperiment} when an experiment is already active (invariant, HANDOFF.md §0). */
+export class ExperimentAlreadyActiveError extends Error {
+  constructor() {
+    super('An experiment is already active — finish or abandon it first.');
+    this.name = 'ExperimentAlreadyActiveError';
+  }
+}
+
+export interface StartExperimentInput {
+  /** Raw user text — normalized here via `normalizeWatchTerm`. */
+  term: string;
+  eliminationDays: EliminationChoice;
+}
+
+/**
+ * Starts a new elimination experiment (GitHub #19). Normalizes the term the
+ * same way the watchlist does; an invalid (too-short) term throws before any
+ * write. One synchronous transaction: throws {@link ExperimentAlreadyActiveError}
+ * (rolling back, writing nothing) if an experiment is already `active`;
+ * otherwise inserts the new row (`startDate` = today, baseline/challenge/
+ * observation from `DEFAULT_PROTOCOL`) and adds the term to the watchlist if
+ * it isn't already watched — so save-time warnings work for free without a
+ * second write path.
+ */
+export async function startExperiment(input: StartExperimentInput, now: number): Promise<Experiment> {
+  const normalized = normalizeWatchTerm(input.term);
+  if (!normalized) {
+    throw new Error(`startExperiment: invalid term "${input.term}".`);
+  }
+
+  const row: Experiment = {
+    id: createId(),
+    term: normalized,
+    startDate: formatDateInput(now),
+    baselineDays: DEFAULT_PROTOCOL.baselineDays,
+    eliminationDays: input.eliminationDays,
+    challengeDays: DEFAULT_PROTOCOL.challengeDays,
+    observationDays: DEFAULT_PROTOCOL.observationDays,
+    status: 'active',
+    verdictJson: null,
+    endedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  // Sync callback — see createLogEntries' comment above for why.
+  db.transaction((tx) => {
+    const existingActive = tx.select().from(experiment).where(eq(experiment.status, 'active')).limit(1).get();
+    if (existingActive) {
+      throw new ExperimentAlreadyActiveError();
+    }
+
+    tx.insert(experiment).values(row).run();
+
+    const existingWatch = tx.select().from(watchlistItem).where(eq(watchlistItem.term, normalized)).limit(1).get();
+    if (!existingWatch) {
+      tx.insert(watchlistItem).values({ id: createId(), term: normalized, createdAt: now }).run();
+    }
+  });
+
+  return row;
+}
+
+/** The current `active` experiment, or undefined when none is running (at most one, invariant). */
+export async function getActiveExperiment(): Promise<Experiment | undefined> {
+  const rows = await db.select().from(experiment).where(eq(experiment.status, 'active')).limit(1);
+  return rows[0];
+}
+
+export async function getExperiment(id: string): Promise<Experiment | undefined> {
+  const rows = await db.select().from(experiment).where(eq(experiment.id, id)).limit(1);
+  return rows[0];
+}
+
+/** Every experiment, newest first. */
+export async function listExperiments(): Promise<Experiment[]> {
+  return db.select().from(experiment).orderBy(desc(experiment.createdAt));
+}
+
+/** All experiment rows — used by the backup export (src/lib/backup.ts, version 5). */
+export async function listAllExperiments(): Promise<Experiment[]> {
+  return db.select().from(experiment).orderBy(asc(experiment.createdAt));
+}
+
+/**
+ * Freezes the verdict and marks an experiment `completed` (GitHub #19
+ * invariant: a later edit to old log entries must never silently change a
+ * finished experiment's verdict). Only takes effect from `status: 'active'` —
+ * a no-op otherwise (already finished/abandoned, or a stale id).
+ */
+export async function finishExperiment(id: string, verdict: ExperimentVerdict, now: number): Promise<void> {
+  await db
+    .update(experiment)
+    .set({ status: 'completed', verdictJson: JSON.stringify(verdict), endedAt: now, updatedAt: now })
+    .where(and(eq(experiment.id, id), eq(experiment.status, 'active')));
+}
+
+/** Ends an experiment early with no verdict. Only takes effect from `status: 'active'`. */
+export async function abandonExperiment(id: string, now: number): Promise<void> {
+  await db
+    .update(experiment)
+    .set({ status: 'abandoned', endedAt: now, updatedAt: now })
+    .where(and(eq(experiment.id, id), eq(experiment.status, 'active')));
+}
+
+/**
+ * Inserts pre-built experiment rows PRESERVING their ids (restore, mirrors
+ * {@link insertMedicationsPreservingIds}) — skips rows whose id already
+ * exists. The "at most one active" invariant still has to hold after a
+ * restore: the FIRST `active` row this call would insert (in file order) is
+ * kept active only if the device doesn't already have one; every other
+ * `active` row in the same restore (and any after the device's own, if it
+ * has one) is imported as `abandoned` with `endedAt` backfilled from its own
+ * `updatedAt` rather than dropped, so the experiment's history isn't lost.
+ */
+export async function insertExperimentsPreservingIds(
+  rows: Experiment[],
+): Promise<{ inserted: number; skipped: number }> {
+  if (rows.length === 0) return { inserted: 0, skipped: 0 };
+
+  const existingIds = new Set<string>();
+  for (const idBatch of chunk(rows.map((row) => row.id), RESTORE_CHUNK_SIZE)) {
+    const existing = await db.select({ id: experiment.id }).from(experiment).where(inArray(experiment.id, idBatch));
+    for (const row of existing) existingIds.add(row.id);
+  }
+
+  const toInsert = rows.filter((row) => !existingIds.has(row.id));
+
+  let activeClaimed = (await getActiveExperiment()) != null;
+  const finalRows: Experiment[] = toInsert.map((row) => {
+    if (row.status !== 'active') return row;
+    if (activeClaimed) {
+      return { ...row, status: 'abandoned', endedAt: row.updatedAt };
+    }
+    activeClaimed = true;
+    return row;
+  });
+
+  for (const insertBatch of chunk(finalRows, RESTORE_CHUNK_SIZE)) {
+    await db.insert(experiment).values(insertBatch);
+  }
+  return { inserted: toInsert.length, skipped: rows.length - toInsert.length };
+}
+
+// ---------------------------------------------------------------------------
+// Saved meals / "My meals" (GitHub #25). A saved meal is a template: these
+// functions never touch log entries, with ONE exception — `backfillSavedMealTags`,
+// which the UI only calls after an explicit "Add" in its confirmation.
+// ---------------------------------------------------------------------------
+
+/** Thrown by {@link saveSavedMeal} when another template already holds the name and the caller didn't ask to replace it. */
+export class SavedMealNameTakenError extends Error {
+  constructor(name: string) {
+    super(`A saved meal named "${name}" already exists.`);
+    this.name = 'SavedMealNameTakenError';
+  }
+}
+
+export type { SavedMealWithComponents };
+
+/** Every saved meal with its items (in builder order), A-Z by name. */
+export async function listSavedMeals(): Promise<SavedMealWithComponents[]> {
+  const meals = await db.select().from(savedMeal);
+  const components = await db.select().from(savedMealComponent).orderBy(asc(savedMealComponent.sortOrder));
+  return groupSavedMeals(meals, components);
+}
+
+/** The saved meal holding this `nameKey` (see `savedMealNameKey`), if any. */
+export async function findSavedMealByNameKey(nameKey: string): Promise<SavedMeal | undefined> {
+  const rows = await db.select().from(savedMeal).where(eq(savedMeal.nameKey, nameKey)).limit(1);
+  return rows[0];
+}
+
+export interface SaveSavedMealInput {
+  /** Edit this template. Omit to create one. */
+  id?: string;
+  name: string;
+  type: (typeof FOOD_TYPES)[number];
+  mealSlot: SavedMeal['mealSlot'];
+  components: readonly MealComponentDraft[];
+  /**
+   * The id of ANOTHER template that currently holds this name, which the
+   * caller has confirmed to Replace. Without `id` that template is overwritten
+   * in place (keeping its id); with `id` it is deleted and the edited
+   * template (`id`) takes its name. Never two rows with one `nameKey`.
+   */
+  replaceId?: string;
+}
+
+/**
+ * Creates or edits a saved meal (replacing ALL of its items) in ONE
+ * transaction. The name is stored trimmed; `nameKey` is its lowercase. A name
+ * held by a different template that wasn't named in `replaceId` throws
+ * {@link SavedMealNameTakenError} and writes nothing.
+ */
+export async function saveSavedMeal(input: SaveSavedMealInput): Promise<SavedMeal> {
+  const name = input.name.trim();
+  const nameKey = savedMealNameKey(name);
+  const now = Date.now();
+  const componentIds = input.components.map(() => createId());
+  const newId = createId();
+
+  // Sync callback — see createLogEntries' comment above for why.
+  return db.transaction((tx) => {
+    const clash = tx.select().from(savedMeal).where(eq(savedMeal.nameKey, nameKey)).limit(1).get();
+    const editing = input.id
+      ? tx.select().from(savedMeal).where(eq(savedMeal.id, input.id)).limit(1).get()
+      : undefined;
+    if (input.id && !editing) throw new Error(`saveSavedMeal: no saved meal with id "${input.id}".`);
+
+    let targetId: string;
+    let createdAt = now;
+    if (editing) {
+      targetId = editing.id;
+      createdAt = editing.createdAt;
+      if (clash && clash.id !== editing.id) {
+        if (clash.id !== input.replaceId) throw new SavedMealNameTakenError(name);
+        // Free the name: the clashing template (and its items) goes away.
+        tx.delete(savedMealComponent).where(eq(savedMealComponent.savedMealId, clash.id)).run();
+        tx.delete(savedMeal).where(eq(savedMeal.id, clash.id)).run();
+      }
+    } else if (clash) {
+      if (clash.id !== input.replaceId) throw new SavedMealNameTakenError(name);
+      targetId = clash.id;
+      createdAt = clash.createdAt;
+    } else {
+      targetId = newId;
+    }
+
+    const row: SavedMeal = {
+      id: targetId,
+      name,
+      nameKey,
+      type: input.type,
+      mealSlot: input.mealSlot,
+      createdAt,
+      updatedAt: now,
+    };
+    const componentRows: NewSavedMealComponent[] = input.components.map((component, index) => ({
+      ...component,
+      id: componentIds[index],
+      savedMealId: targetId,
+      sortOrder: index,
+      createdAt: now,
+    }));
+
+    if (editing || clash) {
+      tx.update(savedMeal)
+        .set({ name, nameKey, type: row.type, mealSlot: row.mealSlot, updatedAt: now })
+        .where(eq(savedMeal.id, targetId))
+        .run();
+      tx.delete(savedMealComponent).where(eq(savedMealComponent.savedMealId, targetId)).run();
+    } else {
+      tx.insert(savedMeal).values(row).run();
+    }
+    if (componentRows.length > 0) {
+      tx.insert(savedMealComponent).values(componentRows).run();
+    }
+    return row;
+  });
+}
+
+/** Deletes a saved meal and its items in one transaction. Past meals are never touched. */
+export async function deleteSavedMeal(id: string): Promise<void> {
+  // Sync callback — see createLogEntries' comment above for why.
+  db.transaction((tx) => {
+    tx.delete(savedMealComponent).where(eq(savedMealComponent.savedMealId, id)).run();
+    tx.delete(savedMeal).where(eq(savedMeal.id, id)).run();
+  });
+}
+
+/** Anything with drizzle's sync `select` — the db itself or a transaction. */
+type SelectSource = Pick<typeof db, 'select'>;
+
+/** SQLite caps bound parameters; stay well under it for `inArray` lookups. */
+const BACKFILL_ID_CHUNK = 500;
+
+/**
+ * The backfill targets for `nameKey` read from `source` (see `backfillTargets`
+ * for the rule): same-name food entries whose only tags are their own name
+ * and their items' names. Shared by the count the UI shows and the write.
+ */
+function savedMealBackfillTargetsIn(source: SelectSource, nameKey: string): LogEntry[] {
+  const candidates = source
+    .select()
+    .from(logEntry)
+    .where(inArray(logEntry.type, [...FOOD_TYPES]))
+    .all()
+    .filter((entry) => savedMealNameKey(entry.name) === nameKey);
+  const ids = candidates.map((entry) => entry.id);
+  const componentNames = new Map<string, string[]>();
+  for (let i = 0; i < ids.length; i += BACKFILL_ID_CHUNK) {
+    const rows = source
+      .select({ entryId: mealComponent.entryId, name: mealComponent.name })
+      .from(mealComponent)
+      .where(inArray(mealComponent.entryId, ids.slice(i, i + BACKFILL_ID_CHUNK)))
+      .all();
+    for (const row of rows) {
+      const names = componentNames.get(row.entryId) ?? [];
+      names.push(row.name);
+      componentNames.set(row.entryId, names);
+    }
+  }
+  return backfillTargets(candidates, nameKey, componentNames);
+}
+
+/** How many past entries `backfillSavedMealTags` would update right now (for the offer's wording). */
+export async function countSavedMealBackfillTargets(nameKey: string): Promise<number> {
+  return savedMealBackfillTargetsIn(db, nameKey).length;
+}
+
+/**
+ * The opt-in backfill (GitHub #25): gives past food entries named like a
+ * saved meal (`nameKey`) the template's tags, but ONLY entries with no
+ * ingredient information — every tag they have is just a name
+ * (`backfillTargets`). `tags` are merged after the entry's existing name tags
+ * (additive, order-preserving, like the tag backfill); `ingredientsText` is
+ * set from the template only when the entry's is null/empty; `updatedAt` is
+ * bumped. Components of those entries are never touched. Targets are
+ * recomputed inside the transaction — never trust a count the UI computed
+ * earlier. Returns how many entries were updated.
+ */
+export async function backfillSavedMealTags(
+  nameKey: string,
+  tags: readonly string[],
+  ingredientsText: string | null,
+): Promise<number> {
+  if (tags.length === 0) return 0;
+  const now = Date.now();
+  const text = ingredientsText?.trim() ? ingredientsText : null;
+
+  // Sync callback — see createLogEntries' comment above for why.
+  return db.transaction((tx) => {
+    const targets = savedMealBackfillTargetsIn(tx, nameKey);
+    for (const target of targets) {
+      const merged = mergeTags(parseTagsJson(target.tagsJson), [...tags]);
+      const patch: Partial<NewLogEntry> = { tagsJson: serializeTags(merged), updatedAt: now };
+      if (text && !target.ingredientsText?.trim()) patch.ingredientsText = text;
+      tx.update(logEntry).set(patch).where(eq(logEntry.id, target.id)).run();
+    }
+    return targets.length;
+  });
+}
+
+/** All saved_meal rows — used by the backup export (src/lib/backup.ts). */
+export async function listAllSavedMeals(): Promise<SavedMeal[]> {
+  return db.select().from(savedMeal).orderBy(asc(savedMeal.createdAt));
+}
+
+/** All saved_meal_component rows — used by the backup export. */
+export async function listAllSavedMealComponents(): Promise<SavedMealComponent[]> {
+  return db.select().from(savedMealComponent).orderBy(asc(savedMealComponent.sortOrder));
+}
+
+/**
+ * Restores saved meals from a backup, PRESERVING ids. A meal is skipped when
+ * its id OR its `nameKey` already exists on the device (the device wins,
+ * whole — like check-ins), and duplicate ids/nameKeys inside `meals` keep the
+ * first. Components are inserted only for the meals actually inserted, so a
+ * skipped meal keeps exactly the items the device already has. Chunked like
+ * the other restore helpers.
+ */
+export async function insertSavedMealsPreservingIds(
+  meals: SavedMeal[],
+  components: SavedMealComponent[],
+): Promise<{ inserted: number; skipped: number }> {
+  if (meals.length === 0) return { inserted: 0, skipped: 0 };
+
+  const seenKeys = new Set<string>();
+  const seenIds = new Set<string>();
+  const deduped: SavedMeal[] = [];
+  for (const meal of meals) {
+    if (seenKeys.has(meal.nameKey) || seenIds.has(meal.id)) continue;
+    seenKeys.add(meal.nameKey);
+    seenIds.add(meal.id);
+    deduped.push(meal);
+  }
+
+  const existingIds = new Set<string>();
+  const existingKeys = new Set<string>();
+  for (const idBatch of chunk(deduped.map((meal) => meal.id), RESTORE_CHUNK_SIZE)) {
+    const existing = await db.select({ id: savedMeal.id }).from(savedMeal).where(inArray(savedMeal.id, idBatch));
+    for (const row of existing) existingIds.add(row.id);
+  }
+  for (const keyBatch of chunk(deduped.map((meal) => meal.nameKey), RESTORE_CHUNK_SIZE)) {
+    const existing = await db
+      .select({ nameKey: savedMeal.nameKey })
+      .from(savedMeal)
+      .where(inArray(savedMeal.nameKey, keyBatch));
+    for (const row of existing) existingKeys.add(row.nameKey);
+  }
+
+  const toInsert = deduped.filter((meal) => !existingIds.has(meal.id) && !existingKeys.has(meal.nameKey));
+  for (const insertBatch of chunk(toInsert, RESTORE_CHUNK_SIZE)) {
+    await db.insert(savedMeal).values(insertBatch);
+  }
+
+  const insertedIds = new Set(toInsert.map((meal) => meal.id));
+  const seenComponentIds = new Set<string>();
+  const componentsToInsert = components.filter((component) => {
+    if (!insertedIds.has(component.savedMealId) || seenComponentIds.has(component.id)) return false;
+    seenComponentIds.add(component.id);
+    return true;
+  });
+  for (const insertBatch of chunk(componentsToInsert, RESTORE_CHUNK_SIZE)) {
+    await db.insert(savedMealComponent).values(insertBatch);
+  }
+  return { inserted: toInsert.length, skipped: meals.length - toInsert.length };
 }

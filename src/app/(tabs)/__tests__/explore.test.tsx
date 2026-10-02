@@ -147,6 +147,7 @@ function makeMedication(overrides: Partial<Medication> = {}): Medication {
     startDate: null,
     endDate: null,
     isActive: true,
+    isRegular: false,
     notes: null,
     createdAt: 0,
     updatedAt: 0,
@@ -165,6 +166,7 @@ function makeMedicationDose(overrides: Partial<MedicationDose> = {}): Medication
     medicationId: 'med1',
     dose: 20,
     doseUnit: 'mg',
+    reason: null,
     createdAt: 0,
     updatedAt: 0,
     ...overrides,
@@ -185,6 +187,15 @@ describe('BrowseScreen Meds filter (Cycle B)', () => {
     expect(await findByText('Lunch')).toBeTruthy();
     expect(await findByText('💊 Medication')).toBeTruthy();
     expect(await findByText('Omeprazole 20 mg')).toBeTruthy();
+  });
+
+  it('shows a dose reason after the amount in the Journal (GitHub #28)', async () => {
+    mockMedicationDoses = [
+      makeMedicationDose({ id: 'd1', eventId: 'evt1', medicationId: 'med1', dose: 200, doseUnit: 'mg', reason: 'headache' }),
+    ];
+    const { findByText } = await render(<BrowseScreen />);
+
+    expect(await findByText('Omeprazole 200 mg — headache')).toBeTruthy();
   });
 
   it('"Meds" shows only the medication row', async () => {

@@ -7,8 +7,10 @@ import { useDatabaseMigrations } from '@/db/migrate';
 import { runTagBackfillOnce } from '@/db/tagBackfillRunner';
 import { runAutoBackupIfDue } from '@/features/backup/backupService';
 import { refreshDayCheckInIfEnabled } from '@/features/checkin/dayCheckInService';
+import { requestExperimentNotificationRefresh } from '@/features/experiments/experimentNotifications';
 import { refreshCheckInIfEnabled } from '@/features/goals/checkInService';
 import { useGoalsStore } from '@/features/goals/goalsStore';
+import { requestMedicationReminderRefresh } from '@/features/medications/reminderService';
 import { configureNotificationHandler } from '@/features/notifications/service';
 import { usePrefsStore } from '@/features/prefs/prefsStore';
 import { useWatchlistStore } from '@/features/watchlist/watchlistStore';
@@ -57,6 +59,10 @@ function MigrationGate({ children }: { children: ReactNode }) {
       void refreshCheckInIfEnabled();
       // Same re-arming for the day check-in (GitHub #13) — its own slot.
       void refreshDayCheckInIfEnabled();
+      // Active experiment's phase reminders (GitHub #19) — own slot, re-armed at open.
+      requestExperimentNotificationRefresh();
+      // Medication reminders (GitHub #29) — own slot, re-armed at open.
+      requestMedicationReminderRefresh();
       // Automatic folder backup (GitHub #14, Android only) — once per local
       // day, at app open.
       void runAutoBackupIfDue();
@@ -70,7 +76,12 @@ function MigrationGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!success) return;
     const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') void runAutoBackupIfDue();
+      if (state === 'active') {
+        void runAutoBackupIfDue();
+        // Resume re-arms medication reminders too (a medication may have been
+        // edited/restored since); the refresh is serialized, so this is safe.
+        requestMedicationReminderRefresh();
+      }
     });
     return () => subscription.remove();
   }, [success]);

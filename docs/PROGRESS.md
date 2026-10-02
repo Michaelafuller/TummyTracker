@@ -22,6 +22,11 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
 
 ## Status
 
+> **Owed device work is consolidated in `docs/OWED.md`** (run order, every
+> flow and manual check). The per-item "Owed device check" bullets below are
+> the detail; OWED.md is the list to work from.
+
+
 - **On `main`** through the 2026-09-26 session (see below). Feature surface:
   manual & barcode entry, multi-item meal builder with re-log-from-history,
   "Add item" and a servings stepper; browse/edit with a day/week/month
@@ -80,6 +85,20 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   behavior only changes on a mid-write failure, so a regression of the save
   paths is enough: `q-reuse-adjust`, `j-component-drilldown` (edit/delete a
   meal item), `s-medication-entry` (create/edit/delete), `i-backup`. JS-only.
+- **Owed device check — experiments (GH #19, 2026-09-28):**
+  `z-experiment-start` (watch → start → Home row → end early), then the
+  verdict path: `node scripts/make-experiment-fixture.mjs`, run the printed
+  `adb push`, then `za-experiment-fixture-import` (drives the system file
+  picker — best guess; import by hand if it doesn't match) and
+  `zb-experiment-verdict` (Verdict ready → Likely a trigger → Finish →
+  watchlist "Last experiment" → Past experiments). Manual: the 09:00 phase
+  reminders + tap-to-open; the PDF's Elimination experiments table.
+  JS + migration 0011, no build. The same fixture covers **#20**: `zb-`
+  also checks "Medications linked to rough days" (ibuprofen 7 of 7 days) and
+  the lactose card's confounder caveat, and **#21**'s latency line on it,
+  and **#23**'s high-stress finding + stress caveat, and **#24**'s chance
+  lines on the lactose / ibuprofen / stress cards. `zc-day-details` checks
+  the Home day-details chips and the Track-period switch. Migration 0012.
 - **Owed device checks:** iOS pass (the #2 keyboard items below + carried: iOS
   app icon, time-picker Done feel), light-mode walkthrough, camera scan loop,
   and the manual items in `docs/E2E.md`. **Owner sequencing from the
@@ -132,6 +151,99 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   callbacks were async) — 8 of 9 multi-step writes could leave partial data
   on a failure. All converted to sync callbacks; the atomicity tests went
   red → green.
+- **Elimination experiments, Cycle A (GitHub #19):** start from a watched
+  term (plan with real dates, baseline preview, safety note), follow on an
+  experiment screen + Home row (phase/day, today's instruction, slips), end
+  early, and a verdict — likely trigger / likely not / inconclusive — with
+  confidence, reason and the numbers; frozen on finish. Table `experiment`
+  (0011), backup v5. Built in a git worktree while the device run used main.
+  Review fix: the suspect must have been eaten in the baseline, otherwise a
+  "drop" while avoiding it proves nothing (new inconclusive rule + preview
+  warning); the watchlist store now refreshes after a start.
+- **Medication reminders (GitHub #29):** reminders per medication (times +
+  weekdays) in its form; one notification per time listing every med due,
+  with a "Took them" button (when they all have a default dose) that saves
+  one dose entry with Undo, and a tap that opens the entry form with those
+  meds ticked. New table `medication_reminder` (0016), backups v10. Review
+  fix: the tap guards remembered a notification's identifier, which a
+  repeating reminder keeps forever — with the app left running, next
+  week's "Took them" (and #26's next-morning meal-reminder tap) did
+  nothing. Flow `zg-med-reminders` (form side).
+- **Medication adherence + as-needed reasons (GitHub #28):** "Logged on 26
+  of the last 30 days" for regular meds and "Logged on 4 days in the last
+  30" for as-needed ones on the Meds tab; a dose calendar on each
+  medication's screen; a reason on as-needed doses (chips from past
+  reasons) shown everywhere a dose is listed, PDF included. New column
+  `medication_dose.reason` (0015), backups v9. Review fix: the line clipped
+  by the medication's stated dates, so a finished course read "8 of the
+  last 10 days" about days that ended weeks ago, a later start date
+  counted doses outside the range, and day one read "1 of the last 1
+  days". Flow `zf-med-adherence`.
+- **Faster logging (GitHub #26):** a "Regular" switch on medications
+  (0014, backups v8) and a one-tap "Took my regular meds" with Undo on the
+  Meds tab; meal reminders now open a quick-log screen for that meal (meds
+  button, matching My meals first, Recent, scan/manual with the slot
+  preset); My meals on Home ordered by time of day. Review fix: the Meds
+  tab stays mounted, so the "Logged · Undo" row never cleared — the next
+  day the button was gone and Undo would delete yesterday's dose; it now
+  clears when you leave the screen. Flow `ze-faster-logging`.
+- **Saved meals / "My meals" (GitHub #25):** "Save as my meal" on meal
+  review; a My meals list on Home (tap = prefilled review like Recent,
+  Edit = review in template mode with Save changes / Delete); items on
+  review are now editable in place; new tables `saved_meal` +
+  `saved_meal_component` (0013), backups v7. Opt-in backfill gives past
+  same-name, ingredient-less meals the template's ingredients. Review fix:
+  the backfill required "no tags at all", but the builder always tags a
+  meal with its item names, so it matched nothing logged since the builder
+  (now: only-name tags count as no ingredients, merged additively; the
+  offer needs real ingredient tags). Flow `zd-my-meals`.
+- **"By chance" indicator (GitHub #24):** every Insights finding card now
+  says how many findings this strong luck alone would produce: "Chance
+  check: of 42 ingredients checked, luck alone would make about 1 look this
+  strong", plus "could easily be chance" when that's at least as many as
+  were found. Computed by sliding the rough outcomes against the journal by
+  whole days (up to 30 times) and re-running the same analysis, so streaks
+  and eating habits are kept (a textbook formula would understate chance).
+  The meal-to-outcome join became a binary search so this stays fast
+  (~200–350 ms for a synthetic year in Node). Review fixes: the slide ran
+  along the calendar, so one stray backdated entry or a logging break made
+  noise look trustworthy (now slides among logged days); two experiment
+  flows had YAML escapes a strict parser rejects. Honest side effect: the
+  fixture's lactose card says "could easily be chance" — one lactose block
+  lining up with one rough streak is exactly what correlation can't separate.
+- **Daily confounders (GitHub #23):** sleep, stress, alcohol, caffeine and an
+  opt-in period flag as one-tap "Add details" chips in the Home check-in card;
+  new `day_factor` table (0012), backup v6; "Daily factors linked to rough
+  days" in Insights + factor caveats on food cards, comparing flagged days
+  with days the factor was logged unflagged. No review bugs; added the
+  stress pattern to the device fixture and a flow.
+- **Dose-response (GitHub #22):** spike confirmed findings ignored portion
+  size; ingredient/food cards now show "More than 1 serving: 4 of 5 (80%) ·
+  1 or less: 1 of 6 (17%)" when larger amounts are clearly worse, and the
+  finding detail has a "By amount" block + per-meal servings. Review fix: the
+  split was labelled with an even-count median nobody ate ("1.5 servings").
+  Jest-only — the device fixture logs 1 serving everywhere, so there's no
+  device check for the dose line.
+- **Reaction latency + a second window (GitHub #21):** "Usually about N h
+  later (range)" on findings (Insights, detail, PDF); a guarded "Slower
+  patterns (within 48 h)" section (medium/high only, never duplicating a
+  24 h finding); a 6/24/48/72 h timing profile on each finding's detail
+  screen. Every 24 h number unchanged. First execute attempt died on a
+  network error before writing anything; re-run cleanly.
+- **Medications in the correlation engine (GitHub #20):** a "Medications
+  linked to rough days" Insights section (day-level: days on/after a dose vs
+  other logged days; antibiotics count 7 days on; notes for "taken nearly
+  every day" / "too few days") and a confounder caveat on food findings whose
+  hit meals mostly fall in one medication's window. Food numbers unchanged.
+  Review fix: the caveat said "rough outcomes" but counts meals — reworded to
+  the card's own unit. Built on the #19 branch.
+- **Elimination experiments, Cycle B (GitHub #19):** 09:00 phase reminders
+  (challenge days, first observation day, ready day) that open the
+  experiment; an Experiments history screen; "Last experiment" on each
+  watchlist item; an experiments table in the PDF; a backdated fixture
+  generator for device checks. Review fixes: a refused start (another
+  experiment already active) failed silently; the fixture's ready day was
+  off by one.
 - Earlier (2026-09-26): re-log + Add item (#1), medications epic (#4–#11),
   keyboard dismissal (#2), Settings gear, #12 re-baseline. Issues **#1, #2,
   #4–#11, #13–#18** are done but still open on GitHub — the owner closes them.
@@ -202,17 +314,17 @@ analysis.
 
 | # | Item | Why it matters | Effort | Notes |
 |:-:|------|----------------|:--:|------|
-| 8 | **Elimination experiment mode** (GH #19) | The north star's "act on it": pick a suspect → guided avoid-then-reintroduce period → before/during/after outcome comparison with a confidence verdict. Turns correlation into a near-controlled test. | L | Epic — plan first. Reuses watchlist (save-time warnings), outcome engine, reminders. Depends on #2 for a real baseline. |
-| 9 | **Medications in the correlation engine** (GH #20) | NSAIDs, antibiotics and PPIs strongly affect digestion; today a bad antibiotic week is blamed on food. Treat meds as confounders and candidate exposures. | M–L | Plan first. The #11 helpers already make the data analysis-ready; the engine deliberately doesn't read it yet. |
-| 10 | **Reaction latency + multiple windows** (GH #21) | Every outcome counts "within 24 h", but reactions range from hours (lactose) to 1–3 days (some FODMAP/gluten). Show when outcomes tend to follow each trigger; compare windows. | M | Also makes findings more explainable. |
-| 11 | **Dose-response** (GH #22) | Servings are stored, but the engine appears to treat an ingredient as present/absent — "a splash of milk is fine, a latte isn't" is exactly what the app should find. | S spike → M | First confirm in `temporal.ts` whether servings are ignored (not verified in review). |
-| 12 | **Confounder tracking** (GH #23) | Sleep, stress, menstrual cycle, alcohol and caffeine drive gut symptoms and currently land on food. Even one daily "stress 1–5" helps. | M | Could fold into #2's daily check-in. Additive migration. |
-| 13 | **"By chance" indicator on findings** (GH #24) | Many ingredients × few logs = some spurious correlations. Show how many findings like this you'd expect by chance. | S–M | Complements the existing confidence tiers. |
-| 14 | **Saved recipes / "my meals" with ingredients** (GH #25) | Homemade and restaurant food has a name but no ingredients, blinding the ingredient engine where it matters most. | M | Re-used like Recent meals. |
-| 15 | **Faster logging** (GH #26) | Favourites ("usual breakfast"), log straight from the reminder notification (subsumes the reminder deep-link), one-tap "took my regular meds". Adherence and data quality die when logging is tedious. | M | |
-| 16 | **Optional app lock** (GH #27) | Sensitive health data (BMs, symptoms, medications) with no lock. | S–M | ⚠ likely `expo-local-authentication` — owner approval + CVE check. |
-| 17 | **Medication adherence view + as-needed reason** (GH #28) | "Taken 26 of 30 days" calendar; a reason field for as-needed doses ("ibuprofen — headache"). | S–M | Builds on Cycle B history. |
-| 18 | **Medication reminders** (GH #29) | Owner-requested enhancement: local notifications from a structured schedule (times/days) via the approved `expo-notifications`. | M | A reminder must never become a dose record (#10/#11). Needs a structured schedule, not today's free-text frequency. |
+| 8 | ~~**Elimination experiment mode** (GH #19)~~ — *✅ Cycles A + B 2026-09-28 (device check owed)* | The north star's "act on it": pick a suspect → guided avoid-then-reintroduce period → before/during/after outcome comparison with a confidence verdict. Turns correlation into a near-controlled test. | L | Epic — plan first. Reuses watchlist (save-time warnings), outcome engine, reminders. Depends on #2 for a real baseline. |
+| 9 | ~~**Medications in the correlation engine** (GH #20)~~ — *✅ 2026-09-28 (device check owed; on the #19 branch)* | NSAIDs, antibiotics and PPIs strongly affect digestion; today a bad antibiotic week is blamed on food. Treat meds as confounders and candidate exposures. | M–L | Plan first. The #11 helpers already make the data analysis-ready; the engine deliberately doesn't read it yet. |
+| 10 | ~~**Reaction latency + multiple windows** (GH #21)~~ — *✅ 2026-09-30 (device check owed; on the #19 branch)* | Every outcome counts "within 24 h", but reactions range from hours (lactose) to 1–3 days (some FODMAP/gluten). Show when outcomes tend to follow each trigger; compare windows. | M | Also makes findings more explainable. |
+| 11 | ~~**Dose-response** (GH #22)~~ — *✅ 2026-09-30 (on the #19 branch)* | Servings are stored, but the engine appears to treat an ingredient as present/absent — "a splash of milk is fine, a latte isn't" is exactly what the app should find. | S spike → M | First confirm in `temporal.ts` whether servings are ignored (not verified in review). |
+| 12 | ~~**Confounder tracking** (GH #23)~~ — *✅ 2026-09-30 (device check owed; on the #19 branch)* | Sleep, stress, menstrual cycle, alcohol and caffeine drive gut symptoms and currently land on food. Even one daily "stress 1–5" helps. | M | Could fold into #2's daily check-in. Additive migration. |
+| 13 | ~~**"By chance" indicator on findings** (GH #24)~~ — *✅ 2026-09-30 (device check owed; on the #19 branch)* | Many ingredients × few logs = some spurious correlations. Show how many findings like this you'd expect by chance. | S–M | Complements the existing confidence tiers. |
+| 14 | ~~**Saved recipes / "my meals" with ingredients** (GH #25)~~ — *✅ 2026-09-30 (device check owed; on the #19 branch)* | Homemade and restaurant food has a name but no ingredients, blinding the ingredient engine where it matters most. | M | Re-used like Recent meals. |
+| 15 | ~~**Faster logging** (GH #26)~~ — *✅ 2026-10-01 (device check owed; on the #19 branch)* | Favourites ("usual breakfast"), log straight from the reminder notification (subsumes the reminder deep-link), one-tap "took my regular meds". Adherence and data quality die when logging is tedious. | M | |
+| 16 | **Optional app lock** (GH #27) — *⏸ deferred by the owner 2026-10-01 (decided so far: lock on open + after 1 min in the background; dependency not yet approved)* | Sensitive health data (BMs, symptoms, medications) with no lock. | S–M | ⚠ likely `expo-local-authentication` — owner approval + CVE check. |
+| 17 | ~~**Medication adherence view + as-needed reason** (GH #28)~~ — *✅ 2026-10-01 (device check owed; on the #19 branch)* | "Taken 26 of 30 days" calendar; a reason field for as-needed doses ("ibuprofen — headache"). | S–M | Builds on Cycle B history. |
+| 18 | ~~**Medication reminders** (GH #29)~~ — *✅ 2026-10-02 (device check owed; on the #19 branch)* | Owner-requested enhancement: local notifications from a structured schedule (times/days) via the approved `expo-notifications`. | M | A reminder must never become a dose record (#10/#11). Needs a structured schedule, not today's free-text frequency. |
 | 19 | **iOS pass** (GH #30) | Every device check so far is Android. Includes the #2 keyboard checks (Done on a number pad, tap-outside on Home, drag-to-dismiss), the iOS icon, time-picker feel. | M | Owner — no iOS device/Mac in this environment. |
 
 ## Tier 0 — Foundations · ✅ complete

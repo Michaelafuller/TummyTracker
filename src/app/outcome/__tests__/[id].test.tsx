@@ -78,6 +78,7 @@ const MED: Medication = {
   startDate: null,
   endDate: null,
   isActive: true,
+  isRegular: false,
   notes: null,
   createdAt: 0,
   updatedAt: 0,
@@ -102,6 +103,7 @@ function makeMedDose(eventId: string): MedicationDose {
     medicationId: MED.id,
     dose: 20,
     doseUnit: 'mg',
+    reason: null,
     createdAt: 0,
     updatedAt: 0,
   };

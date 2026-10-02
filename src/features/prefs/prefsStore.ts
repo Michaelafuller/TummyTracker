@@ -12,6 +12,9 @@ type PrefsStore = AppPrefs & {
   /** The only write path for day-check-in prefs (GitHub #13) — sets store
    * state and persists in one call, like `setCheckIn`. */
   setDayCheckIn: (enabled: boolean, hour: number, minute: number) => void;
+  /** Write path for the period-tracking opt-in (GitHub #23) — sets store
+   * state and persists in one call. */
+  setTrackPeriod: (value: boolean) => void;
 };
 
 export const usePrefsStore = create<PrefsStore>((set, get) => ({
@@ -24,6 +27,7 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
   dayCheckInEnabled: false,
   dayCheckInHour: 21,
   dayCheckInMinute: 0,
+  trackPeriod: false,
   autoBackupDirUri: null,
   autoBackupDirName: null,
   lastBackupAt: null,
@@ -45,5 +49,9 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
   setDayCheckIn: (enabled, hour, minute) => {
     set({ dayCheckInEnabled: enabled, dayCheckInHour: hour, dayCheckInMinute: minute });
     savePrefs({ ...get(), dayCheckInEnabled: enabled, dayCheckInHour: hour, dayCheckInMinute: minute });
+  },
+  setTrackPeriod: (value) => {
+    set({ trackPeriod: value });
+    savePrefs({ ...get(), trackPeriod: value });
   },
 }));

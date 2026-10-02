@@ -23,12 +23,17 @@ import { db, sqlite } from '../client';
 import migrations from '../migrations/migrations';
 import {
   dayCheckIn,
+  dayFactor,
+  experiment,
   goal,
   logEntry,
   mealComponent,
   medication,
   medicationDose,
   medicationEvent,
+  medicationReminder,
+  savedMeal,
+  savedMealComponent,
   watchlistItem,
 } from '../schema';
 
@@ -49,7 +54,12 @@ const APP_TABLES = [
   medication,
   medicationEvent,
   medicationDose,
+  medicationReminder,
   dayCheckIn,
+  dayFactor,
+  experiment,
+  savedMeal,
+  savedMealComponent,
 ];
 
 /** Deletes every row from every app table. Call in `beforeEach` for a clean slate within one file's shared in-memory DB. */

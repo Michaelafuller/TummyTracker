@@ -1,5 +1,6 @@
 import type { LogEntry } from '@/db/schema';
 import { drilldownSummary, findingInstances } from '../drilldown';
+import { pairInstances } from '../medications';
 
 let seq = 0;
 function makeEntry(overrides: Partial<LogEntry>): LogEntry {
@@ -147,9 +148,9 @@ describe('findingInstances — ordering', () => {
 describe('drilldownSummary', () => {
   it('computes count/outcomes', () => {
     const instances = [
-      { entry: makeEntry({ loggedAt: T }), followedByOutcome: true },
-      { entry: makeEntry({ loggedAt: T + HOUR }), followedByOutcome: false },
-      { entry: makeEntry({ loggedAt: T + 2 * HOUR }), followedByOutcome: false },
+      { entry: makeEntry({ loggedAt: T }), followedByOutcome: true, outcomeDelayMs: HOUR },
+      { entry: makeEntry({ loggedAt: T + HOUR }), followedByOutcome: false, outcomeDelayMs: null },
+      { entry: makeEntry({ loggedAt: T + 2 * HOUR }), followedByOutcome: false, outcomeDelayMs: null },
     ];
 
     expect(drilldownSummary(instances)).toEqual({
@@ -160,8 +161,8 @@ describe('drilldownSummary', () => {
 
   it('counts every flagged instance, not just the first', () => {
     const instances = [
-      { entry: makeEntry({ loggedAt: T }), followedByOutcome: true },
-      { entry: makeEntry({ loggedAt: T + HOUR }), followedByOutcome: true },
+      { entry: makeEntry({ loggedAt: T }), followedByOutcome: true, outcomeDelayMs: HOUR },
+      { entry: makeEntry({ loggedAt: T + HOUR }), followedByOutcome: true, outcomeDelayMs: HOUR },
     ];
 
     expect(drilldownSummary(instances).outcomes).toBe(2);
@@ -172,5 +173,53 @@ describe('drilldownSummary', () => {
       count: 0,
       outcomes: 0,
     });
+  });
+});
+
+describe('findingInstances — outcomeDelayMs and the window parameter', () => {
+  it('reports the delay to the FIRST outcome, and null when none followed', () => {
+    const hit = makeEntry({ type: 'meal', tagsJson: '["a"]', loggedAt: T });
+    const miss = makeEntry({ type: 'meal', tagsJson: '["a"]', loggedAt: T + 100 * HOUR });
+    const late = makeEntry({ type: 'symptom', severity: 4, loggedAt: T + 9 * HOUR });
+    const early = makeEntry({ type: 'symptom', severity: 3, loggedAt: T + 5 * HOUR });
+
+    const instances = findingInstances([hit, miss, late, early], 'tag', 'a');
+
+    const byId = new Map(instances.map((i) => [i.entry.id, i]));
+    expect(byId.get(hit.id)?.outcomeDelayMs).toBe(5 * HOUR);
+    expect(byId.get(hit.id)?.followedByOutcome).toBe(true);
+    expect(byId.get(miss.id)?.outcomeDelayMs).toBeNull();
+    expect(byId.get(miss.id)?.followedByOutcome).toBe(false);
+  });
+
+  it('defaults to 24 h: an outcome 30 h later is not counted', () => {
+    const meal = makeEntry({ type: 'meal', tagsJson: '["a"]', loggedAt: T });
+    const outcome = makeEntry({ type: 'symptom', severity: 4, loggedAt: T + 30 * HOUR });
+
+    const [instance] = findingInstances([meal, outcome], 'tag', 'a');
+
+    expect(instance.followedByOutcome).toBe(false);
+    expect(instance.outcomeDelayMs).toBeNull();
+  });
+
+  it('a 48 h window counts the 30 h outcome, boundary included', () => {
+    const meal = makeEntry({ type: 'meal', tagsJson: '["a"]', loggedAt: T });
+    const outcome = makeEntry({ type: 'symptom', severity: 4, loggedAt: T + 30 * HOUR });
+    const edge = makeEntry({ type: 'meal', tagsJson: '["a"]', loggedAt: T + 200 * HOUR });
+    const edgeOutcome = makeEntry({ type: 'symptom', severity: 4, loggedAt: T + 248 * HOUR });
+
+    const instances = findingInstances([meal, outcome, edge, edgeOutcome], 'tag', 'a', 48 * HOUR);
+
+    const byId = new Map(instances.map((i) => [i.entry.id, i]));
+    expect(byId.get(meal.id)?.outcomeDelayMs).toBe(30 * HOUR);
+    expect(byId.get(edge.id)?.outcomeDelayMs).toBe(48 * HOUR);
+  });
+
+  it('pairInstances passes the window through', () => {
+    const meal = makeEntry({ type: 'meal', tagsJson: '["a","b"]', loggedAt: T });
+    const outcome = makeEntry({ type: 'symptom', severity: 4, loggedAt: T + 30 * HOUR });
+
+    expect(pairInstances([meal, outcome], 'a + b')[0].followedByOutcome).toBe(false);
+    expect(pairInstances([meal, outcome], 'a + b', 48 * HOUR)[0].outcomeDelayMs).toBe(30 * HOUR);
   });
 });

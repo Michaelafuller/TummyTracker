@@ -21,13 +21,17 @@ export interface DayCoverage {
  * day or earliest check-in date — 'YYYY-MM-DD' compares correctly as a
  * plain string) so someone who started 10 days ago sees "of 10", not "of
  * 28". Entries/check-ins dated after today are ignored. Returns null when
- * there is no activity at all (the caller hides the line).
+ * there is no activity at all (the caller hides the line). `factorRows`
+ * (daily factors, GitHub #23 — rows that logged at least one visible factor)
+ * also count a day as covered, and as activity for the window start; they
+ * never count toward `checkedIn`.
  */
 export function dayCoverage(
   entries: readonly { loggedAt: number }[],
   checkIns: readonly { date: string }[],
   now: number,
   windowDays = COVERAGE_WINDOW_DAYS,
+  factorRows: readonly { date: string }[] = [],
 ): DayCoverage | null {
   const todayKey = formatDateInput(now);
 
@@ -42,13 +46,21 @@ export function dayCoverage(
     if (checkIn.date <= todayKey) checkInDates.add(checkIn.date);
   }
 
-  if (entryDates.size === 0 && checkInDates.size === 0) return null;
+  const factorDates = new Set<string>();
+  for (const row of factorRows) {
+    if (row.date <= todayKey) factorDates.add(row.date);
+  }
+
+  if (entryDates.size === 0 && checkInDates.size === 0 && factorDates.size === 0) return null;
 
   let earliest: string | null = null;
   for (const key of entryDates) {
     if (earliest === null || key < earliest) earliest = key;
   }
   for (const key of checkInDates) {
+    if (earliest === null || key < earliest) earliest = key;
+  }
+  for (const key of factorDates) {
     if (earliest === null || key < earliest) earliest = key;
   }
 
@@ -69,7 +81,7 @@ export function dayCoverage(
   for (const key of dayKeys) {
     const hasEntry = entryDates.has(key);
     const hasCheckIn = checkInDates.has(key);
-    if (hasEntry || hasCheckIn) covered++;
+    if (hasEntry || hasCheckIn || factorDates.has(key)) covered++;
     if (hasCheckIn) checkedIn++;
   }
 

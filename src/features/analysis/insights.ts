@@ -12,9 +12,13 @@ import { parseTagsJson } from '@/lib/ingredients';
 import { wilsonLowerBound, type ConfidenceTier } from '@/lib/stats';
 import {
   analyzeOutcomeRates,
+  DEFAULT_WINDOW_MS,
+  displayOutcomeFindings,
   isOutcome,
   MEDIUM_CONFIDENCE_MIN_MEALS,
   mealsFollowedByOutcome,
+  outcomeRateCandidates,
+  SLOW_WINDOW_MS,
   tagHitRates,
   type OutcomeFinding,
   type OutcomeKey,
@@ -67,10 +71,32 @@ function isFood(entry: LogEntry): boolean {
  * (ingredient-to-outcome timing) analysis — there is no separate "timing"
  * finding set; ingredient outcomes ARE the timing analysis.
  */
-export function analyzeIngredientOutcomes(entries: readonly LogEntry[]): OutcomeFinding[] {
-  return analyzeOutcomeRates(entries, (meal) =>
-    parseTagsJson(meal.tagsJson).map((tag) => ({ key: tag, label: tag })),
-  );
+export function analyzeIngredientOutcomes(
+  entries: readonly LogEntry[],
+  windowMs: number = DEFAULT_WINDOW_MS,
+): OutcomeFinding[] {
+  return analyzeOutcomeRates(entries, ingredientKeysOf, { windowMs });
+}
+
+/** Grouping keys for ingredient/allergen/additive tags: one key per parsed tag. */
+const ingredientKeysOf = (meal: LogEntry): OutcomeKey[] =>
+  parseTagsJson(meal.tagsJson).map((tag) => ({ key: tag, label: tag }));
+
+/** Grouping keys for recurring foods: the trimmed name, case-insensitive, first-seen casing as label. */
+const foodKeysOf = (meal: LogEntry): OutcomeKey[] => {
+  const name = meal.name.trim();
+  return name.length > 0 ? [{ key: name.toLowerCase(), label: name }] : [];
+};
+
+/**
+ * Every compared ingredient's excess-risk result at every tier (low included),
+ * with no display rules — see `outcomeRateCandidates`. Used by the chance check.
+ */
+export function ingredientCandidates(
+  entries: readonly LogEntry[],
+  windowMs: number = DEFAULT_WINDOW_MS,
+): { checked: number; candidates: OutcomeFinding[] } {
+  return outcomeRateCandidates(entries, ingredientKeysOf, { windowMs });
 }
 
 /**
@@ -78,15 +104,19 @@ export function analyzeIngredientOutcomes(entries: readonly LogEntry[]): Outcome
  * is kept as the label) whose meals are followed by a rough outcome more
  * often than the overall baseline.
  */
-export function analyzeFoodOutcomes(entries: readonly LogEntry[]): OutcomeFinding[] {
-  return analyzeOutcomeRates(
-    entries,
-    (meal) => {
-      const name = meal.name.trim();
-      return name.length > 0 ? [{ key: name.toLowerCase(), label: name }] : [];
-    },
-    { minOccurrences: MIN_FOOD_OCCURRENCES },
-  );
+export function analyzeFoodOutcomes(
+  entries: readonly LogEntry[],
+  windowMs: number = DEFAULT_WINDOW_MS,
+): OutcomeFinding[] {
+  return analyzeOutcomeRates(entries, foodKeysOf, { minOccurrences: MIN_FOOD_OCCURRENCES, windowMs });
+}
+
+/** Food counterpart of `ingredientCandidates`. */
+export function foodCandidates(
+  entries: readonly LogEntry[],
+  windowMs: number = DEFAULT_WINDOW_MS,
+): { checked: number; candidates: OutcomeFinding[] } {
+  return outcomeRateCandidates(entries, foodKeysOf, { minOccurrences: MIN_FOOD_OCCURRENCES, windowMs });
 }
 
 /**
@@ -99,15 +129,29 @@ export function analyzeFoodOutcomes(entries: readonly LogEntry[]): OutcomeFindin
  * when its hit rate beats BOTH constituent tags' raw hit rates (via
  * `tagHitRates`; a tag absent from that map — never seen alone — counts as
  * rate 0) by at least PAIR_RATE_MARGIN, then is capped at MAX_PAIR_FINDINGS.
+ * `windowMs` (default 24 h) applies to the pair rates and the tag rates alike.
  */
-export function analyzePairOutcomes(entries: readonly LogEntry[]): OutcomeFinding[] {
-  const foodEntries = entries.filter(isFood);
+export function analyzePairOutcomes(
+  entries: readonly LogEntry[],
+  windowMs: number = DEFAULT_WINDOW_MS,
+): OutcomeFinding[] {
+  return pairAnalysis(entries, windowMs).shown;
+}
 
+/**
+ * Builds the `keysOf` for tag pairs: each meal yields `"a + b"` (tags sorted)
+ * for every pair among its tags that are in the MAX_PAIR_TAGS most frequent
+ * (frequency counted over all food entries' parsed tags).
+ */
+function pairKeysOf(entries: readonly LogEntry[]): (meal: LogEntry) => OutcomeKey[] {
+  // Each food entry's tags are parsed once and reused (a per-call map, not a global cache).
+  const parsed = new Map<LogEntry, string[]>();
   const tagCounts = new Map<string, number>();
-  for (const entry of foodEntries) {
-    for (const tag of parseTagsJson(entry.tagsJson)) {
-      tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
-    }
+  for (const entry of entries) {
+    if (!isFood(entry)) continue;
+    const tags = parseTagsJson(entry.tagsJson);
+    parsed.set(entry, tags);
+    for (const tag of tags) tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
   }
   const topTagSet = new Set(
     [...tagCounts.entries()]
@@ -116,33 +160,69 @@ export function analyzePairOutcomes(entries: readonly LogEntry[]): OutcomeFindin
       .map(([tag]) => tag),
   );
 
-  const findings = analyzeOutcomeRates(
-    entries,
-    (meal) => {
-      const tags = parseTagsJson(meal.tagsJson).filter((t) => topTagSet.has(t));
-      const keys: OutcomeKey[] = [];
-      for (let i = 0; i < tags.length; i++) {
-        for (let j = i + 1; j < tags.length; j++) {
-          const [a, b] = [tags[i], tags[j]].sort();
-          const key = `${a} + ${b}`;
-          keys.push({ key, label: key });
-        }
+  return (meal) => {
+    const tags = (parsed.get(meal) ?? parseTagsJson(meal.tagsJson)).filter((t) => topTagSet.has(t));
+    const keys: OutcomeKey[] = [];
+    for (let i = 0; i < tags.length; i++) {
+      for (let j = i + 1; j < tags.length; j++) {
+        // Same order as `[a, b].sort()` (UTF-16 code-unit comparison), without the allocation.
+        const [a, b] = tags[i] <= tags[j] ? [tags[i], tags[j]] : [tags[j], tags[i]];
+        const key = `${a} + ${b}`;
+        keys.push({ key, label: key });
       }
-      return keys;
-    },
-    { minOccurrences: MIN_PAIR_OCCURRENCES },
-  );
+    }
+    return keys;
+  };
+}
 
-  const rates = tagHitRates(entries);
-  return findings
-    .filter((f) => {
-      const [a, b] = f.key.split(' + ');
-      return (
-        f.hitRate >= (rates.get(a) ?? 0) + PAIR_RATE_MARGIN &&
-        f.hitRate >= (rates.get(b) ?? 0) + PAIR_RATE_MARGIN
-      );
-    })
-    .slice(0, MAX_PAIR_FINDINGS);
+/** The interaction test: a pair must beat BOTH constituent tags' raw rates by PAIR_RATE_MARGIN. */
+function interactionFilter(
+  entries: readonly LogEntry[],
+  windowMs: number,
+): (f: OutcomeFinding) => boolean {
+  const rates = tagHitRates(entries, windowMs);
+  return (f) => {
+    const [a, b] = f.key.split(' + ');
+    return (
+      f.hitRate >= (rates.get(a) ?? 0) + PAIR_RATE_MARGIN &&
+      f.hitRate >= (rates.get(b) ?? 0) + PAIR_RATE_MARGIN
+    );
+  };
+}
+
+/**
+ * One pass over the pair space: `shown` is exactly `analyzePairOutcomes`'s
+ * list (the fallback-applied findings, then the interaction filter, then the
+ * cap); `candidates` is every compared pair that passes the interaction
+ * filter at every tier (low included) — uncapped and without the low-only
+ * fallback — and `checked` is how many pairs had at least MIN_PAIR_OCCURRENCES
+ * meals. The chance check (chance.ts) uses `candidates`/`checked` for the
+ * count and `shown` to know which pairs the 24 h section already lists.
+ */
+export function pairAnalysis(
+  entries: readonly LogEntry[],
+  windowMs: number = DEFAULT_WINDOW_MS,
+): { checked: number; candidates: OutcomeFinding[]; shown: OutcomeFinding[] } {
+  const raw = outcomeRateCandidates(entries, pairKeysOf(entries), {
+    minOccurrences: MIN_PAIR_OCCURRENCES,
+    windowMs,
+  });
+  const passes = interactionFilter(entries, windowMs);
+  return {
+    checked: raw.checked,
+    candidates: raw.candidates.filter(passes),
+    // The fallback is applied BEFORE the interaction filter, as it always was.
+    shown: displayOutcomeFindings(raw.candidates).filter(passes).slice(0, MAX_PAIR_FINDINGS),
+  };
+}
+
+/** Candidates-only view of `pairAnalysis` (see there). */
+export function pairCandidates(
+  entries: readonly LogEntry[],
+  windowMs: number = DEFAULT_WINDOW_MS,
+): { checked: number; candidates: OutcomeFinding[] } {
+  const { checked, candidates } = pairAnalysis(entries, windowMs);
+  return { checked, candidates };
 }
 
 export interface NutrientOutcomeFinding {
@@ -171,8 +251,26 @@ export interface NutrientOutcomeFinding {
  * otherwise `low`, which is suppressed — only medium+high findings surface.
  */
 export function analyzeNutrientOutcomes(entries: readonly LogEntry[]): NutrientOutcomeFinding[] {
+  const { candidates } = nutrientCandidates(entries);
+  return candidates
+    .filter((f) => f.confidence !== 'low')
+    .sort((a, b) => b.highRate - b.lowRate - (a.highRate - a.lowRate));
+}
+
+/**
+ * Every nutrient whose high-value meals beat the low-value meals by at least
+ * NUTRIENT_RATE_MARGIN, at every tier — including the `low` tier that
+ * `analyzeNutrientOutcomes` suppresses — in NUTRITION_FIELDS order, unsorted.
+ * `checked` is how many nutrients passed the sample and group-size gates. Used
+ * by the chance check (chance.ts).
+ */
+export function nutrientCandidates(entries: readonly LogEntry[]): {
+  checked: number;
+  candidates: NutrientOutcomeFinding[];
+} {
   const food = entries.filter(isFood);
-  const findings: NutrientOutcomeFinding[] = [];
+  const candidates: NutrientOutcomeFinding[] = [];
+  let checked = 0;
 
   for (const nutrient of NUTRITION_FIELDS) {
     const samples = food.filter((e) => e[nutrient] != null);
@@ -182,6 +280,7 @@ export function analyzeNutrientOutcomes(entries: readonly LogEntry[]): NutrientO
     const high = samples.filter((e) => (e[nutrient] as number) >= threshold);
     const low = samples.filter((e) => (e[nutrient] as number) < threshold);
     if (high.length < MIN_GROUP_SIZE || low.length < MIN_GROUP_SIZE) continue;
+    checked++;
 
     const outcomeMap = mealsFollowedByOutcome(entries, samples);
     const hitsHigh = high.filter((e) => outcomeMap.get(e.id)).length;
@@ -197,9 +296,8 @@ export function analyzeNutrientOutcomes(entries: readonly LogEntry[]): NutrientO
         : high.length >= MEDIUM_CONFIDENCE_MIN_MEALS
           ? 'medium'
           : 'low';
-    if (confidence === 'low') continue;
 
-    findings.push({
+    candidates.push({
       nutrient,
       thresholdValue: round1(threshold),
       highRate,
@@ -209,7 +307,7 @@ export function analyzeNutrientOutcomes(entries: readonly LogEntry[]): NutrientO
     });
   }
 
-  return findings.sort((a, b) => b.highRate - b.lowRate - (a.highRate - a.lowRate));
+  return { checked, candidates };
 }
 
 export interface InsightsSummary {
@@ -237,6 +335,43 @@ export interface Insights {
   foodFindings: OutcomeFinding[];
   ingredientFindings: OutcomeFinding[];
   pairFindings: OutcomeFinding[];
+}
+
+export interface SlowerPatterns {
+  ingredientFindings: OutcomeFinding[];
+  foodFindings: OutcomeFinding[];
+  pairFindings: OutcomeFinding[];
+}
+
+/**
+ * "Slower patterns (within 48 h)" (#21): ingredient / food / combination
+ * findings that reach MEDIUM or HIGH confidence when outcomes are counted up
+ * to SLOW_WINDOW_MS after eating AND that do not appear in the 24 h results
+ * (`twentyFourHour`, any tier — a slower pattern never duplicates a 24 h one).
+ *
+ * Guard rails, deliberately narrow: with daily meals and scattered rough days
+ * a long window pushes the baseline toward 100 %, and trying several windows
+ * per food finds spurious "triggers" by chance. So exactly ONE extra window is
+ * tried, low-confidence results are never shown, and the per-finding timing
+ * profile (outcomeRateForKey) is context only — it never creates findings.
+ * Nutrient findings are not part of this (they stay at 24 h).
+ */
+export function analyzeSlowerPatterns(
+  entries: readonly LogEntry[],
+  twentyFourHour: Insights,
+): SlowerPatterns {
+  const novel = (found: OutcomeFinding[], shown: readonly OutcomeFinding[]): OutcomeFinding[] => {
+    const shownKeys = new Set(shown.map((f) => f.key));
+    return found.filter((f) => f.confidence !== 'low' && !shownKeys.has(f.key));
+  };
+  return {
+    ingredientFindings: novel(
+      analyzeIngredientOutcomes(entries, SLOW_WINDOW_MS),
+      twentyFourHour.ingredientFindings,
+    ),
+    foodFindings: novel(analyzeFoodOutcomes(entries, SLOW_WINDOW_MS), twentyFourHour.foodFindings),
+    pairFindings: novel(analyzePairOutcomes(entries, SLOW_WINDOW_MS), twentyFourHour.pairFindings),
+  };
 }
 
 export function computeInsights(entries: readonly LogEntry[]): Insights {

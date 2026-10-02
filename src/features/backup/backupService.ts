@@ -12,10 +12,15 @@ import { Platform } from 'react-native';
 import {
   hasAnyLogEntry,
   listAllDayCheckIns,
+  listAllDayFactors,
+  listAllExperiments,
   listAllMealComponents,
   listAllMedicationDoses,
   listAllMedicationEvents,
+  listAllMedicationReminders,
   listAllMedications,
+  listAllSavedMealComponents,
+  listAllSavedMeals,
   listLogEntries,
 } from '@/db/repository';
 import { usePrefsStore } from '@/features/prefs/prefsStore';
@@ -27,7 +32,7 @@ import { loadPrefs, savePrefs, type AppPrefs } from '@/lib/prefs';
  * revoked, storage-provider quirk, etc.) is deliberately kept out of the UI. */
 const FOLDER_ERROR_MESSAGE = "Couldn't write to the backup folder. Choose it again in Settings.";
 
-/** Gathers every backed-up table and serializes it in the existing v4 format
+/** Gathers every backed-up table and serializes it in the existing v10 format
  * (src/lib/backup.ts) — the one source both the share-sheet export and the
  * folder backups use, so they can never drift apart. */
 export async function buildBackupJson(): Promise<string> {
@@ -37,7 +42,24 @@ export async function buildBackupJson(): Promise<string> {
   const medicationEvents = await listAllMedicationEvents();
   const medicationDoses = await listAllMedicationDoses();
   const dayCheckIns = await listAllDayCheckIns();
-  return entriesToJson(entries, mealComponents, medications, medicationEvents, medicationDoses, dayCheckIns);
+  const experiments = await listAllExperiments();
+  const dayFactors = await listAllDayFactors();
+  const savedMeals = await listAllSavedMeals();
+  const savedMealComponents = await listAllSavedMealComponents();
+  const medicationReminders = await listAllMedicationReminders();
+  return entriesToJson(
+    entries,
+    mealComponents,
+    medications,
+    medicationEvents,
+    medicationDoses,
+    dayCheckIns,
+    experiments,
+    dayFactors,
+    savedMeals,
+    savedMealComponents,
+    medicationReminders,
+  );
 }
 
 /**

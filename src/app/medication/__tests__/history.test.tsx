@@ -50,6 +50,7 @@ function makeMedication(overrides: Partial<Medication> = {}): Medication {
     startDate: null,
     endDate: null,
     isActive: true,
+    isRegular: false,
     notes: null,
     createdAt: 0,
     updatedAt: 0,
@@ -68,6 +69,7 @@ function makeDose(overrides: Partial<MedicationDose> = {}): MedicationDose {
     medicationId: 'med1',
     dose: 20,
     doseUnit: 'mg',
+    reason: null,
     createdAt: 0,
     updatedAt: 0,
     ...overrides,
@@ -118,5 +120,17 @@ describe('MedicationHistoryScreen', () => {
 
     expect(await findByTestId('journal-med-evt1')).toBeTruthy();
     expect(queryByTestId('journal-med-evt2')).toBeNull();
+  });
+
+  it('shows a dose reason after the amount (GitHub #28)', async () => {
+    mockMedications = [makeMedication({ id: 'med1', name: 'Ibuprofen' })];
+    mockEvents = [makeEvent({ id: 'evt1', takenAt: 1_000 })];
+    mockDoses = [
+      makeDose({ id: 'd1', eventId: 'evt1', medicationId: 'med1', dose: 200, doseUnit: 'mg', reason: 'headache' }),
+    ];
+
+    const { findByText } = await renderScreen();
+
+    expect(await findByText('Ibuprofen 200 mg — headache')).toBeTruthy();
   });
 });

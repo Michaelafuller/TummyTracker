@@ -3,9 +3,13 @@ import { parseTagsJson } from '@/lib/ingredients';
 import {
   analyzeOutcomeRates,
   DEFAULT_WINDOW_MS,
+  firstOutcomeDelayMs,
   isOutcome,
   MAX_LOW_CONFIDENCE_FINDINGS,
   mealsFollowedByOutcome,
+  outcomeRateForKey,
+  PROFILE_WINDOWS_H,
+  SLOW_WINDOW_MS,
   tagHitRates,
 } from '../temporal';
 
@@ -305,5 +309,105 @@ describe('tagHitRates', () => {
     expect(tagHitRates([]).size).toBe(0);
     expect(tagHitRates([makeEntry({ type: 'meal', tagsJson: null, loggedAt: T })]).size).toBe(0);
     expect(tagHitRates([makeEntry({ type: 'meal', tagsJson: '[]', loggedAt: T })]).size).toBe(0);
+  });
+});
+
+describe('window constants', () => {
+  it('exposes the 48 h slow window and the profile windows', () => {
+    expect(SLOW_WINDOW_MS).toBe(48 * HOUR);
+    expect([...PROFILE_WINDOWS_H]).toEqual([6, 24, 48, 72]);
+  });
+});
+
+describe('firstOutcomeDelayMs', () => {
+  const meal = () => makeEntry({ type: 'meal', loggedAt: T });
+
+  it('is null when no outcome follows', () => {
+    const m = meal();
+    expect(firstOutcomeDelayMs([m], m)).toBeNull();
+    const mild = makeEntry({ type: 'symptom', severity: 2, loggedAt: T + HOUR });
+    expect(firstOutcomeDelayMs([m, mild], m)).toBeNull();
+  });
+
+  it('counts only outcomes strictly after the meal', () => {
+    const m = meal();
+    const same = makeEntry({ type: 'symptom', severity: 4, loggedAt: T });
+    const before = makeEntry({ type: 'symptom', severity: 4, loggedAt: T - HOUR });
+    expect(firstOutcomeDelayMs([m, same, before], m)).toBeNull();
+  });
+
+  it('includes the window boundary and excludes beyond it', () => {
+    const m = meal();
+    const edge = makeEntry({ type: 'symptom', severity: 4, loggedAt: T + 24 * HOUR });
+    const past = makeEntry({ type: 'symptom', severity: 4, loggedAt: T + 24 * HOUR + 1 });
+    expect(firstOutcomeDelayMs([m, edge], m)).toBe(24 * HOUR);
+    expect(firstOutcomeDelayMs([m, past], m)).toBeNull();
+    expect(firstOutcomeDelayMs([m, past], m, 48 * HOUR)).toBe(24 * HOUR + 1);
+  });
+
+  it('returns the first of several outcomes regardless of entry order', () => {
+    const m = meal();
+    const later = makeEntry({ type: 'bowel_movement', bristolScale: 7, loggedAt: T + 9 * HOUR });
+    const sooner = makeEntry({ type: 'symptom', severity: 3, loggedAt: T + 4 * HOUR });
+    expect(firstOutcomeDelayMs([later, m, sooner], m)).toBe(4 * HOUR);
+  });
+});
+
+describe('outcomeRateForKey', () => {
+  const keysOf = (meal: LogEntry) =>
+    parseTagsJson(meal.tagsJson).map((tag) => ({ key: tag, label: tag }));
+
+  function fixture(): LogEntry[] {
+    const entries: LogEntry[] = [];
+    for (let i = 0; i < 6; i++) {
+      const t = T + i * 48 * HOUR;
+      entries.push(makeEntry({ type: 'meal', tagsJson: '["onion"]', loggedAt: t }));
+      if (i < 4) entries.push(makeEntry({ type: 'symptom', severity: 4, loggedAt: t + 3 * HOUR }));
+    }
+    for (let i = 0; i < 6; i++) {
+      entries.push(makeEntry({ type: 'meal', tagsJson: '["rice"]', loggedAt: T + i * 48 * HOUR + 12 * HOUR }));
+    }
+    return entries;
+  }
+
+  it('equals the matching analyzeOutcomeRates finding numbers', () => {
+    const entries = fixture();
+    const finding = analyzeOutcomeRates(entries, keysOf).find((f) => f.key === 'onion');
+    expect(finding).toBeDefined();
+
+    const rate = outcomeRateForKey(entries, keysOf, 'onion', DEFAULT_WINDOW_MS);
+
+    expect(rate).toEqual({
+      occurrences: finding?.occurrences,
+      hits: finding?.hits,
+      hitRate: finding?.hitRate,
+      baseRate: finding?.baseRate,
+    });
+  });
+
+  it('applies no gating: a never-flagged key and a one-meal key still report', () => {
+    const entries = fixture();
+    expect(outcomeRateForKey(entries, keysOf, 'rice')).toEqual(
+      expect.objectContaining({ occurrences: 6, hits: 0, hitRate: 0 }),
+    );
+    const single = [makeEntry({ type: 'meal', tagsJson: '["rare"]', loggedAt: T })];
+    expect(outcomeRateForKey(single, keysOf, 'rare')).toEqual({
+      occurrences: 1,
+      hits: 0,
+      hitRate: 0,
+      baseRate: 0,
+    });
+  });
+
+  it('uses the window it is given', () => {
+    const meal = makeEntry({ type: 'meal', tagsJson: '["a"]', loggedAt: T });
+    const outcome = makeEntry({ type: 'symptom', severity: 4, loggedAt: T + 30 * HOUR });
+    expect(outcomeRateForKey([meal, outcome], keysOf, 'a', 24 * HOUR)?.hits).toBe(0);
+    expect(outcomeRateForKey([meal, outcome], keysOf, 'a', 48 * HOUR)?.hits).toBe(1);
+  });
+
+  it('is null for an unknown key or when no meal is eligible', () => {
+    expect(outcomeRateForKey(fixture(), keysOf, 'nope')).toBeNull();
+    expect(outcomeRateForKey([], keysOf, 'onion')).toBeNull();
   });
 });

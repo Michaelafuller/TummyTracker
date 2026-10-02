@@ -2,17 +2,27 @@
 // No filesystem or sharing imports here — kept pure so the logic can be unit-tested.
 
 import {
+  ALCOHOL_LEVELS,
+  CAFFEINE_LEVELS,
   DAY_STATUSES,
+  EXPERIMENT_STATUSES,
   LOG_ENTRY_TYPES,
   FOOD_TYPES,
   MEAL_SLOTS,
+  SLEEP_LEVELS,
   type DayCheckIn,
+  type DayFactor,
+  type Experiment,
   type LogEntry,
   type MealComponent,
   type Medication,
   type MedicationDose,
   type MedicationEvent,
+  type MedicationReminder,
+  type SavedMeal,
+  type SavedMealComponent,
 } from '@/db/schema';
+import { savedMealNameKey } from '@/lib/savedMeals';
 
 export interface BackupFile {
   version: number;
@@ -25,13 +35,26 @@ export interface BackupFile {
   medicationDoses?: MedicationDose[];
   /** Absent before v4 (pre day-check-in, GitHub #13) and treated as [] on import. */
   dayCheckIns?: DayCheckIn[];
+  /** Absent before v5 (pre elimination-experiments, GitHub #19) and treated as [] on import. */
+  experiments?: Experiment[];
+  /** Absent before v6 (pre daily-factors, GitHub #23) and treated as [] on import. */
+  dayFactors?: DayFactor[];
+  /** Absent before v7 (pre saved-meals, GitHub #25) and treated as [] on import. */
+  savedMeals?: SavedMeal[];
+  savedMealComponents?: SavedMealComponent[];
+  /** Absent before v10 (pre medication-reminders, GitHub #29) and treated as [] on import. */
+  medicationReminders?: MedicationReminder[];
 }
 
 /**
  * Serializes entries + their mealComponent rows, the medication inventory and
- * history, and the day check-in answers (GitHub #13 backup v4). Version
- * bumps to 4 but `parseBackupJson` still reads v1/v2/v3 files (missing keys)
- * by defaulting every new array to empty — old backups remain importable.
+ * history, the day check-in answers, and the elimination experiments (GitHub
+ * #19 backup v5), the daily factors (GitHub #23 backup v6), and the saved meals
+ * with their items (GitHub #25 backup v7), and each medication's `isRegular`
+ * flag (GitHub #26 backup v8), and each dose's optional `reason` (GitHub #28
+ * backup v9), and the medication reminder schedule (GitHub #29 backup v10).
+ * Version bumps to 10 but `parseBackupJson` still reads v1–v9 files (missing keys) by
+ * defaulting every new array to empty — old backups remain importable.
  */
 export function entriesToJson(
   entries: LogEntry[],
@@ -40,15 +63,25 @@ export function entriesToJson(
   medicationEvents: MedicationEvent[] = [],
   medicationDoses: MedicationDose[] = [],
   dayCheckIns: DayCheckIn[] = [],
+  experiments: Experiment[] = [],
+  dayFactors: DayFactor[] = [],
+  savedMeals: SavedMeal[] = [],
+  savedMealComponents: SavedMealComponent[] = [],
+  medicationReminders: MedicationReminder[] = [],
 ): string {
   const payload: BackupFile = {
-    version: 4,
+    version: 10,
     entries,
     mealComponents,
     medications,
     medicationEvents,
     medicationDoses,
     dayCheckIns,
+    experiments,
+    dayFactors,
+    savedMeals,
+    savedMealComponents,
+    medicationReminders,
   };
   return JSON.stringify(payload, null, 2);
 }
@@ -116,6 +149,11 @@ export type ParseResult =
       medicationEvents: MedicationEvent[];
       medicationDoses: MedicationDose[];
       dayCheckIns: DayCheckIn[];
+      experiments: Experiment[];
+      dayFactors: DayFactor[];
+      savedMeals: SavedMeal[];
+      savedMealComponents: SavedMealComponent[];
+      medicationReminders: MedicationReminder[];
     }
   | { ok: false; error: string };
 
@@ -176,6 +214,8 @@ function normaliseMedication(v: Record<string, unknown>): Medication {
     startDate: nullable<number>('startDate'),
     endDate: nullable<number>('endDate'),
     isActive: typeof v.isActive === 'boolean' ? v.isActive : true,
+    // Absent before v8 (GitHub #26) → not regular.
+    isRegular: typeof v.isRegular === 'boolean' ? v.isRegular : false,
     notes: nullable<string>('notes'),
     createdAt: v.createdAt as number,
     updatedAt: v.updatedAt as number,
@@ -218,7 +258,11 @@ function isValidMedicationDose(v: unknown): v is MedicationDose {
   return true;
 }
 
-/** Normalises a medicationDose from the backup. Every field here is required (no nullable columns). */
+/**
+ * Normalises a medicationDose from the backup. Every field but `reason` is
+ * required; `reason` is absent before v9 (GitHub #28) and a missing,
+ * non-string or blank value becomes null.
+ */
 function normaliseMedicationDose(v: Record<string, unknown>): MedicationDose {
   return {
     id: v.id as string,
@@ -226,6 +270,7 @@ function normaliseMedicationDose(v: Record<string, unknown>): MedicationDose {
     medicationId: v.medicationId as string,
     dose: v.dose as number,
     doseUnit: v.doseUnit as string,
+    reason: typeof v.reason === 'string' && v.reason.trim().length > 0 ? v.reason.trim() : null,
     createdAt: v.createdAt as number,
     updatedAt: v.updatedAt as number,
   };
@@ -256,8 +301,179 @@ function normaliseDayCheckIn(v: Record<string, unknown>): DayCheckIn {
 }
 
 /**
+ * A reminder whose time or weekday mask is out of range is DROPPED on import
+ * (never fatal — a hand-edited file shouldn't block the rest of a restore),
+ * which is why this is a predicate over the raw row and the parse loop below
+ * skips rather than rejects.
+ */
+function isValidMedicationReminder(v: unknown): v is MedicationReminder {
+  if (!v || typeof v !== 'object') return false;
+  const r = v as Record<string, unknown>;
+  if (!isString(r.id) || r.id.length === 0) return false;
+  if (!isString(r.medicationId) || r.medicationId.length === 0) return false;
+  if (typeof r.hour !== 'number' || !Number.isInteger(r.hour) || r.hour < 0 || r.hour > 23) return false;
+  if (typeof r.minute !== 'number' || !Number.isInteger(r.minute) || r.minute < 0 || r.minute > 59) return false;
+  if (typeof r.daysMask !== 'number' || !Number.isInteger(r.daysMask) || r.daysMask < 1 || r.daysMask > 127) {
+    return false;
+  }
+  if (typeof r.createdAt !== 'number') return false;
+  if (typeof r.updatedAt !== 'number') return false;
+  return true;
+}
+
+function normaliseMedicationReminder(v: Record<string, unknown>): MedicationReminder {
+  return {
+    id: v.id as string,
+    medicationId: v.medicationId as string,
+    hour: v.hour as number,
+    minute: v.minute as number,
+    daysMask: v.daysMask as number,
+    enabled: typeof v.enabled === 'boolean' ? v.enabled : true,
+    createdAt: v.createdAt as number,
+    updatedAt: v.updatedAt as number,
+  };
+}
+
+function isNullableEnum(v: unknown, levels: readonly string[]): boolean {
+  return v === null || v === undefined || (typeof v === 'string' && levels.includes(v));
+}
+
+function isValidDayFactor(v: unknown): v is DayFactor {
+  if (!v || typeof v !== 'object') return false;
+  const r = v as Record<string, unknown>;
+  if (!isString(r.id) || r.id.length === 0) return false;
+  if (!isString(r.date) || !DATE_KEY_RE.test(r.date)) return false;
+  if (!isNullableEnum(r.sleep, SLEEP_LEVELS)) return false;
+  if (!isNullableEnum(r.alcohol, ALCOHOL_LEVELS)) return false;
+  if (!isNullableEnum(r.caffeine, CAFFEINE_LEVELS)) return false;
+  if (r.stress !== null && r.stress !== undefined) {
+    if (typeof r.stress !== 'number' || !Number.isInteger(r.stress) || r.stress < 1 || r.stress > 5) return false;
+  }
+  if (r.period !== null && r.period !== undefined && typeof r.period !== 'boolean') return false;
+  if (typeof r.createdAt !== 'number') return false;
+  if (typeof r.updatedAt !== 'number') return false;
+  return true;
+}
+
+/** Normalises a dayFactor from the backup so absent factor fields become null. */
+function normaliseDayFactor(v: Record<string, unknown>): DayFactor {
+  const nullable = <T>(key: string): T | null => (v[key] !== undefined ? v[key] : null) as T | null;
+  return {
+    id: v.id as string,
+    date: v.date as string,
+    sleep: nullable<DayFactor['sleep']>('sleep'),
+    stress: nullable<number>('stress'),
+    alcohol: nullable<DayFactor['alcohol']>('alcohol'),
+    caffeine: nullable<DayFactor['caffeine']>('caffeine'),
+    period: nullable<boolean>('period'),
+    createdAt: v.createdAt as number,
+    updatedAt: v.updatedAt as number,
+  };
+}
+
+function isValidSavedMeal(v: unknown): v is SavedMeal {
+  if (!v || typeof v !== 'object') return false;
+  const r = v as Record<string, unknown>;
+  if (!isString(r.id) || r.id.length === 0) return false;
+  if (!isString(r.name) || r.name.trim().length === 0) return false;
+  if (!(FOOD_TYPES as readonly string[]).includes(r.type as string)) return false;
+  if (r.mealSlot !== null && r.mealSlot !== undefined) {
+    if (!(MEAL_SLOTS as readonly string[]).includes(r.mealSlot as string)) return false;
+  }
+  if (typeof r.createdAt !== 'number') return false;
+  if (typeof r.updatedAt !== 'number') return false;
+  return true;
+}
+
+/** Normalises a saved meal from the backup. `nameKey` is always re-derived from `name`, never trusted from the file. */
+function normaliseSavedMeal(v: Record<string, unknown>): SavedMeal {
+  const name = (v.name as string).trim();
+  return {
+    id: v.id as string,
+    name,
+    nameKey: savedMealNameKey(name),
+    type: v.type as SavedMeal['type'],
+    mealSlot: ((v.mealSlot !== undefined ? v.mealSlot : null) as SavedMeal['mealSlot']) ?? null,
+    createdAt: v.createdAt as number,
+    updatedAt: v.updatedAt as number,
+  };
+}
+
+function isValidSavedMealComponent(v: unknown): v is SavedMealComponent {
+  if (!v || typeof v !== 'object') return false;
+  const r = v as Record<string, unknown>;
+  if (!isString(r.id) || r.id.length === 0) return false;
+  if (!isString(r.savedMealId) || r.savedMealId.length === 0) return false;
+  if (!isString(r.name)) return false;
+  if (typeof r.createdAt !== 'number') return false;
+  return true;
+}
+
+/** Normalises a saved-meal component from the backup so optional absent fields become null/defaults. */
+function normaliseSavedMealComponent(v: Record<string, unknown>): SavedMealComponent {
+  const nullable = <T>(key: string): T | null => (v[key] !== undefined ? v[key] : null) as T | null;
+  return {
+    id: v.id as string,
+    savedMealId: v.savedMealId as string,
+    name: v.name as string,
+    barcode: nullable<string>('barcode'),
+    servings: typeof v.servings === 'number' ? v.servings : 1,
+    servingG: nullable<number>('servingG'),
+    calories: nullable<number>('calories'),
+    fatG: nullable<number>('fatG'),
+    saturatedFatG: nullable<number>('saturatedFatG'),
+    carbsG: nullable<number>('carbsG'),
+    proteinG: nullable<number>('proteinG'),
+    fiberG: nullable<number>('fiberG'),
+    sugarG: nullable<number>('sugarG'),
+    sodiumMg: nullable<number>('sodiumMg'),
+    ingredientsText: nullable<string>('ingredientsText'),
+    tagsJson: nullable<string>('tagsJson'),
+    sortOrder: typeof v.sortOrder === 'number' ? v.sortOrder : 0,
+    createdAt: v.createdAt as number,
+  };
+}
+
+function isValidExperiment(v: unknown): v is Experiment {
+  if (!v || typeof v !== 'object') return false;
+  const r = v as Record<string, unknown>;
+  if (!isString(r.id) || r.id.length === 0) return false;
+  if (!isString(r.term) || r.term.length === 0) return false;
+  if (!isString(r.startDate) || !DATE_KEY_RE.test(r.startDate)) return false;
+  if (!(EXPERIMENT_STATUSES as readonly string[]).includes(r.status as string)) return false;
+  if (typeof r.baselineDays !== 'number' || r.baselineDays <= 0) return false;
+  if (typeof r.eliminationDays !== 'number' || r.eliminationDays <= 0) return false;
+  if (typeof r.challengeDays !== 'number' || r.challengeDays <= 0) return false;
+  if (typeof r.observationDays !== 'number' || r.observationDays <= 0) return false;
+  if (r.verdictJson !== null && r.verdictJson !== undefined && !isString(r.verdictJson)) return false;
+  if (r.endedAt !== null && r.endedAt !== undefined && typeof r.endedAt !== 'number') return false;
+  if (typeof r.createdAt !== 'number') return false;
+  if (typeof r.updatedAt !== 'number') return false;
+  return true;
+}
+
+/** Normalises an experiment from the backup. Every field here is required except the two nullable columns. */
+function normaliseExperiment(v: Record<string, unknown>): Experiment {
+  const nullable = <T>(key: string): T | null => (v[key] !== undefined ? v[key] : null) as T | null;
+  return {
+    id: v.id as string,
+    term: v.term as string,
+    startDate: v.startDate as string,
+    baselineDays: v.baselineDays as number,
+    eliminationDays: v.eliminationDays as number,
+    challengeDays: v.challengeDays as number,
+    observationDays: v.observationDays as number,
+    status: v.status as Experiment['status'],
+    verdictJson: nullable<string>('verdictJson'),
+    endedAt: nullable<number>('endedAt'),
+    createdAt: v.createdAt as number,
+    updatedAt: v.updatedAt as number,
+  };
+}
+
+/**
  * Parses a backup file, accepting both the legacy v1 shape (no mealComponents
- * key — imports with an empty component list) and the v2/v3/v4 shapes
+ * key — imports with an empty component list) and the v2–v7 shapes
  * produced by entriesToJson. Also accepts a bare entries array for maximum
  * backward compat.
  */
@@ -346,7 +562,73 @@ export function parseBackupJson(text: string): ParseResult {
     dayCheckIns.push(normaliseDayCheckIn(rawDayCheckIns[i] as Record<string, unknown>));
   }
 
-  return { ok: true, entries, mealComponents, medications, medicationEvents, medicationDoses, dayCheckIns };
+  // Absent before v5 — default to [] so v1/v2/v3/v4 backups remain importable.
+  const rawExperiments: unknown[] = Array.isArray(root.experiments) ? (root.experiments as unknown[]) : [];
+  const experiments: Experiment[] = [];
+  for (let i = 0; i < rawExperiments.length; i++) {
+    if (!isValidExperiment(rawExperiments[i])) {
+      return { ok: false, error: `Experiment at index ${i} has an invalid shape.` };
+    }
+    experiments.push(normaliseExperiment(rawExperiments[i] as Record<string, unknown>));
+  }
+
+  // Absent before v6 — default to [] so v1–v5 backups remain importable.
+  const rawDayFactors: unknown[] = Array.isArray(root.dayFactors) ? (root.dayFactors as unknown[]) : [];
+  const dayFactors: DayFactor[] = [];
+  for (let i = 0; i < rawDayFactors.length; i++) {
+    if (!isValidDayFactor(rawDayFactors[i])) {
+      return { ok: false, error: `Day factor at index ${i} has an invalid shape.` };
+    }
+    dayFactors.push(normaliseDayFactor(rawDayFactors[i] as Record<string, unknown>));
+  }
+
+  // Absent before v7 — default to [] so v1–v6 backups remain importable.
+  const rawSavedMeals: unknown[] = Array.isArray(root.savedMeals) ? (root.savedMeals as unknown[]) : [];
+  const savedMeals: SavedMeal[] = [];
+  for (let i = 0; i < rawSavedMeals.length; i++) {
+    if (!isValidSavedMeal(rawSavedMeals[i])) {
+      return { ok: false, error: `Saved meal at index ${i} has an invalid shape.` };
+    }
+    savedMeals.push(normaliseSavedMeal(rawSavedMeals[i] as Record<string, unknown>));
+  }
+
+  const rawSavedMealComponents: unknown[] = Array.isArray(root.savedMealComponents)
+    ? (root.savedMealComponents as unknown[])
+    : [];
+  const savedMealComponents: SavedMealComponent[] = [];
+  for (let i = 0; i < rawSavedMealComponents.length; i++) {
+    if (!isValidSavedMealComponent(rawSavedMealComponents[i])) {
+      return { ok: false, error: `Saved meal component at index ${i} has an invalid shape.` };
+    }
+    savedMealComponents.push(normaliseSavedMealComponent(rawSavedMealComponents[i] as Record<string, unknown>));
+  }
+
+  // Absent before v10 — default to [] so v1–v9 backups remain importable.
+  // Rows with an out-of-range time or weekday mask are dropped, not fatal.
+  const rawMedicationReminders: unknown[] = Array.isArray(root.medicationReminders)
+    ? (root.medicationReminders as unknown[])
+    : [];
+  const medicationReminders: MedicationReminder[] = [];
+  for (const raw of rawMedicationReminders) {
+    if (isValidMedicationReminder(raw)) {
+      medicationReminders.push(normaliseMedicationReminder(raw as unknown as Record<string, unknown>));
+    }
+  }
+
+  return {
+    ok: true,
+    entries,
+    mealComponents,
+    medications,
+    medicationEvents,
+    medicationDoses,
+    dayCheckIns,
+    experiments,
+    dayFactors,
+    savedMeals,
+    savedMealComponents,
+    medicationReminders,
+  };
 }
 
 // Re-export so callers only need one import.

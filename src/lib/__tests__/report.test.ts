@@ -1,4 +1,4 @@
-import type { LogEntry, Medication, MedicationDose, MedicationEvent } from '@/db/schema';
+import type { Experiment, LogEntry, Medication, MedicationDose, MedicationEvent } from '@/db/schema';
 import { buildReportHtml, escapeHtml, REPORT_RANGES } from '../report';
 
 let seq = 0;
@@ -179,6 +179,7 @@ function makeMedication(overrides: Partial<Medication> = {}): Medication {
     startDate: null,
     endDate: null,
     isActive: true,
+    isRegular: false,
     notes: null,
     createdAt: 0,
     updatedAt: 0,
@@ -207,6 +208,7 @@ function makeMedicationDose(overrides: Partial<MedicationDose> = {}): Medication
     medicationId: 'med0',
     dose: 20,
     doseUnit: 'mg',
+    reason: null,
     createdAt: 0,
     updatedAt: 0,
     ...overrides,
@@ -309,6 +311,25 @@ describe('buildReportHtml — medications (GitHub #17)', () => {
     expect(html).toContain('Omeprazole 20 mg');
   });
 
+  it('shows a dose reason in the Journal row but keeps the Medications amounts amount-only (GitHub #28)', () => {
+    const med = makeMedication({ id: 'med1', name: 'Ibuprofen', isActive: true });
+    const event = makeMedicationEvent({ id: 'evt1', takenAt: NOW });
+    const dose = makeMedicationDose({
+      id: 'd1',
+      eventId: 'evt1',
+      medicationId: 'med1',
+      dose: 200,
+      doseUnit: 'mg',
+      reason: 'headache',
+    });
+
+    const html = buildReportHtml([], NOW, 30, { meds: [med], events: [event], doses: [dose] });
+
+    expect(html).toContain('Ibuprofen 200 mg — headache');
+    expect(html).toContain('200 mg ×1');
+    expect(html).not.toContain('200 mg — headache ×');
+  });
+
   it('shows "time not set" for a medication event without a known time', () => {
     const med = makeMedication({ id: 'med1', name: 'Omeprazole', isActive: true });
     const event = makeMedicationEvent({ id: 'evt1', takenAt: NOW, timeKnown: false });
@@ -357,5 +378,196 @@ describe('buildReportHtml — window across a DST change', () => {
     const html = buildReportHtml([lateBefore, firstDay], MARCH_NOW, 30);
     expect(html).not.toContain('Late snack');
     expect(html).toContain('First-day toast');
+  });
+});
+
+function makeExperiment(overrides: Partial<Experiment> = {}): Experiment {
+  return {
+    id: `x${seq++}`,
+    term: 'lactose',
+    startDate: '2026-07-27', // 14/3/3 -> last day 2026-08-15
+    baselineDays: 14,
+    eliminationDays: 14,
+    challengeDays: 3,
+    observationDays: 3,
+    status: 'completed',
+    verdictJson: null,
+    endedAt: 1,
+    createdAt: 0,
+    updatedAt: 0,
+    ...overrides,
+  };
+}
+
+const TRIGGER_VERDICT = JSON.stringify({
+  kind: 'likely-trigger',
+  confidence: 'high',
+  reason: 'Rough days dropped while avoiding it and came back after reintroducing it.',
+  baselineRate: 0.71,
+  eliminationRate: 0,
+  reintroductionRate: 0.83,
+});
+
+describe('buildReportHtml — experiments (GitHub #19)', () => {
+  it('is unchanged when the experiments argument is omitted or empty', () => {
+    const entries = [makeEntry({ loggedAt: NOW })];
+    const base = buildReportHtml(entries, NOW, 30);
+    expect(buildReportHtml(entries, NOW, 30, undefined, undefined)).toBe(base);
+    expect(buildReportHtml(entries, NOW, 30, undefined, [])).toBe(base);
+    expect(base).not.toContain('Elimination experiments');
+  });
+
+  it('adds a section for an experiment overlapping the range, with the sentence and a completed row', () => {
+    const html = buildReportHtml([], NOW, 30, undefined, [
+      makeExperiment({ status: 'completed', verdictJson: TRIGGER_VERDICT }),
+    ]);
+
+    expect(html).toContain('<h2>Elimination experiments</h2>');
+    expect(html).toContain(
+      'Elimination experiments the user ran. Verdicts are observations from their own logs, not diagnoses.',
+    );
+    expect(html).toContain('<th>Tested</th><th>Dates</th><th>Status</th><th>Result</th>');
+    expect(html).toContain('<td>lactose</td>');
+    expect(html).toContain('<td>Jul 27 – Aug 15</td>');
+    expect(html).toContain('<td>Completed</td>');
+    expect(html).toContain('Likely a trigger · high');
+    expect(html).toContain('Rough days: before 71% · while avoiding 0% · after reintroducing 83%');
+  });
+
+  it('places the section after Medications and before the Journal', () => {
+    const med = makeMedication({ id: 'med1', name: 'Omeprazole' });
+    const event = makeMedicationEvent({ id: 'evt1', takenAt: NOW });
+    const dose = makeMedicationDose({ id: 'd1', eventId: 'evt1', medicationId: 'med1' });
+    const html = buildReportHtml([], NOW, 30, { meds: [med], events: [event], doses: [dose] }, [
+      makeExperiment({ status: 'completed', verdictJson: TRIGGER_VERDICT }),
+    ]);
+
+    const medsAt = html.indexOf('<h2>Medications</h2>');
+    const expAt = html.indexOf('<h2>Elimination experiments</h2>');
+    const journalAt = html.indexOf('<h2>Journal</h2>');
+    expect(medsAt).toBeGreaterThan(-1);
+    expect(expAt).toBeGreaterThan(medsAt);
+    expect(journalAt).toBeGreaterThan(expAt);
+  });
+
+  it('omits the section when nothing overlaps the range and nothing is active', () => {
+    const html = buildReportHtml([], NOW, 30, undefined, [
+      makeExperiment({ startDate: '2026-01-01', status: 'completed', verdictJson: TRIGGER_VERDICT }),
+      makeExperiment({ startDate: '2026-01-01', status: 'abandoned' }),
+    ]);
+    expect(html).not.toContain('Elimination experiments');
+  });
+
+  it('applies the overlap rule at both edges of the window', () => {
+    // 30-day window = Jul 26 .. Aug 24. Ends exactly on the first day: included.
+    const endsOnFirstDay = makeExperiment({ term: 'edge-start', startDate: '2026-07-07' }); // last day 07-26
+    // Ends the day before the window: excluded.
+    const endsBefore = makeExperiment({ term: 'too-early', startDate: '2026-07-06' }); // last day 07-25
+    // Starts on the last day of the window: included. Starts the day after: excluded.
+    const startsOnLastDay = makeExperiment({ term: 'edge-end', startDate: '2026-08-24' });
+    const startsAfter = makeExperiment({ term: 'too-late', startDate: '2026-08-25' });
+
+    const html = buildReportHtml([], NOW, 30, undefined, [endsOnFirstDay, endsBefore, startsOnLastDay, startsAfter]);
+
+    expect(html).toContain('<td>edge-start</td>');
+    expect(html).toContain('<td>edge-end</td>');
+    expect(html).not.toContain('too-early');
+    expect(html).not.toContain('too-late');
+  });
+
+  it('respects the range: a 14-day report drops an experiment that finished before it', () => {
+    const exp = makeExperiment({ startDate: '2026-07-07', status: 'completed', verdictJson: TRIGGER_VERDICT }); // ends 07-26
+    expect(buildReportHtml([], NOW, 30, undefined, [exp])).toContain('<td>lactose</td>');
+    expect(buildReportHtml([], NOW, 14, undefined, [exp])).not.toContain('Elimination experiments');
+  });
+
+  it('always includes an active experiment, with its current phase', () => {
+    const html = buildReportHtml([], NOW, 14, undefined, [
+      // Started long ago and still marked active: the schedule is finished, so a verdict is waiting.
+      makeExperiment({ status: 'active', startDate: '2026-01-01', endedAt: null }),
+      makeExperiment({ term: 'soy', status: 'active', startDate: '2026-08-20', endedAt: null }),
+    ]);
+    expect(html).toContain('In progress — Verdict ready');
+    expect(html).toContain('In progress — Avoiding · day 5 of 14');
+    expect(html).toContain('<td>soy</td>');
+  });
+
+  it('shows an abandoned experiment as ended early with no result', () => {
+    const html = buildReportHtml([], NOW, 30, undefined, [makeExperiment({ status: 'abandoned' })]);
+    expect(html).toContain('<td>Ended early</td><td>—</td>');
+  });
+
+  it('reads the FROZEN verdict, even when the current entries would evaluate differently', () => {
+    // Entries that, evaluated today, contain no rough days at all — a live
+    // evaluation could never say "likely a trigger". The frozen verdict wins.
+    const entries = [makeEntry({ loggedAt: new Date(2026, 7, 5, 12).getTime(), name: 'Plain rice' })];
+    const html = buildReportHtml(entries, NOW, 30, undefined, [
+      makeExperiment({ status: 'completed', verdictJson: TRIGGER_VERDICT }),
+    ]);
+    expect(html).toContain('Likely a trigger · high');
+    expect(html).not.toContain('Inconclusive');
+  });
+
+  it('falls back to a dash when a completed row has no readable verdict', () => {
+    const html = buildReportHtml([], NOW, 30, undefined, [
+      makeExperiment({ status: 'completed', verdictJson: '{oops' }),
+    ]);
+    expect(html).toContain('<td>Completed</td><td>—</td>');
+  });
+
+  it('escapes the user-authored term everywhere it appears', () => {
+    const html = buildReportHtml([], NOW, 30, undefined, [
+      makeExperiment({ term: '<img src=x onerror=1> & "q"', status: 'completed', verdictJson: TRIGGER_VERDICT }),
+    ]);
+    expect(html).toContain('&lt;img src=x onerror=1&gt; &amp; &quot;q&quot;');
+    expect(html).not.toContain('<img src=x');
+  });
+});
+
+describe('buildReportHtml — reaction latency (#21)', () => {
+  const BASE = NOW - 400 * HOUR;
+
+  /** Lactose meals 48 h apart followed by a symptom after each delay, plus 3 quiet rice meals. */
+  function lactoseEntries(delaysH: number[]): LogEntry[] {
+    const entries: LogEntry[] = [];
+    delaysH.forEach((delay, i) => {
+      const t = BASE + i * 48 * HOUR;
+      entries.push(makeEntry({ type: 'meal', name: 'Latte', tagsJson: '["lactose"]', loggedAt: t }));
+      entries.push(makeEntry({ type: 'symptom', severity: 4, loggedAt: t + delay * HOUR }));
+    });
+    for (let i = 0; i < 3; i++) {
+      entries.push(makeEntry({ type: 'meal', name: 'Rice', tagsJson: '["rice"]', loggedAt: BASE + (300 + i * 30) * HOUR }));
+    }
+    return entries;
+  }
+
+  it('appends the typical latency to a finding sentence with 3 or more hits', () => {
+    const html = buildReportHtml(lactoseEntries([3, 5, 8]), NOW, 30);
+    expect(html).toContain('lactose: 3 of 3 meals');
+    expect(html).toContain('(Low confidence, n=3). Usually about 5 h later (3–8 h).');
+  });
+
+  it('says "within an hour" when the median is under an hour', () => {
+    const html = buildReportHtml(lactoseEntries([0.2, 0.4, 0.6]), NOW, 30);
+    expect(html).toContain('(Low confidence, n=3). Usually within an hour.');
+  });
+
+  it('adds no latency sentence when fewer than 3 meals were followed', () => {
+    // 4 lactose meals, only 2 followed -> still a finding, but no latency.
+    const entries = lactoseEntries([3, 5]);
+    for (let i = 0; i < 2; i++) {
+      entries.push(makeEntry({ type: 'meal', name: 'Latte', tagsJson: '["lactose"]', loggedAt: BASE + (120 + i * 48) * HOUR }));
+    }
+    const html = buildReportHtml(entries, NOW, 30);
+    expect(html).toContain('lactose: 2 of 4 meals');
+    expect(html).not.toContain('Usually');
+  });
+
+  it('leaves the PDF at 24 h: a slow-only pattern does not appear and no slower-patterns section is added', () => {
+    const html = buildReportHtml(lactoseEntries([30, 30, 30, 30, 30, 30]), NOW, 30);
+    expect(html).not.toContain('lactose: ');
+    expect(html).not.toContain('Slower');
+    expect(html).not.toContain('Usually');
+    expect(html).toContain('No patterns stand out yet.');
   });
 });

@@ -4,12 +4,19 @@
 // (invariant, HANDOFF.md §0): they only ever summarize rows a caller already
 // has (Cycle B writes those rows; the UI and any future insights consume them).
 
+import type { MedicationDoseInput } from '@/db/repository';
 import { DOSE_UNITS, type Medication, type MedicationDose, type MedicationEvent } from '@/db/schema';
 import { dayBounds, formatDateInput } from '@/lib/datetime';
 import { validateNotes } from '@/lib/validation';
 
 export const MAX_MEDICATION_NAME_LENGTH = 100;
 export const MAX_OTHER_UNIT_LENGTH = 20;
+export const MAX_REASON_LENGTH = 60;
+/** How many days the adherence line looks back (today included) — GitHub #28. */
+export const ADHERENCE_WINDOW_DAYS = 30;
+/** Most past-reason chips offered for one medication — GitHub #28. */
+export const MAX_REASON_CHIPS = 5;
+export const REGULAR_NEEDS_DOSE_ERROR = 'A regular medication needs a default dose and unit.';
 
 export interface MedicationInput {
   name: string;
@@ -19,6 +26,8 @@ export interface MedicationInput {
   startDate?: number | null;
   endDate?: number | null;
   notes?: string | null;
+  /** Taken every day (GitHub #26) — requires a default dose and unit. */
+  isRegular?: boolean;
 }
 
 export interface MedicationValidationErrors {
@@ -41,7 +50,9 @@ export interface MedicationValidationResult {
  * DOSE_UNITS chip or the "Other" free-text field, both stored in the same
  * `doseUnit` string — the "Other" text is capped at 20 chars); `endDate` must
  * be on or after `startDate` when both are set; notes reuse the existing 500-
- * char rule.
+ * char rule. A regular medication (GitHub #26) must have a default dose, and
+ * therefore a unit — the dose-field error "A regular medication needs a
+ * default dose and unit." is shown when the dose is missing.
  */
 export function validateMedication(input: MedicationInput): MedicationValidationResult {
   const errors: MedicationValidationErrors = {};
@@ -51,6 +62,10 @@ export function validateMedication(input: MedicationInput): MedicationValidation
     errors.name = 'Name is required.';
   } else if (trimmedName.length > MAX_MEDICATION_NAME_LENGTH) {
     errors.name = `Name must be ${MAX_MEDICATION_NAME_LENGTH} characters or fewer.`;
+  }
+
+  if (input.isRegular && input.defaultDose == null) {
+    errors.defaultDose = REGULAR_NEEDS_DOSE_ERROR;
   }
 
   if (input.defaultDose != null) {
@@ -84,6 +99,44 @@ export function formatDoseNumber(value: number): string {
   return String(parseFloat(value.toFixed(2)));
 }
 
+/** "200 mg" — the amount only (what the report's "amounts" summary counts). */
+export function formatDoseAmount(dose: number, doseUnit: string): string {
+  return `${formatDoseNumber(dose)} ${doseUnit}`;
+}
+
+/**
+ * The shared label for one logged dose (GitHub #28): "200 mg", or
+ * "200 mg — headache" when the dose has a reason. Every place a dose is
+ * listed (Journal, Meds tab, history, outcome detail, the PDF's Journal)
+ * goes through this via `medicationEventsToJournalItems`.
+ */
+export function formatDoseLabel(dose: number, doseUnit: string, reason?: string | null): string {
+  const amount = formatDoseAmount(dose, doseUnit);
+  const trimmed = reason?.trim() ?? '';
+  return trimmed.length > 0 ? `${amount} — ${trimmed}` : amount;
+}
+
+export interface ReasonValidationResult {
+  valid: boolean;
+  /** Trimmed reason, or null when blank. Only meaningful when `valid`. */
+  value: string | null;
+  error?: string;
+}
+
+/** A dose's reason is optional: trimmed, blank -> null, at most MAX_REASON_LENGTH chars (GitHub #28). */
+export function validateReason(text: string | null | undefined): ReasonValidationResult {
+  const trimmed = text?.trim() ?? '';
+  if (trimmed.length === 0) return { valid: true, value: null };
+  if (trimmed.length > MAX_REASON_LENGTH) {
+    return {
+      valid: false,
+      value: null,
+      error: `Reason must be ${MAX_REASON_LENGTH} characters or fewer (got ${trimmed.length}).`,
+    };
+  }
+  return { valid: true, value: trimmed };
+}
+
 export interface DoseSummarySource {
   defaultDose: number | null;
   doseUnit: string | null;
@@ -105,6 +158,36 @@ export function formatDoseSummary(med: DoseSummarySource): string {
   return '';
 }
 
+/**
+ * The doses "Took my regular meds" logs (GitHub #26): every medication that is
+ * active AND regular AND has a default dose > 0 and a non-empty unit, in the
+ * order given (the Meds tab's order). Each dose is a snapshot of the
+ * medication's current default dose/unit; nothing is inferred from `frequency`
+ * (invariant, HANDOFF.md §0).
+ */
+export function regularDoses(meds: readonly Medication[]): MedicationDoseInput[] {
+  const doses: MedicationDoseInput[] = [];
+  for (const med of meds) {
+    if (!med.isRegular) continue;
+    const dose = activeDefaultDose(med);
+    if (dose) doses.push(dose);
+  }
+  return doses;
+}
+
+/**
+ * One dose line at a medication's CURRENT default — null unless the medication
+ * is active with a default dose > 0 and a non-empty unit. The single rule
+ * shared by "Took my regular meds" (#26) and a medication reminder's "Took
+ * them" action (#29); `reason` is always null (an explicit tap, no free text).
+ */
+export function activeDefaultDose(med: Medication): MedicationDoseInput | null {
+  if (!med.isActive) return null;
+  const unit = med.doseUnit?.trim() ?? '';
+  if (med.defaultDose == null || !(med.defaultDose > 0) || unit.length === 0) return null;
+  return { medicationId: med.id, dose: med.defaultDose, doseUnit: unit, reason: null };
+}
+
 // Re-exported so callers only need one import for the fixed unit list.
 export { DOSE_UNITS };
 
@@ -123,6 +206,8 @@ export interface DoseRecord {
   timeKnown: boolean;
   dose: number;
   doseUnit: string;
+  /** Why an as-needed dose was taken (GitHub #28); null when none was given. */
+  reason: string | null;
   notes: string | null;
   createdAt: number;
   updatedAt: number;
@@ -152,6 +237,7 @@ export function flattenDoseRecords(
       timeKnown: event.timeKnown,
       dose: dose.dose,
       doseUnit: dose.doseUnit,
+      reason: dose.reason,
       notes: event.notes,
       createdAt: dose.createdAt,
       updatedAt: dose.updatedAt,
@@ -272,7 +358,7 @@ function computeDaysInRange(
 function summarizeAmounts(records: readonly DoseRecord[]): { label: string; count: number }[] {
   const counts = new Map<string, number>();
   for (const record of records) {
-    const label = `${formatDoseNumber(record.dose)} ${record.doseUnit}`;
+    const label = formatDoseAmount(record.dose, record.doseUnit);
     counts.set(label, (counts.get(label) ?? 0) + 1);
   }
   return Array.from(counts.entries())
@@ -328,4 +414,159 @@ export function summarizeMedicationUse(
   withoutDoses.sort((a, b) => a.name.localeCompare(b.name));
 
   return [...withDoses, ...withoutDoses];
+}
+
+// ---------------------------------------------------------------------------
+// Adherence view + as-needed reasons (GitHub #28). Everything below only reads
+// logged dose rows — a day without a dose is simply unknown — and
+// reuses the day-counting helpers above so the Meds tab line and the PDF agree.
+// ---------------------------------------------------------------------------
+
+/** The 30 local days ending today (today included), as a half-open [start, end). */
+export function adherenceWindow(now: number): MedicationUseRange {
+  const today = new Date(now);
+  // Date arithmetic (not 29 * 24h) so a DST change inside the window can't shift the start.
+  const start = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate() - (ADHERENCE_WINDOW_DAYS - 1),
+  ).getTime();
+  return { start, end: dayBounds(now).end };
+}
+
+export interface AdherenceSummary {
+  /** Distinct local days in the window with >= 1 dose of this medication. */
+  daysWithDose: number;
+  /**
+   * Regular medications only: the local days the line is measured against —
+   * the window clipped to the medication's start/end dates and its first
+   * logged dose ever, never less than `daysWithDose`. Null for as-needed.
+   */
+  denominator: number | null;
+}
+
+/**
+ * "How many days did this medication get logged?" over the last 30 local days
+ * (GitHub #28). A day counts once however many doses it has. For a regular
+ * medication still in use, the denominator is the local days from the later
+ * of the window start and its FIRST logged dose ever, up to today — so "of the
+ * last M days" is always literally true and every counted dose falls inside
+ * those M days. The medication's stated start/end dates are notes, not a
+ * schedule, and are not used to clip (review 2026-10-01: an end date in the
+ * past made "the last M days" false, and a later start date counted doses
+ * outside the M days). A regular medication whose end date has passed, and
+ * every as-needed medication, has no denominator.
+ */
+export function adherenceSummary(
+  med: Pick<Medication, 'id' | 'endDate' | 'isRegular'>,
+  events: readonly MedicationEvent[],
+  doses: readonly MedicationDose[],
+  now: number,
+): AdherenceSummary {
+  const window = adherenceWindow(now);
+  const records = flattenDoseRecords(events, doses).filter((record) => record.medicationId === med.id);
+  const inWindow = filterDoseRecordsInRange(records, window);
+  const daysWithDose = new Set(inWindow.map((record) => formatDateInput(record.takenAt))).size;
+
+  if (!med.isRegular) return { daysWithDose, denominator: null };
+  const todayStart = dayBounds(now).start;
+  if (med.endDate != null && med.endDate < todayStart) return { daysWithDose, denominator: null };
+
+  let firstDoseDayStart: number | null = null;
+  for (const record of records) {
+    const dayStart = dayBounds(record.takenAt).start;
+    if (firstDoseDayStart == null || dayStart < firstDoseDayStart) firstDoseDayStart = dayStart;
+  }
+  const start = firstDoseDayStart != null ? Math.max(window.start, firstDoseDayStart) : window.start;
+  return { daysWithDose, denominator: countLocalDays(start, window.end) };
+}
+
+/**
+ * The adherence wording (GitHub #28): logged days only, never a
+ * percentage. "Logged on 26 of the last 30 days", "Logged on 4 of the last 10
+ * days" (a younger regular medication), "Logged today" (its first day),
+ * "Logged on 4 days in the last 30" (as-needed, or a finished course), or
+ * "No doses logged in the last 30 days".
+ */
+export function adherenceLine(med: Pick<Medication, 'isRegular'>, summary: AdherenceSummary): string {
+  const { daysWithDose, denominator } = summary;
+  if (daysWithDose === 0) return `No doses logged in the last ${ADHERENCE_WINDOW_DAYS} days`;
+  if (med.isRegular && denominator != null) {
+    if (denominator === 1) return 'Logged today';
+    return `Logged on ${daysWithDose} of the last ${denominator} days`;
+  }
+  return `Logged on ${daysWithDose} ${daysWithDose === 1 ? 'day' : 'days'} in the last ${ADHERENCE_WINDOW_DAYS}`;
+}
+
+/** Every local day ('YYYY-MM-DD') this medication has at least one logged dose — the calendar's dots. */
+export function doseDayKeys(
+  medicationId: string,
+  events: readonly MedicationEvent[],
+  doses: readonly MedicationDose[],
+): Set<string> {
+  const keys = new Set<string>();
+  for (const record of flattenDoseRecords(events, doses)) {
+    if (record.medicationId === medicationId) keys.add(formatDateInput(record.takenAt));
+  }
+  return keys;
+}
+
+/** {@link doseDayKeys} limited to one calendar month (`month` is 1-12, as react-native-calendars reports it). */
+export function doseDaysInMonth(
+  medicationId: string,
+  events: readonly MedicationEvent[],
+  doses: readonly MedicationDose[],
+  year: number,
+  month: number,
+): Set<string> {
+  const prefix = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-`;
+  const keys = new Set<string>();
+  for (const key of doseDayKeys(medicationId, events, doses)) {
+    if (key.startsWith(prefix)) keys.add(key);
+  }
+  return keys;
+}
+
+/**
+ * The reason chips for one medication (GitHub #28): its distinct past
+ * reasons, most recently logged first, case-insensitively de-duplicated
+ * (first-seen = most recent casing), at most MAX_REASON_CHIPS. A reason stays
+ * on offer even if the medication later became regular.
+ */
+export function pastReasons(
+  medicationId: string,
+  events: readonly MedicationEvent[],
+  doses: readonly MedicationDose[],
+): string[] {
+  const records = flattenDoseRecords(events, doses)
+    .filter((record) => record.medicationId === medicationId && record.reason != null)
+    .sort((a, b) => b.takenAt - a.takenAt || b.createdAt - a.createdAt);
+
+  const seen = new Set<string>();
+  const reasons: string[] = [];
+  for (const record of records) {
+    const reason = record.reason?.trim() ?? '';
+    if (reason.length === 0) continue;
+    const key = reason.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    reasons.push(reason);
+    if (reasons.length === MAX_REASON_CHIPS) break;
+  }
+  return reasons;
+}
+
+/** {@link pastReasons} for every non-regular medication, keyed by medication id — the entry form's chips. */
+export function reasonSuggestionsByMedication(
+  meds: readonly Medication[],
+  events: readonly MedicationEvent[],
+  doses: readonly MedicationDose[],
+): Record<string, string[]> {
+  const byMedication: Record<string, string[]> = {};
+  for (const med of meds) {
+    if (med.isRegular) continue;
+    const reasons = pastReasons(med.id, events, doses);
+    if (reasons.length > 0) byMedication[med.id] = reasons;
+  }
+  return byMedication;
 }

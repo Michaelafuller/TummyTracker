@@ -25,6 +25,7 @@ const EXPECTED_TABLES = [
   'medication_event',
   'medication_dose',
   'day_check_in',
+  'experiment',
 ];
 
 describe('repository test harness', () => {

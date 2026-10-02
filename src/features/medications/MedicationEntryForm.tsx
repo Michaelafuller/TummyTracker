@@ -17,7 +17,7 @@ import {
   type MedicationEntryErrors,
   type MedicationEntryFormState,
 } from '@/lib/medicationEntry';
-import { DOSE_UNITS, MAX_OTHER_UNIT_LENGTH } from '@/lib/medications';
+import { DOSE_UNITS, MAX_OTHER_UNIT_LENGTH, MAX_REASON_LENGTH } from '@/lib/medications';
 import { MAX_NOTES_LENGTH } from '@/lib/validation';
 
 /** The unit chips: every fixed DOSE_UNITS value, plus "other" for the free-text field (mirrors MedicationForm). */
@@ -40,6 +40,8 @@ export interface MedicationEntryFormProps {
   /** Every medication (active + inactive) — used for name lookup and the "inactive" tag. */
   medications: readonly Medication[];
   initial: MedicationEntryFormState;
+  /** Past reasons per medicationId, for the reason chips on as-needed lines (GitHub #28). */
+  reasonSuggestions?: Readonly<Record<string, readonly string[]>>;
   onSubmit: (payload: MedicationEntrySavePayload) => void | Promise<void>;
   submitLabel?: string;
   submitting?: boolean;
@@ -54,6 +56,7 @@ export interface MedicationEntryFormProps {
 export function MedicationEntryForm({
   medications,
   initial,
+  reasonSuggestions,
   onSubmit,
   submitLabel = 'Save',
   submitting = false,
@@ -237,6 +240,45 @@ export function MedicationEntryForm({
                         />
                       </FormField>
                     ) : null}
+
+                    {!med.isRegular ? (
+                      <FormField label="Reason (optional)" error={errors.reasonErrors?.[med.id]}>
+                        <ThemedTextInput
+                          value={line.reasonInput}
+                          onChangeText={(value) => setLine(med.id, { reasonInput: value })}
+                          accessibilityLabel={`Reason for ${med.name}`}
+                          testID={`dose-reason-${med.id}`}
+                          placeholder="e.g. headache"
+                          maxLength={MAX_REASON_LENGTH}
+                        />
+                        {(reasonSuggestions?.[med.id] ?? []).length > 0 ? (
+                          <View style={styles.reasonChips}>
+                            {(reasonSuggestions?.[med.id] ?? []).map((reason, i) => (
+                              <Pressable
+                                key={reason}
+                                accessibilityRole="button"
+                                accessibilityLabel={`Use reason ${reason}`}
+                                testID={`dose-reason-chip-${med.id}-${i}`}
+                                onPress={() => setLine(med.id, { reasonInput: reason })}
+                                style={[
+                                  styles.reasonChip,
+                                  { backgroundColor: theme.backgroundElement, borderColor: theme.border },
+                                ]}>
+                                <ThemedText type="small" themeColor="textSecondary">
+                                  {reason}
+                                </ThemedText>
+                              </Pressable>
+                            ))}
+                          </View>
+                        ) : null}
+                      </FormField>
+                    ) : errors.reasonErrors?.[med.id] ? (
+                      // A regular line has no reason field, but a reason already saved on this
+                      // dose is kept — surface why a save is blocked if it is somehow too long.
+                      <ThemedText type="small" themeColor="danger">
+                        {errors.reasonErrors[med.id]}
+                      </ThemedText>
+                    ) : null}
                   </View>
                 ) : null}
               </View>
@@ -308,6 +350,18 @@ const styles = StyleSheet.create({
   },
   doseFields: {
     gap: Spacing.three,
+  },
+  reasonChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.two,
+    marginTop: Spacing.two,
+  },
+  reasonChip: {
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    borderRadius: Spacing.four,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   unitRow: {
     flexDirection: 'row',

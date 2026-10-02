@@ -5,15 +5,18 @@ import { FormScrollView } from '@/components/keyboard-aware-screen';
 import { createMedication } from '@/db/repository';
 import type { BuiltMedication } from '@/features/medications/formModel';
 import { MedicationForm } from '@/features/medications/MedicationForm';
+import { requestMedicationReminderRefresh } from '@/features/medications/reminderService';
+import type { ReminderInput } from '@/features/medications/reminderModel';
 
 export default function NewMedicationScreen() {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
 
-  async function handleSubmit(medication: BuiltMedication) {
+  async function handleSubmit(medication: BuiltMedication, reminders: ReminderInput[]) {
     setSubmitting(true);
     try {
-      await createMedication(medication);
+      await createMedication({ ...medication, reminders });
+      requestMedicationReminderRefresh();
       router.back();
     } finally {
       setSubmitting(false);

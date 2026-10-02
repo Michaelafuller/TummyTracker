@@ -13,10 +13,15 @@ import {
   createLogEntry,
   getLogEntry,
   insertDayCheckInsPreservingIds,
+  insertDayFactorsPreservingIds,
+  insertSavedMealsPreservingIds,
+  insertExperimentsPreservingIds,
   insertMealComponents,
   insertMedicationDosesPreservingIds,
   insertMedicationEventsPreservingIds,
+  insertMedicationRemindersPreservingIds,
   insertMedicationsPreservingIds,
+  listAllExperiments,
   listAllMedicationDoses,
   listAllMedicationEvents,
   listAllMedications,
@@ -29,6 +34,8 @@ import {
   turnOffAutoBackup,
 } from '@/features/backup/backupService';
 import { disableDayCheckIn, refreshDayCheckIn } from '@/features/checkin/dayCheckInService';
+import { requestExperimentNotificationRefresh } from '@/features/experiments/experimentNotifications';
+import { requestMedicationReminderRefresh } from '@/features/medications/reminderService';
 import {
   DEFAULT_REMINDERS,
   REMINDER_SLOTS,
@@ -57,6 +64,8 @@ export default function SettingsScreen() {
   const dayCheckInHour = usePrefsStore((s) => s.dayCheckInHour);
   const dayCheckInMinute = usePrefsStore((s) => s.dayCheckInMinute);
   const setDayCheckIn = usePrefsStore((s) => s.setDayCheckIn);
+  const trackPeriod = usePrefsStore((s) => s.trackPeriod);
+  const setTrackPeriod = usePrefsStore((s) => s.setTrackPeriod);
   const lastBackupAt = usePrefsStore((s) => s.lastBackupAt);
   const autoBackupDirUri = usePrefsStore((s) => s.autoBackupDirUri);
   const autoBackupDirName = usePrefsStore((s) => s.autoBackupDirName);
@@ -224,6 +233,12 @@ export default function SettingsScreen() {
         dosesForRestoredEvents(parsed.medicationDoses, eventResult.insertedIds),
       );
 
+      // Medication reminder schedule (GitHub #29): ids preserved, an id that
+      // already exists on the device is skipped.
+      await insertMedicationRemindersPreservingIds(parsed.medicationReminders);
+      // Restored reminders (or restored medications) need arming — fire-and-forget, own slot only.
+      requestMedicationReminderRefresh();
+
       const medSummary =
         parsed.medications.length > 0
           ? ` Imported ${medResult.inserted} ${medResult.inserted === 1 ? 'medication' : 'medications'} (${medResult.skipped} already existed).`
@@ -237,9 +252,38 @@ export default function SettingsScreen() {
           ? ` Imported ${dayCheckInResult.inserted} ${dayCheckInResult.inserted === 1 ? 'day check-in' : 'day check-ins'} (${dayCheckInResult.skipped} already existed).`
           : '';
 
+      // Daily factors (GitHub #23): the device's own row for a day wins,
+      // whole (insertDayFactorsPreservingIds skips on date OR id match).
+      const dayFactorResult = await insertDayFactorsPreservingIds(parsed.dayFactors);
+      const dayFactorSummary =
+        parsed.dayFactors.length > 0
+          ? ` Imported ${dayFactorResult.inserted} ${dayFactorResult.inserted === 1 ? 'day of factors' : 'days of factors'} (${dayFactorResult.skipped} already existed).`
+          : '';
+
+      // Saved meals (GitHub #25): ids preserved; a meal whose id OR name
+      // already exists on the device is skipped (the device wins, with its own
+      // items), and only restored meals bring their items.
+      const savedMealResult = await insertSavedMealsPreservingIds(parsed.savedMeals, parsed.savedMealComponents);
+      const savedMealSummary =
+        parsed.savedMeals.length > 0
+          ? ` Imported ${savedMealResult.inserted} ${savedMealResult.inserted === 1 ? 'saved meal' : 'saved meals'} (${savedMealResult.skipped} already existed).`
+          : '';
+
+      // Experiments (GitHub #19): ids preserved like medications; a restored
+      // 'active' row is demoted to 'abandoned' rather than dropped when the
+      // device already has (or this file already restored) an active one.
+      const experimentResult = await insertExperimentsPreservingIds(parsed.experiments);
+      // A restored active experiment needs its phase reminders armed (or a
+      // demoted one's cancelled) — fire-and-forget, own slot only.
+      requestExperimentNotificationRefresh();
+      const experimentSummary =
+        parsed.experiments.length > 0
+          ? ` Imported ${experimentResult.inserted} ${experimentResult.inserted === 1 ? 'experiment' : 'experiments'} (${experimentResult.skipped} already existed).`
+          : '';
+
       Alert.alert(
         'Import complete',
-        `Imported ${imported} ${imported === 1 ? 'entry' : 'entries'} (${skipped} already existed).${medSummary}${dayCheckInSummary}`,
+        `Imported ${imported} ${imported === 1 ? 'entry' : 'entries'} (${skipped} already existed).${medSummary}${dayCheckInSummary}${dayFactorSummary}${savedMealSummary}${experimentSummary}`,
       );
     } catch (e) {
       Alert.alert('Import failed', e instanceof Error ? e.message : String(e));
@@ -251,13 +295,14 @@ export default function SettingsScreen() {
   async function handleCreateReport() {
     setReportWorking(true);
     try {
-      const [entries, meds, events, doses] = await Promise.all([
+      const [entries, meds, events, doses, experiments] = await Promise.all([
         listLogEntries(),
         listAllMedications(),
         listAllMedicationEvents(),
         listAllMedicationDoses(),
+        listAllExperiments(),
       ]);
-      const html = buildReportHtml(entries, Date.now(), reportRange, { meds, events, doses });
+      const html = buildReportHtml(entries, Date.now(), reportRange, { meds, events, doses }, experiments);
       // Dynamic import only — the installed dev client on the owner's Pixel
       // predates expo-print; a static import would crash Metro (CLAUDE.md §0
       // in docs/HANDOFF.md). Any failure here (module missing, print/share
@@ -488,6 +533,18 @@ export default function SettingsScreen() {
               accessibilityLabel="Day check-in time"
             />
           </FormField>
+        </View>
+        <View style={styles.row}>
+          <View style={styles.rowHeader}>
+            <View style={styles.rowLabel}>
+              <ThemedText type="smallBold">Track period</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                Adds a period option to the day details. Off by default; your data never leaves this
+                device.
+              </ThemedText>
+            </View>
+            <Switch value={trackPeriod} onValueChange={setTrackPeriod} accessibilityLabel="Track period" testID="track-period-switch" />
+          </View>
         </View>
 
         <View style={styles.divider} />

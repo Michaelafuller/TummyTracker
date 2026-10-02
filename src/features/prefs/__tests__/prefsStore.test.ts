@@ -16,6 +16,7 @@ beforeEach(() => {
     dayCheckInEnabled: false,
     dayCheckInHour: 21,
     dayCheckInMinute: 0,
+    trackPeriod: false,
     autoBackupDirUri: null,
     autoBackupDirName: null,
     lastBackupAt: null,
@@ -146,5 +147,32 @@ describe('prefsStore.setDayCheckIn', () => {
     (savePrefs as jest.Mock).mockResolvedValue(undefined);
     usePrefsStore.getState().setDayCheckIn(true, 21, 30);
     expect(usePrefsStore.getState().checkInEnabled).toBe(false);
+  });
+});
+
+describe('prefsStore.setTrackPeriod (GitHub #23)', () => {
+  it('defaults to off', () => {
+    expect(usePrefsStore.getState().trackPeriod).toBe(false);
+  });
+
+  it('updates trackPeriod in store state and persists it by calling savePrefs', () => {
+    (savePrefs as jest.Mock).mockResolvedValue(undefined);
+    usePrefsStore.getState().setTrackPeriod(true);
+    expect(usePrefsStore.getState().trackPeriod).toBe(true);
+    expect(savePrefs).toHaveBeenCalledWith(expect.objectContaining({ trackPeriod: true }));
+  });
+
+  it('turning it back off persists false', () => {
+    (savePrefs as jest.Mock).mockResolvedValue(undefined);
+    usePrefsStore.getState().setTrackPeriod(true);
+    usePrefsStore.getState().setTrackPeriod(false);
+    expect(usePrefsStore.getState().trackPeriod).toBe(false);
+    expect(savePrefs).toHaveBeenLastCalledWith(expect.objectContaining({ trackPeriod: false }));
+  });
+
+  it('load picks up a stored trackPeriod', async () => {
+    (loadPrefs as jest.Mock).mockResolvedValue({ trackPeriod: true });
+    await usePrefsStore.getState().load();
+    expect(usePrefsStore.getState().trackPeriod).toBe(true);
   });
 });

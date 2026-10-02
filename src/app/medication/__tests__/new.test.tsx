@@ -1,6 +1,7 @@
 import { fireEvent, render } from '@testing-library/react-native';
 
 import { createMedication } from '@/db/repository';
+import { requestMedicationReminderRefresh } from '@/features/medications/reminderService';
 import NewMedicationScreen from '../new';
 
 const mockBack = jest.fn();
@@ -10,6 +11,14 @@ jest.mock('expo-router', () => ({
 
 jest.mock('@/db/repository', () => ({
   createMedication: jest.fn(),
+}));
+
+jest.mock('@/features/medications/reminderService', () => ({
+  requestMedicationReminderRefresh: jest.fn(),
+}));
+
+jest.mock('@/features/notifications/service', () => ({
+  ensureNotificationPermission: jest.fn().mockResolvedValue(true),
 }));
 
 beforeEach(() => {
@@ -29,6 +38,25 @@ describe('NewMedicationScreen', () => {
       expect.objectContaining({ name: 'Omeprazole', defaultDose: null, doseUnit: null }),
     );
     expect(mockBack).toHaveBeenCalled();
+    // A saved medication re-arms the reminders (GitHub #29).
+    expect(requestMedicationReminderRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes the reminders added in the form to createMedication (GitHub #29)', async () => {
+    (createMedication as jest.Mock).mockResolvedValue({});
+    const { getByLabelText, findByLabelText, findByTestId } = await render(<NewMedicationScreen />);
+
+    await fireEvent.changeText(getByLabelText('Medication name'), 'Vitamin D');
+    await fireEvent.press(await findByTestId('reminder-add'));
+    await findByTestId('reminder-0');
+    await fireEvent.press(await findByLabelText('Save'));
+
+    expect(createMedication).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Vitamin D',
+        reminders: [{ hour: 8, minute: 0, daysMask: 127, enabled: true }],
+      }),
+    );
   });
 
   it('does not call createMedication or navigate back when validation fails', async () => {
@@ -38,6 +66,7 @@ describe('NewMedicationScreen', () => {
     await fireEvent.press(await findByLabelText('Save'));
 
     expect(createMedication).not.toHaveBeenCalled();
+    expect(requestMedicationReminderRefresh).not.toHaveBeenCalled();
     expect(mockBack).not.toHaveBeenCalled();
   });
 });

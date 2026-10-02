@@ -43,6 +43,25 @@ export function wilsonLowerBound(successes: number, n: number, z = 1.96): number
   return (centre - margin) / denominator;
 }
 
+/**
+ * Wilson score interval UPPER bound for a proportion (95% by default, z =
+ * 1.96) — mirror of {@link wilsonLowerBound}, used where the pessimistic
+ * bound on a rate is the SMALLER number (e.g. the experiment engine wants an
+ * elimination-phase rough rate that is confidently LOW, so it reads the upper
+ * bound: even in the worst case the rate isn't higher than this). Returns 1
+ * when n is 0 (nothing to estimate — the pessimistic bound is "could be
+ * anything up to certain").
+ */
+export function wilsonUpperBound(successes: number, n: number, z = 1.96): number {
+  if (n === 0) return 1;
+  const p = successes / n;
+  const z2 = z * z;
+  const denominator = 1 + z2 / n;
+  const centre = p + z2 / (2 * n);
+  const margin = z * Math.sqrt((p * (1 - p)) / n + z2 / (4 * n * n));
+  return (centre + margin) / denominator;
+}
+
 export type ConfidenceTier = 'low' | 'medium' | 'high';
 
 /** Minimum sample size + effect-vs-SE multiples gating each confidence tier. */

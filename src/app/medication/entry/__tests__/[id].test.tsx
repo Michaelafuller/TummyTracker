@@ -22,6 +22,8 @@ jest.mock('@/db/repository', () => ({
 let mockMedications: Medication[] = [];
 jest.mock('@/features/medications/useMedicationData', () => ({
   useMedications: () => mockMedications,
+  useMedicationEvents: () => [],
+  useMedicationDoses: () => [],
 }));
 
 function makeMedication(overrides: Partial<Medication> = {}): Medication {
@@ -34,6 +36,7 @@ function makeMedication(overrides: Partial<Medication> = {}): Medication {
     startDate: null,
     endDate: null,
     isActive: true,
+    isRegular: false,
     notes: null,
     createdAt: 0,
     updatedAt: 0,
@@ -52,6 +55,7 @@ function makeDose(overrides: Partial<MedicationDose> = {}): MedicationDose {
     medicationId: 'med1',
     dose: 20,
     doseUnit: 'mg',
+    reason: null,
     createdAt: 0,
     updatedAt: 0,
     ...overrides,
@@ -99,7 +103,7 @@ describe('EditMedicationEntryScreen', () => {
     expect(updateMedicationEvent).toHaveBeenCalledWith(
       'evt1',
       expect.objectContaining({ timeKnown: true }),
-      [{ medicationId: 'med1', dose: 10, doseUnit: 'mg' }],
+      [{ medicationId: 'med1', dose: 10, doseUnit: 'mg', reason: null }],
     );
     expect(mockBack).toHaveBeenCalled();
   });

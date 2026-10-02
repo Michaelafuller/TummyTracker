@@ -1,6 +1,14 @@
-import { fireEvent, render } from '@testing-library/react-native';
+import { Alert } from 'react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 
-import { createMealWithComponents } from '@/db/repository';
+import {
+  backfillSavedMealTags,
+  countSavedMealBackfillTargets,
+  createMealWithComponents,
+  deleteSavedMeal,
+  findSavedMealByNameKey,
+  saveSavedMeal,
+} from '@/db/repository';
 import type { Goal, LogEntry, WatchlistItem } from '@/db/schema';
 import { refreshCheckInIfEnabled } from '@/features/goals/checkInService';
 import { useGoalsStore } from '@/features/goals/goalsStore';
@@ -11,12 +19,18 @@ import MealReviewScreen from '../review';
 
 const mockDismissAll = jest.fn();
 const mockPush = jest.fn();
+const mockBack = jest.fn();
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ dismissAll: mockDismissAll, push: mockPush }),
+  useRouter: () => ({ dismissAll: mockDismissAll, push: mockPush, back: mockBack }),
 }));
 
 jest.mock('@/db/repository', () => ({
   createMealWithComponents: jest.fn().mockResolvedValue(undefined),
+  saveSavedMeal: jest.fn().mockResolvedValue(undefined),
+  findSavedMealByNameKey: jest.fn().mockResolvedValue(undefined),
+  deleteSavedMeal: jest.fn().mockResolvedValue(undefined),
+  backfillSavedMealTags: jest.fn().mockResolvedValue(0),
+  countSavedMealBackfillTargets: jest.fn().mockResolvedValue(0),
   listWatchlistItems: jest.fn(),
   addWatchlistItem: jest.fn(),
   removeWatchlistItem: jest.fn(),
@@ -56,9 +70,13 @@ function draft(name: string, overrides: Partial<MealComponentDraft> = {}): MealC
 
 beforeEach(() => {
   jest.clearAllMocks();
+  (findSavedMealByNameKey as jest.Mock).mockResolvedValue(undefined);
+  (backfillSavedMealTags as jest.Mock).mockResolvedValue(0);
+  (countSavedMealBackfillTargets as jest.Mock).mockResolvedValue(0);
   useMealBuilderStore.setState({
     components: [draft('Peas', { calories: 100 }), draft('Rice', { calories: 200 })],
     reviewPrefill: null,
+    editingSavedMealId: null,
   });
   useWatchlistStore.setState({ items: [], loaded: false });
   useGoalsStore.setState({ goals: [], loaded: false });
@@ -134,6 +152,30 @@ describe('MealReviewScreen', () => {
     const { getByLabelText } = await render(<MealReviewScreen />);
     await fireEvent.press(getByLabelText('Add item to this meal'));
     expect(mockPush).toHaveBeenCalledWith('/scan');
+  });
+});
+
+describe('MealReviewScreen per-item edit (GitHub #25)', () => {
+  it('tapping an item name opens the item form in edit mode for that index', async () => {
+    const { getByLabelText } = await render(<MealReviewScreen />);
+    await fireEvent.press(getByLabelText('Edit Rice'));
+    expect(mockPush).toHaveBeenCalledWith({ pathname: '/meal/component', params: { edit: '1' } });
+  });
+
+  it('every row has an edit testID', async () => {
+    const { getByTestId } = await render(<MealReviewScreen />);
+    expect(getByTestId('component-0-edit')).toBeTruthy();
+    expect(getByTestId('component-1-edit')).toBeTruthy();
+  });
+
+  it('an edited item shows its new name and the auto-name follows it', async () => {
+    const { getByDisplayValue, getByText } = await render(<MealReviewScreen />);
+    expect(getByDisplayValue('Peas + 1 more')).toBeTruthy();
+    await act(async () => {
+      useMealBuilderStore.getState().updateComponent(0, { name: 'Garden peas' });
+    });
+    expect(getByText('Garden peas')).toBeTruthy();
+    expect(getByDisplayValue('Garden peas + 1 more')).toBeTruthy();
   });
 });
 
@@ -331,5 +373,380 @@ describe('MealReviewScreen check-in refresh', () => {
     await fireEvent.changeText(getByLabelText('Meal name'), '');
     await fireEvent.press(getByLabelText('Save meal'));
     expect(refreshCheckInIfEnabled).not.toHaveBeenCalled();
+  });
+});
+
+// --- My meals (GitHub #25) -------------------------------------------------
+
+// --- My meals (GitHub #25) -------------------------------------------------
+
+type AlertAnswer = string | (() => string);
+
+/**
+ * Replaces Alert.alert with a stub that immediately "taps" the button named in
+ * `answers` (keyed by the alert's exact title). The screen awaits the user's
+ * choice, so the whole save chain then settles inside the awaited press.
+ * Alerts not in `answers` are recorded but left open (only fine for the
+ * fire-and-forget confirmations).
+ */
+function spyOnAlert(answers: Record<string, AlertAnswer> = {}) {
+  const spy = jest.spyOn(Alert, 'alert').mockImplementation((title, _message, buttons) => {
+    const answer = answers[title];
+    if (answer === undefined) return;
+    const label = typeof answer === 'function' ? answer() : answer;
+    const button = buttons?.find((b) => b.text === label);
+    if (!button) throw new Error(`No "${label}" button on the "${title}" alert`);
+    button.onPress?.();
+  });
+  return {
+    spy,
+    titles: () => spy.mock.calls.map((call) => call[0]),
+    messageOf: (title: string) => spy.mock.calls.find((call) => call[0] === title)?.[1],
+  };
+}
+
+function savedMealRow(id: string, name: string) {
+  return { id, name, nameKey: name.toLowerCase(), type: 'meal', mealSlot: null, createdAt: 1, updatedAt: 1 };
+}
+
+const BACKFILL_TITLE = 'Add ingredients to past meals?';
+
+describe('MealReviewScreen "Save as my meal" (logging mode)', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('shows the button above Save meal, with a testID and label', async () => {
+    const { getByLabelText, getByTestId } = await render(<MealReviewScreen />);
+    expect(getByTestId('review-save-as-my-meal')).toBeTruthy();
+    expect(getByLabelText('Save as my meal')).toBeTruthy();
+    expect(getByLabelText('Save meal')).toBeTruthy();
+  });
+
+  it('is disabled with no items', async () => {
+    useMealBuilderStore.setState({ components: [], reviewPrefill: null });
+    const { getByLabelText } = await render(<MealReviewScreen />);
+    expect(getByLabelText('Save as my meal')).toBeDisabled();
+  });
+
+  it('saves name/type/slot and the items with their servings — not a log entry, and stays on screen', async () => {
+    spyOnAlert();
+    const { getByLabelText, findByText } = await render(<MealReviewScreen />);
+    await fireEvent.changeText(getByLabelText('Meal name'), '  Lunch bowl ');
+    await fireEvent.press(getByLabelText('Breakfast'));
+    await fireEvent.press(getByLabelText('Increase servings of Rice'));
+    await fireEvent.changeText(getByLabelText('Notes'), 'not stored');
+
+    await fireEvent.press(getByLabelText('Save as my meal'));
+
+    expect(saveSavedMeal).toHaveBeenCalledTimes(1);
+    expect(saveSavedMeal).toHaveBeenCalledWith({
+      id: undefined,
+      name: 'Lunch bowl',
+      type: 'meal',
+      mealSlot: 'breakfast',
+      components: [
+        expect.objectContaining({ name: 'Peas', servings: 1 }),
+        expect.objectContaining({ name: 'Rice', servings: 1.5 }),
+      ],
+      replaceId: undefined,
+    });
+    // Never a log entry, never leaves the screen, builder untouched.
+    expect(createMealWithComponents).not.toHaveBeenCalled();
+    expect(mockDismissAll).not.toHaveBeenCalled();
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(useMealBuilderStore.getState().components).toHaveLength(2);
+    // The saved payload carries no date/time/notes at all.
+    const saved = (saveSavedMeal as jest.Mock).mock.calls[0][0];
+    expect(Object.keys(saved).sort()).toEqual(['components', 'id', 'mealSlot', 'name', 'replaceId', 'type']);
+
+    expect(await findByText('Saved to My meals')).toBeTruthy();
+  });
+
+  it('goes back to "Save as my meal" once the items change after saving', async () => {
+    spyOnAlert();
+    const { getByLabelText, getByText, findByText } = await render(<MealReviewScreen />);
+    await fireEvent.press(getByLabelText('Save as my meal'));
+    expect(await findByText('Saved to My meals')).toBeTruthy();
+    expect(getByLabelText('Save as my meal')).toBeDisabled();
+
+    await fireEvent.press(getByLabelText('Increase servings of Rice'));
+
+    expect(getByText('Save as my meal')).toBeTruthy();
+    expect(getByLabelText('Save as my meal')).not.toBeDisabled();
+  });
+
+  it('does not save with a blank name', async () => {
+    const { getByLabelText, findByText } = await render(<MealReviewScreen />);
+    await fireEvent.changeText(getByLabelText('Meal name'), '   ');
+    await fireEvent.press(getByLabelText('Save as my meal'));
+    expect(await findByText('Name is required.')).toBeTruthy();
+    expect(saveSavedMeal).not.toHaveBeenCalled();
+  });
+
+  it('a name clash asks to Replace; Cancel saves nothing', async () => {
+    (findSavedMealByNameKey as jest.Mock).mockResolvedValue(savedMealRow('existing', 'Peas + 1 more'));
+    const alert = spyOnAlert({ "Replace 'Peas + 1 more' in My meals?": 'Cancel' });
+    const { getByLabelText } = await render(<MealReviewScreen />);
+
+    await fireEvent.press(getByLabelText('Save as my meal'));
+
+    expect(alert.titles()).toEqual(["Replace 'Peas + 1 more' in My meals?"]);
+    expect(findSavedMealByNameKey).toHaveBeenCalledWith('peas + 1 more');
+    expect(saveSavedMeal).not.toHaveBeenCalled();
+    expect(getByLabelText('Save as my meal')).not.toBeDisabled();
+  });
+
+  it('a name clash then Replace saves over the existing template (replaceId)', async () => {
+    (findSavedMealByNameKey as jest.Mock).mockResolvedValue(savedMealRow('existing', 'Peas + 1 more'));
+    spyOnAlert({ "Replace 'Peas + 1 more' in My meals?": 'Replace' });
+    const { getByLabelText } = await render(<MealReviewScreen />);
+
+    await fireEvent.press(getByLabelText('Save as my meal'));
+
+    expect(saveSavedMeal).toHaveBeenCalledTimes(1);
+    expect(saveSavedMeal).toHaveBeenCalledWith(expect.objectContaining({ id: undefined, replaceId: 'existing' }));
+  });
+
+  it('shows an alert (and no "Saved" state) when saving fails', async () => {
+    (saveSavedMeal as jest.Mock).mockRejectedValueOnce(new Error('boom'));
+    const alert = spyOnAlert();
+    const { getByLabelText, queryByText } = await render(<MealReviewScreen />);
+    await fireEvent.press(getByLabelText('Save as my meal'));
+    expect(alert.titles()).toEqual(["Couldn't save to My meals"]);
+    expect(queryByText('Saved to My meals')).toBeNull();
+  });
+});
+
+describe('MealReviewScreen backfill offer (GitHub #25)', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('offers nothing when no past meal of that name lacks ingredients', async () => {
+    mockAllEntries = [
+      todayEntry({ type: 'meal', name: 'Peas + 1 more', tagsJson: '["peas"]' }),
+      todayEntry({ type: 'meal', name: 'Toast' }),
+      todayEntry({ type: 'bowel_movement', name: 'Peas + 1 more' }),
+    ];
+    const alert = spyOnAlert();
+    const { getByLabelText, findByText } = await render(<MealReviewScreen />);
+    await fireEvent.press(getByLabelText('Save as my meal'));
+    expect(await findByText('Saved to My meals')).toBeTruthy();
+    expect(alert.spy).not.toHaveBeenCalled();
+    expect(backfillSavedMealTags).not.toHaveBeenCalled();
+  });
+
+  // The offer needs ingredient tags on the template's items (item names alone add nothing).
+  function withIngredients() {
+    useMealBuilderStore.setState({
+      components: [draft('Peas', { calories: 100, tagsJson: '["peas"]' }), draft('Rice', { calories: 200 })],
+    });
+  }
+
+  it('offers nothing when the template has no ingredient tags, even with same-name past meals (review 2026-09-30)', async () => {
+    (countSavedMealBackfillTargets as jest.Mock).mockResolvedValue(3);
+    mockAllEntries = [todayEntry({ type: 'meal', name: 'Peas + 1 more' })];
+    const alert = spyOnAlert();
+    const { getByLabelText, findByText } = await render(<MealReviewScreen />);
+    await fireEvent.press(getByLabelText('Save as my meal'));
+    expect(await findByText('Saved to My meals')).toBeTruthy();
+    expect(alert.spy).not.toHaveBeenCalled();
+    expect(countSavedMealBackfillTargets).not.toHaveBeenCalled();
+    expect(backfillSavedMealTags).not.toHaveBeenCalled();
+  });
+
+  it('offers with the target count; "Not now" writes nothing', async () => {
+    withIngredients();
+    (countSavedMealBackfillTargets as jest.Mock).mockResolvedValue(2);
+    const alert = spyOnAlert({ [BACKFILL_TITLE]: 'Not now' });
+    const { getByLabelText, findByText } = await render(<MealReviewScreen />);
+    await fireEvent.press(getByLabelText('Save as my meal'));
+
+    expect(countSavedMealBackfillTargets).toHaveBeenCalledWith('peas + 1 more');
+    expect(alert.messageOf(BACKFILL_TITLE)).toBe(
+      "Add these ingredients to 2 past 'Peas + 1 more' meals that don't have any? This updates your Insights.",
+    );
+    expect(await findByText('Saved to My meals')).toBeTruthy();
+    expect(backfillSavedMealTags).not.toHaveBeenCalled();
+  });
+
+  it('only "Add" writes: backfills with the template tags and ingredient text, then confirms', async () => {
+    withIngredients();
+    (countSavedMealBackfillTargets as jest.Mock).mockResolvedValue(1);
+    (backfillSavedMealTags as jest.Mock).mockResolvedValue(1);
+    let writesWhenAnswered = -1;
+    const alert = spyOnAlert({
+      [BACKFILL_TITLE]: () => {
+        writesWhenAnswered = (backfillSavedMealTags as jest.Mock).mock.calls.length;
+        return 'Add';
+      },
+    });
+    const { getByLabelText } = await render(<MealReviewScreen />);
+    await fireEvent.press(getByLabelText('Save as my meal'));
+
+    expect(alert.messageOf(BACKFILL_TITLE)).toContain("1 past 'Peas + 1 more' meal that");
+    expect(writesWhenAnswered).toBe(0); // nothing written before the user chose "Add"
+    expect(backfillSavedMealTags).toHaveBeenCalledTimes(1);
+    expect(backfillSavedMealTags).toHaveBeenCalledWith('peas + 1 more', ['peas', 'rice'], 'Peas, Rice');
+    expect(alert.titles()).toContain('Ingredients added');
+    expect(alert.messageOf('Ingredients added')).toBe('Updated 1 past meal.');
+  });
+});
+
+describe('MealReviewScreen template mode (editing a saved meal)', () => {
+  beforeEach(() => {
+    useMealBuilderStore.setState({
+      components: [draft('Oats', { calories: 150, tagsJson: '["oats"]' }), draft('Milk', { calories: 80 })],
+      reviewPrefill: { name: 'Oatmeal bowl', type: 'snack', mealSlot: 'dinner' },
+      editingSavedMealId: 'sm1',
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('shows the edit heading and Save changes / Delete my meal, with the prefilled name', async () => {
+    const { getByTestId, getByDisplayValue, getByText } = await render(<MealReviewScreen />);
+    expect(getByText('Edit my meal')).toBeTruthy();
+    expect(getByTestId('review-save-changes')).toBeTruthy();
+    expect(getByTestId('review-delete-my-meal')).toBeTruthy();
+    expect(getByDisplayValue('Oatmeal bowl')).toBeTruthy();
+  });
+
+  it('hides date/time, notes, the cap notice and the logging buttons', async () => {
+    useGoalsStore.setState({ goals: [goal({ nutrient: 'calories', direction: 'cap', threshold: 10 })], loaded: true });
+    const { queryByLabelText, queryByText, queryByTestId } = await render(<MealReviewScreen />);
+    expect(queryByLabelText('Choose time')).toBeNull();
+    expect(queryByLabelText('Choose date')).toBeNull();
+    expect(queryByLabelText('Notes')).toBeNull();
+    expect(queryByText('This save goes over a goal')).toBeNull();
+    expect(queryByLabelText('Save meal')).toBeNull();
+    expect(queryByTestId('review-save-as-my-meal')).toBeNull();
+  });
+
+  it('keeps the watched-ingredient notice', async () => {
+    useWatchlistStore.setState({ items: [{ id: 'w', term: 'oats', createdAt: 0 } as WatchlistItem], loaded: true });
+    const { findByText } = await render(<MealReviewScreen />);
+    expect(await findByText('Contains a watched ingredient')).toBeTruthy();
+  });
+
+  it('still allows per-item edit', async () => {
+    const { getByLabelText } = await render(<MealReviewScreen />);
+    await fireEvent.press(getByLabelText('Edit Milk'));
+    expect(mockPush).toHaveBeenCalledWith({ pathname: '/meal/component', params: { edit: '1' } });
+  });
+
+  it('Save changes edits that template (by id), clears the builder and goes back — never logs a meal', async () => {
+    const { getByTestId, getByLabelText } = await render(<MealReviewScreen />);
+    await fireEvent.changeText(getByLabelText('Meal name'), 'Oatmeal bowl 2');
+    await fireEvent.press(getByTestId('review-save-changes'));
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(saveSavedMeal).toHaveBeenCalledWith({
+      id: 'sm1',
+      name: 'Oatmeal bowl 2',
+      type: 'snack',
+      mealSlot: 'dinner',
+      components: [expect.objectContaining({ name: 'Oats' }), expect.objectContaining({ name: 'Milk' })],
+      replaceId: undefined,
+    });
+    expect(createMealWithComponents).not.toHaveBeenCalled();
+    expect(mockDismissAll).not.toHaveBeenCalled();
+    expect(useMealBuilderStore.getState().components).toEqual([]);
+    expect(useMealBuilderStore.getState().editingSavedMealId).toBeNull();
+  });
+
+  it("keeping the template's own name is not a clash", async () => {
+    (findSavedMealByNameKey as jest.Mock).mockResolvedValue(savedMealRow('sm1', 'Oatmeal bowl'));
+    const alert = spyOnAlert();
+    const { getByTestId } = await render(<MealReviewScreen />);
+    await fireEvent.press(getByTestId('review-save-changes'));
+    expect(mockBack).toHaveBeenCalled();
+    expect(alert.spy).not.toHaveBeenCalled();
+    expect(saveSavedMeal).toHaveBeenCalledWith(expect.objectContaining({ id: 'sm1', replaceId: undefined }));
+  });
+
+  it("renaming into another template's name asks to Replace; Cancel stays on the screen with nothing saved", async () => {
+    (findSavedMealByNameKey as jest.Mock).mockResolvedValue(savedMealRow('other', 'Toast'));
+    spyOnAlert({ "Replace 'Toast' in My meals?": 'Cancel' });
+    const { getByTestId, getByLabelText } = await render(<MealReviewScreen />);
+    await fireEvent.changeText(getByLabelText('Meal name'), 'Toast');
+    await fireEvent.press(getByTestId('review-save-changes'));
+
+    expect(saveSavedMeal).not.toHaveBeenCalled();
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(useMealBuilderStore.getState().editingSavedMealId).toBe('sm1');
+  });
+
+  it("renaming into another template's name then Replace saves with id + replaceId", async () => {
+    (findSavedMealByNameKey as jest.Mock).mockResolvedValue(savedMealRow('other', 'Toast'));
+    spyOnAlert({ "Replace 'Toast' in My meals?": 'Replace' });
+    const { getByTestId, getByLabelText } = await render(<MealReviewScreen />);
+    await fireEvent.changeText(getByLabelText('Meal name'), 'Toast');
+    await fireEvent.press(getByTestId('review-save-changes'));
+
+    expect(mockBack).toHaveBeenCalled();
+    expect(saveSavedMeal).toHaveBeenCalledWith(expect.objectContaining({ id: 'sm1', replaceId: 'other', name: 'Toast' }));
+  });
+
+  it('waits for the backfill choice before going back; "Add" writes, then leaves', async () => {
+    (countSavedMealBackfillTargets as jest.Mock).mockResolvedValue(1);
+    (backfillSavedMealTags as jest.Mock).mockResolvedValue(1);
+    let backWhenAnswered = -1;
+    spyOnAlert({
+      [BACKFILL_TITLE]: () => {
+        backWhenAnswered = mockBack.mock.calls.length;
+        return 'Add';
+      },
+    });
+    const { getByTestId } = await render(<MealReviewScreen />);
+    await fireEvent.press(getByTestId('review-save-changes'));
+
+    expect(backWhenAnswered).toBe(0); // still on the screen while the offer is open
+    expect(backfillSavedMealTags).toHaveBeenCalledWith('oatmeal bowl', ['oats', 'milk'], 'Oats, Milk');
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect((backfillSavedMealTags as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(
+      mockBack.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('"Not now" leaves without writing', async () => {
+    (countSavedMealBackfillTargets as jest.Mock).mockResolvedValue(1);
+    spyOnAlert({ [BACKFILL_TITLE]: 'Not now' });
+    const { getByTestId } = await render(<MealReviewScreen />);
+    await fireEvent.press(getByTestId('review-save-changes'));
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(backfillSavedMealTags).not.toHaveBeenCalled();
+  });
+
+  it('Delete my meal confirms, deletes the template, clears the builder and goes back', async () => {
+    let deletedWhenAnswered = -1;
+    spyOnAlert({
+      "Delete 'Oatmeal bowl'?": () => {
+        deletedWhenAnswered = (deleteSavedMeal as jest.Mock).mock.calls.length;
+        return 'Delete';
+      },
+    });
+    const { getByTestId } = await render(<MealReviewScreen />);
+    await fireEvent.press(getByTestId('review-delete-my-meal'));
+
+    expect(deletedWhenAnswered).toBe(0); // confirm first
+    expect(deleteSavedMeal).toHaveBeenCalledWith('sm1');
+    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(useMealBuilderStore.getState().editingSavedMealId).toBeNull();
+    expect(useMealBuilderStore.getState().components).toEqual([]);
+  });
+
+  it('cancelling Delete does nothing', async () => {
+    spyOnAlert({ "Delete 'Oatmeal bowl'?": 'Cancel' });
+    const { getByTestId } = await render(<MealReviewScreen />);
+    await fireEvent.press(getByTestId('review-delete-my-meal'));
+
+    expect(deleteSavedMeal).not.toHaveBeenCalled();
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(useMealBuilderStore.getState().editingSavedMealId).toBe('sm1');
   });
 });

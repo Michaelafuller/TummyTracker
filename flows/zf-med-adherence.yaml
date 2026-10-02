@@ -1,0 +1,114 @@
+appId: com.tummytracker.app.dev
+# ZF — Medication adherence + as-needed reasons (GitHub #28, 2026-10-01).
+# Written while the phone was disconnected — expect small flow-side fixes on
+# the first run.
+#   - Ibuprofen 200 mg (as-needed) and Levothyroxine 50 mcg (Regular)
+#   - Before any dose: both rows read "No doses logged in the last 30 days"
+#   - One entry with both: the reason field shows only for Ibuprofen;
+#     "headache" → Recent doses reads "Ibuprofen 200 mg — headache · …"
+#   - Rows: Levothyroxine "Logged today" (review fix: never "1 of the last 1
+#     days"), Ibuprofen "Logged on 1 day in the last 30"
+#   - A second Ibuprofen entry offers "headache" as a chip
+#   - Ibuprofen's own screen: the line + the dose calendar
+---
+- launchApp:
+    clearState: true
+- runFlow: _helpers/reconnect-dev-client.yaml
+
+- tapOn:
+    id: "tab-meds"
+- waitForAnimationToEnd
+
+# --- An as-needed and a regular medication ---
+- tapOn: "Add medication"
+- waitForAnimationToEnd
+- tapOn: "Medication name"
+- inputText: "Ibuprofen"
+- runFlow: _helpers/dismiss-keyboard.yaml
+- tapOn: "Default dose"
+- inputText: "200"
+- runFlow: _helpers/dismiss-keyboard.yaml
+- tapOn: "mg"
+- scrollUntilVisible:
+    element:
+      text: "Save"
+    direction: DOWN
+- tapOn: "Save"
+- waitForAnimationToEnd
+
+- tapOn: "Add medication"
+- waitForAnimationToEnd
+- tapOn: "Medication name"
+- inputText: "Levothyroxine"
+- runFlow: _helpers/dismiss-keyboard.yaml
+- tapOn: "Default dose"
+- inputText: "50"
+- runFlow: _helpers/dismiss-keyboard.yaml
+- tapOn: "mcg"
+- scrollUntilVisible:
+    element:
+      id: "medication-regular"
+    direction: DOWN
+    centerElement: true
+- tapOn:
+    id: "medication-regular"
+- scrollUntilVisible:
+    element:
+      text: "Save"
+    direction: DOWN
+- tapOn: "Save"
+- waitForAnimationToEnd
+- assertVisible: "No doses logged in the last 30 days"
+
+# --- One entry: a reason only for the as-needed line ---
+- tapOn: "Create entry"
+- waitForAnimationToEnd
+- tapOn: "Took Ibuprofen"
+- tapOn: "Took Levothyroxine"
+- assertNotVisible: "Reason for Levothyroxine"
+- tapOn: "Reason for Ibuprofen"
+- inputText: "headache"
+- runFlow: _helpers/dismiss-keyboard.yaml
+- scrollUntilVisible:
+    element:
+      text: "Save"
+    direction: DOWN
+- tapOn: "Save"
+- waitForAnimationToEnd
+
+- scrollUntilVisible:
+    element:
+      text: ".*Ibuprofen 200 mg — headache · Levothyroxine 50 mcg.*"
+    direction: DOWN
+- scrollUntilVisible:
+    element:
+      text: "Logged today"
+    direction: UP
+- assertVisible: "Logged on 1 day in the last 30"
+
+# --- A second as-needed entry offers the past reason as a chip ---
+- tapOn: "Create entry"
+- waitForAnimationToEnd
+- tapOn: "Took Ibuprofen"
+- tapOn: "Use reason headache"
+- scrollUntilVisible:
+    element:
+      text: "Save"
+    direction: DOWN
+- tapOn: "Save"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: ".*Ibuprofen 200 mg — headache.*"
+    direction: DOWN
+
+# --- The medication's own screen: line + calendar ---
+- scrollUntilVisible:
+    element:
+      text: "Edit Ibuprofen"
+    direction: UP
+- tapOn: "Edit Ibuprofen"
+- waitForAnimationToEnd
+- assertVisible: "Logged on 1 day in the last 30"
+- assertVisible:
+    id: "dose-calendar"

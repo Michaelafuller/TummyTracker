@@ -135,6 +135,139 @@
   the sync builders (`.run()`, `.all()`, `.get()`), never `await`; compute ids
   and timestamps before the transaction. The repository tests
   (`src/db/__tests__/repository.atomicity.test.ts`) fail if this regresses.
+- **Elimination experiments (owner-decided 2026-09-27, GitHub #19).** One
+  active experiment at a time (enforced in the repository transaction) on an
+  ingredient **term** (watchlist matching). Protocol: 14-day baseline read
+  from past logs, 7/14/21/28-day avoidance, 3 challenge + 3 observation days.
+  All day math by local calendar day. Experiment **rough day** = an
+  `isOutcome` entry **or** a "rough" check-in (the correlation engine still
+  ignores check-ins). Verdict ladder in `src/features/experiments/engine.ts`
+  — inconclusive on too many slips, no challenge exposure, too few covered
+  days, **the suspect never eaten in the baseline** (review 2026-09-28), or
+  no baseline rough days; "likely not a trigger" is never high confidence.
+  Finishing freezes the verdict in `verdictJson`. Copy never diagnoses.
+  Cycle B (2026-09-28): phase reminders at 09:00 local on each challenge day,
+  the first observation day and the ready day — own slot `experiment-phase`,
+  serialized refresh (same pattern as the day check-in), never a record; tap
+  opens the experiment. History, the watchlist's "Last experiment" line and
+  the PDF read only the frozen verdict. Device verdict path:
+  `node scripts/make-experiment-fixture.mjs` → `adb push` → import (flows
+  `za-…`, `zb-…`).
+- **Medications in the correlation engine (owner-decided 2026-09-28, GitHub
+  #20).** A separate day-level module (`src/features/analysis/medications.ts`)
+  — the food engine's numbers are untouched. Exposure = each logged dose's
+  day + the next day; a built-in antibiotic name list
+  (`src/lib/medicationClasses.ts`, heuristic) counts 7 days after each dose.
+  Rough day = an `isOutcome` entry only (check-ins count as coverage, never
+  roughness — the #13 rule). Only covered days are compared; "taken nearly
+  every day" and "too few days" get notes, not findings. Confounders are a
+  **caveat only** on food/ingredient/combination cards ("N of the M meals
+  followed by a rough outcome were eaten while you were taking X"), shown
+  when ≥ 2 and ≥ half of the hit meals fall in one medication's window.
+  Insights only (not the PDF or "What came before").
+- **Reaction latency + a second window (owner-decided 2026-09-28, GitHub
+  #21).** Every existing finding stays at 24 h. Latency ("Usually about 5 h
+  later (3–8 h)") = nearest-rank median + 25th–75th percentile of hours from
+  each hit meal to its first rough outcome, shown with ≥ 3 hits (Insights
+  cards, finding detail, PDF). One extra window only: **"Slower patterns
+  (within 48 h)"** lists ingredient/food/combination findings that reach
+  medium/high at 48 h and aren't shown at 24 h — never low (trying windows
+  per food finds spurious triggers by chance; long windows push the baseline
+  toward 100 %). The detail screen's 6/24/48/72 h timing profile is context
+  only and never creates findings. Everything else (What came before,
+  medication caveats, experiments, watchlist, PDF findings) stays at 24 h.
+- **Dose-response (owner-decided 2026-09-30, GitHub #22).** Spike: food,
+  ingredient and combination findings were amount-blind (the engine reads only
+  entry name + union tags; servings live on `mealComponent`). Amount =
+  component `servings` (missing → 1; food = the meal's total, ingredient = the
+  servings of components carrying the tag). Each food/ingredient finding's
+  meals split at the median amount, snapped to an amount actually eaten; both
+  sides need ≥ 4 meals. Cards show a line only when larger is ≥ 20 points
+  worse; the finding detail shows the split numbers whenever there's enough
+  data. Not in the PDF; no existing number changes.
+- **Daily confounders (owner-decided 2026-09-30, GitHub #23).** Table
+  `day_factor` (0012, one row per local day, every factor nullable — the
+  check-in's NOT NULL status couldn't be relaxed additively); backups v6.
+  Sleep/stress/alcohol/caffeine, plus period **only when Settings → Track
+  period is on** (hidden everywhere otherwise, rows kept). Entry: "Add
+  details" chips in the Home check-in card; tapping a selected chip clears
+  it to unknown. Flagged days: stress 4–5, poor sleep, any alcohol (that day
+  and the next), "more" caffeine, period. Findings compare flagged days with
+  days the factor was **logged and not flagged** (never "all other days");
+  rough = `isOutcome` only. Caveats on food cards like #20's. A factor-only
+  day counts as covered (#13 line, #20 pools).
+- **"By chance" check on findings (owner-decided 2026-09-30, GitHub #24).**
+  `src/features/analysis/chance.ts`. Every Insights finding card gets one
+  line: how many findings at that card's tier **or better** luck alone
+  would produce in its section, plus "could easily be chance" when
+  `round(expected) >= found`. Expected = the mean over up to 30 slides
+  (≥ 3 positions from zero; < 10 possible slides → "needs a couple of
+  weeks of logs") of the SAME analysis re-run with outcomes slid by whole
+  days: meal-level families move outcome entries among **logged days**
+  (never the calendar — a gap or a stray backdated entry would push slides
+  into empty time and understate chance; review 2026-09-30), keeping the
+  time of day; medications/factors rotate the rough flags among covered
+  days. Counts use each family's uncapped `*Candidates` / `compare*Days`
+  lists (no low-only fallback, no cap) on the real journal and on every
+  slide alike. Display-only: no number, tier, order or visibility changes;
+  Insights only (not the PDF or the detail screen). Deterministic.
+- **Saved meals / "My meals" (owner-decided 2026-09-30, GitHub #25).**
+  Templates live in `saved_meal` + `saved_meal_component` (0013, backups
+  v7) and never are, or link to, a log entry. Created with "Save as my
+  meal" on meal review; listed A–Z on Home above Recent; tapping one
+  copies its items into the builder (time = now) like a Recent row;
+  "Edit" opens review in **template mode** (builder store
+  `editingSavedMealId`; no date/notes/cap notice; Save changes / Delete my
+  meal). Names unique case-insensitively (`nameKey`); a clash asks to
+  Replace. Review items are editable in place (tap the name). **Opt-in
+  backfill** after a template save whose items carry ingredient tags:
+  past same-name food entries whose tags are **only names** (their own or
+  their items' — `createMealWithComponents` always adds item names, so
+  "no tags at all" would match nothing since the builder; review
+  2026-09-30) get the template's tags merged in, in one transaction; text
+  only fills an empty `ingredientsText`. Restore: the device's template
+  wins an id or name clash.
+- **Faster logging (owner-decided 2026-10-01, GitHub #26).** Favourites
+  = My meals, ordered for the meal slot (Home: by time of day, 05–11
+  breakfast / 11–16 lunch / 16–22 dinner; quick log: the reminder's slot).
+  Tapping a breakfast/lunch/dinner reminder opens `/quick-log?slot=…`
+  (`useMealReminderResponses`, navigation only — a notification is never a
+  record); a meal opened there takes that slot. **Regular medications:**
+  `medication.isRegular` (0014, backups v8) requires a default dose + unit;
+  "Took my regular meds" (`RegularMedsButton`, Meds tab + quick log)
+  writes ONE event through `createMedicationEvent` with each active regular
+  med's default dose, on an explicit tap only; then "Logged at … · Undo"
+  (Undo deletes that event). The Undo offer ends on **blur**, not unmount —
+  tabs stay mounted (review 2026-10-01).
+- **Medication adherence + as-needed reasons (owner-decided 2026-10-01,
+  GitHub #28).** Logged days only — never "missed", "skipped" or a
+  percentage (a day without a log is unknown). Regular meds still in use:
+  "Logged on N of the last M days", M = local days from the later of the
+  30-day window start and the **first logged dose** up to today ("Logged
+  today" when M = 1). The stated start/end dates are notes and never clip
+  (review 2026-10-01: end-date clipping made "the last M days" false); a
+  regular med whose end date has passed, and every as-needed med, reads
+  "Logged on N days in the last 30". Lines on Meds tab rows + a dose
+  calendar on each medication's screen. `medication_dose.reason` (0015,
+  backups v9): asked on as-needed lines, chips from that med's past
+  reasons, shown as "Ibuprofen 200 mg — headache" via the one dose-label
+  formatter (the PDF amounts column stays amount-only).
+- **Medication reminders (owner-decided 2026-10-01, GitHub #29).** Table
+  `medication_reminder` (0016, backups v10): medication, hour, minute,
+  `daysMask` (bit 0 = Monday … bit 6 = Sunday), enabled — edited in the
+  medication form and replaced in the same transaction as the medication.
+  Scheduling (`reminderService.ts`, serialized, own slot `med-reminder`
+  only): one WEEKLY trigger per (weekday, time) grouping every **active**
+  med due (expo weekday 1 = Sunday). The **"Took them"** button (only
+  when every med due has a default dose + unit; `opensAppToForeground`)
+  re-reads the meds at tap time and writes ONE event at current defaults,
+  then an Undo alert; a body tap opens `/medication/entry/new?medicationIds=`
+  with those lines ticked. A reminder never writes a dose by itself.
+  **Response guards key on the firing, not the identifier**
+  (`responseHandledKey`: identifier + delivery time + action) — a
+  repeating DAILY/WEEKLY trigger keeps its identifier, and keying on it
+  alone ignored every later firing while Home stayed mounted (review
+  2026-10-02; also fixed #26's meal-reminder tap).
 - **Real-SQLite repository tests (2026-09-27, GitHub #18).** `jest/expo-sqlite-node.ts`
   is a Jest-only fake `expo-sqlite` backed by Node's built-in `node:sqlite`
   (**Node ≥ 22.13 to run the tests**; no dependency). A DB test file starts
@@ -270,6 +403,37 @@ MVP entities:
   - `createdAt`, `updatedAt` (timestamps)
   - Written only by an explicit tap (Home card / notification button) or a
     backup restore (device's own row for a day wins). Never an outcome (§0).
+
+- **experiment** (`experiment`, migration 0011 — GitHub #19)
+  - `id`, `term` (normalized watch term), `startDate` ('YYYY-MM-DD', first
+    avoidance day), `baselineDays`, `eliminationDays`, `challengeDays`,
+    `observationDays`, `status` — `'active' | 'completed' | 'abandoned'`
+    (≤ 1 active), `verdictJson` (frozen verdict at finish, else null),
+    `endedAt`, `createdAt`, `updatedAt`. Backups v5.
+
+- **dayFactor** (`day_factor`, migration 0012 — GitHub #23)
+  - `id`, `date` ('YYYY-MM-DD', **unique**), `sleep` (`poor|ok|good`),
+    `stress` (1–5), `alcohol` (`none|some|a_lot`), `caffeine`
+    (`none|usual|more`), `period` (boolean; shown/analysed only when
+    Track period is on) — all nullable (null = not logged), `createdAt`,
+    `updatedAt`. Backups v6.
+
+- **medication** additions: `isRegular` (boolean, default false — migration
+  0014, GitHub #26; needs a default dose + unit). **medicationDose**
+  addition: `reason` (text, nullable — migration 0015, GitHub #28).
+  Backups v8 / v9.
+
+- **medicationReminder** (`medication_reminder`, migration 0016 — GitHub
+  #29): `id`, `medicationId`, `hour` (0–23), `minute`, `daysMask`
+  (1–127, bit 0 = Monday), `enabled`, `createdAt`, `updatedAt`. Backups
+  v10.
+
+- **savedMeal** (`saved_meal`, migration 0013 — GitHub #25)
+  - `id`, `name`, `nameKey` (trimmed lowercase, **unique**), `type`
+    (`meal|snack`), `mealSlot` (nullable), `createdAt`, `updatedAt`.
+  - Items in `saved_meal_component`: every `meal_component` column with
+    `savedMealId` instead of `entryId`. A template is never a log entry.
+    Backups v7.
 
 Conventions:
 - Timestamps stored as Unix epoch (ms) integers.

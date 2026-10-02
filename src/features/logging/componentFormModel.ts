@@ -3,7 +3,6 @@
 // a full BuiltLogEntry — no loggedAt/sentiment/type here, those are meal-level
 // fields collected once on the review screen.
 
-import type { MealComponent } from '@/db/schema';
 import { extractTags, mergeTags, parseTagsJson, serializeTags } from '@/lib/ingredients';
 import type { MealComponentDraft } from '@/lib/mealAggregate';
 import { parseOptionalNumber } from '@/lib/number';
@@ -60,7 +59,9 @@ export function defaultComponentFormState(
 }
 
 /**
- * Hydrate the form state from a saved mealComponent row (edit-after-save,
+ * Hydrate the form state from a saved mealComponent row — or a builder draft
+ * (per-item edit on the review screen, GitHub #25; a row is assignable to the
+ * draft type) (edit-after-save,
  * HANDOFF.md meal-component drill-down). Mirrors formModel.ts's
  * `logEntryToFormState` conventions: numbers become strings (`''` when null),
  * `nutritionBase` stays null since the per-100g OFF base isn't persisted — so
@@ -69,7 +70,7 @@ export function defaultComponentFormState(
  * passed through unchanged so `buildComponentDraft`'s additive merge on save
  * keeps whatever OFF/derived tags this component already carries.
  */
-export function mealComponentToFormState(row: MealComponent): Partial<ComponentFormState> {
+export function mealComponentToFormState(row: MealComponentDraft): Partial<ComponentFormState> {
   const nutrition = NUTRITION_FIELDS.reduce((acc, field) => {
     const value = row[field];
     acc[field] = value == null ? '' : String(value);
@@ -78,8 +79,8 @@ export function mealComponentToFormState(row: MealComponent): Partial<ComponentF
 
   return {
     name: row.name,
-    barcode: row.barcode,
-    servings: String(row.servings),
+    barcode: row.barcode ?? null,
+    servings: String(row.servings ?? 1),
     servingG: row.servingG != null ? String(row.servingG) : '',
     nutrition,
     ingredientsText: row.ingredientsText ?? '',

@@ -1,0 +1,113 @@
+appId: com.tummytracker.app.dev
+# ZB — Experiment verdict, history and watchlist result (GitHub #19, 2026-09-28).
+# Needs the fixture imported first (za-experiment-fixture-import.yaml, or by
+# hand) — this flow does NOT clear app data.
+#   - Home row: "Verdict ready" → the experiment screen shows the live verdict
+#     "Likely a trigger" with its confidence and numbers
+#   - Finish → the verdict is frozen; the Home row is gone
+#   - Insights → the watchlist item shows "Last experiment: Likely a trigger…"
+#   - Past experiments lists it
+#   - #20 (same fixture): Insights shows "Medications linked to rough days"
+#     with the ibuprofen finding, and the lactose ingredient card carries the
+#     confounder caveat
+#   - #23 (same fixture): "Daily factors linked to rough days" with the
+#     high-stress finding, and a stress caveat on the lactose card
+#   - #21 (same fixture): the lactose card shows its latency line
+#     ("Usually about 3 h later": meals at 12:00, bad BMs at 15:00)
+#   - #24 (same fixture): chance lines on the lactose, ibuprofen and
+#     high-stress cards
+---
+- launchApp
+- runFlow: _helpers/reconnect-dev-client.yaml
+
+- assertVisible: "Open lactose experiment"
+- assertVisible: ".*Verdict ready.*"
+- tapOn: "Open lactose experiment"
+- waitForAnimationToEnd
+
+- assertVisible: "Likely a trigger"
+- assertVisible: ".*confidence.*"
+- assertVisible: "Rough days: .*"
+- assertVisible: "An observation from your own logs, not a diagnosis."
+- scrollUntilVisible:
+    element:
+      text: "Finish experiment"
+    direction: DOWN
+- tapOn: "Finish experiment"
+- waitForAnimationToEnd
+# Finished: the frozen verdict still shows, and nothing is running any more.
+- assertVisible: "Likely a trigger"
+- back
+- waitForAnimationToEnd
+- tapOn:
+    id: "tab-home"
+- waitForAnimationToEnd
+- assertNotVisible: "Open lactose experiment"
+
+# Insights: the watchlist item shows the last result, and history lists it.
+- tapOn:
+    id: "tab-insights"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      text: "Last experiment: Likely a trigger.*"
+    direction: DOWN
+    centerElement: true
+- scrollUntilVisible:
+    element:
+      text: "See past experiments"
+    direction: DOWN
+- tapOn: "See past experiments"
+- waitForAnimationToEnd
+- assertVisible: "Experiments"
+- assertVisible: "Open lactose experiment, .*"
+- back
+- waitForAnimationToEnd
+
+# --- #20: medications in Insights (the fixture doses ibuprofen on 6 rough days) ---
+- scrollUntilVisible:
+    element:
+      text: "7 of the 12 meals followed by a rough outcome were eaten while you were taking Ibuprofen\\."
+    direction: UP
+    centerElement: true
+- assertVisible: "Usually about 3 h later"
+# --- #24: chance lines. Lactose sits in one 14-day block and the rough days in
+# one streak inside it, so luck lines a food up with a streak about as often:
+# the lactose card says it could easily be chance; ibuprofen and stress don't.
+- scrollUntilVisible:
+    element:
+      text: "Chance check: of 3 ingredients checked, luck alone would make about 1 look this strong\\. That's as many as you have, so this could easily be chance\\."
+    direction: UP
+    centerElement: true
+- scrollUntilVisible:
+    element:
+      text: "Medications linked to rough days"
+    direction: DOWN
+- scrollUntilVisible:
+    element:
+      text: "7 of 7 days on or after Ibuprofen were rough.*"
+    direction: DOWN
+    centerElement: true
+- assertVisible: "High confidence · 7 days"
+- assertVisible: "Chance check: of 1 medication checked, luck alone would make fewer than 1 look this strong\\."
+
+# --- #23: daily factors (the fixture logs stress 5 on the 10 rough baseline days) ---
+- scrollUntilVisible:
+    element:
+      text: "Daily factors linked to rough days"
+    direction: DOWN
+- scrollUntilVisible:
+    element:
+      text: "Rough on 10 of 10 high-stress days \\(100%\\) vs 0 of 18 other days you logged stress \\(0%\\)\\."
+    direction: DOWN
+    centerElement: true
+- scrollUntilVisible:
+    element:
+      text: "10 of the 12 meals followed by a rough outcome were on high-stress days\\."
+    direction: UP
+    centerElement: true
+- scrollUntilVisible:
+    element:
+      text: "Chance check: of 1 daily factor checked, luck alone would make fewer than 1 look this strong\\."
+    direction: DOWN
+    centerElement: true

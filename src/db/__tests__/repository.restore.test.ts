@@ -1,6 +1,6 @@
 // Repository tests: backup-restore id-preserving inserts (docs/HANDOFF.md §3
 // "Restore" — the 2026-09-26 bound-variable class + skip-if-exists semantics).
-import type { DayCheckIn, Medication, MedicationDose, MedicationEvent } from '../schema';
+import type { DayCheckIn, Medication, MedicationDose, MedicationEvent, MedicationReminder } from '../schema';
 import * as repo from '../repository';
 import { closeTestDb, migrateTestDb, resetTestDb } from '../testUtils/testDb';
 
@@ -29,6 +29,7 @@ function medicationRow(id: string, overrides: Partial<Medication> = {}): Medicat
     startDate: null,
     endDate: null,
     isActive: true,
+    isRegular: false,
     notes: null,
     createdAt: 1000,
     updatedAt: 1000,
@@ -55,6 +56,7 @@ function medicationDoseRow(id: string, eventId: string, medicationId: string): M
     medicationId,
     dose: 1,
     doseUnit: 'mg',
+    reason: null,
     createdAt: 1000,
     updatedAt: 1000,
   };
@@ -86,6 +88,16 @@ describe('insertMedicationsPreservingIds', () => {
     expect(all.map((m) => m.id).sort()).toEqual(['m1', 'm2', 'm3']);
     // The pre-existing m2 row must be untouched, not overwritten.
     expect(all.find((m) => m.id === 'm2')?.name).toBe('Med m2');
+  });
+
+  it('preserves isRegular on restore (GitHub #26)', async () => {
+    await repo.insertMedicationsPreservingIds([
+      medicationRow('m1', { isRegular: true, defaultDose: 5, doseUnit: 'mg' }),
+      medicationRow('m2'),
+    ]);
+    const all = await repo.listAllMedications();
+    expect(all.find((m) => m.id === 'm1')?.isRegular).toBe(true);
+    expect(all.find((m) => m.id === 'm2')?.isRegular).toBe(false);
   });
 
   it('is a no-op for an empty array', async () => {
@@ -126,7 +138,17 @@ describe('insertMedicationDosesPreservingIds', () => {
     expect(await repo.listAllMedicationDoses()).toHaveLength(3);
   });
 
-  it('succeeds inserting 5,000 dose rows in one call (above the 32,766 bound-variable cap at 7 cols/row unchunked)', async () => {
+  it('preserves a dose reason on restore, and a null reason stays null (GitHub #28)', async () => {
+    await repo.insertMedicationDosesPreservingIds([
+      { ...medicationDoseRow('d1', 'e1', 'm1'), reason: 'headache' },
+      medicationDoseRow('d2', 'e1', 'm1'),
+    ]);
+    const byId = new Map((await repo.listAllMedicationDoses()).map((dose) => [dose.id, dose.reason]));
+    expect(byId.get('d1')).toBe('headache');
+    expect(byId.get('d2')).toBeNull();
+  });
+
+  it('succeeds inserting 5,000 dose rows in one call (above the 32,766 bound-variable cap at 8 cols/row unchunked)', async () => {
     const rows: MedicationDose[] = Array.from({ length: 5000 }, (_, i) => medicationDoseRow(`dose-${i}`, 'e1', 'm1'));
 
     const start = Date.now();
@@ -179,5 +201,50 @@ describe('insertDayCheckInsPreservingIds', () => {
 
   it('is a no-op for an empty array', async () => {
     expect(await repo.insertDayCheckInsPreservingIds([])).toEqual({ inserted: 0, skipped: 0 });
+  });
+});
+
+function reminderRow(id: string, overrides: Partial<MedicationReminder> = {}): MedicationReminder {
+  return {
+    id,
+    medicationId: 'm1',
+    hour: 8,
+    minute: 0,
+    daysMask: 127,
+    enabled: true,
+    createdAt: 1000,
+    updatedAt: 1000,
+    ...overrides,
+  };
+}
+
+describe('insertMedicationRemindersPreservingIds (GitHub #29)', () => {
+  it('inserts new rows preserving id and every field, and skips an id that already exists', async () => {
+    const first = await repo.insertMedicationRemindersPreservingIds([
+      reminderRow('r1', { hour: 7, minute: 45, daysMask: 31, enabled: false }),
+      reminderRow('r2'),
+    ]);
+    expect(first).toEqual({ inserted: 2, skipped: 0 });
+
+    const second = await repo.insertMedicationRemindersPreservingIds([
+      reminderRow('r1', { hour: 23 }),
+      reminderRow('r3'),
+    ]);
+    expect(second).toEqual({ inserted: 1, skipped: 1 });
+
+    const all = await repo.listAllMedicationReminders();
+    expect(all.map((r) => r.id).sort()).toEqual(['r1', 'r2', 'r3']);
+    // The device's existing r1 was not overwritten by the backup's r1.
+    expect(all.find((r) => r.id === 'r1')).toMatchObject({ hour: 7, minute: 45, daysMask: 31, enabled: false });
+  });
+
+  it('is a no-op for an empty array', async () => {
+    expect(await repo.insertMedicationRemindersPreservingIds([])).toEqual({ inserted: 0, skipped: 0 });
+  });
+
+  it('chunks a large restore without dropping or duplicating rows', async () => {
+    const rows = Array.from({ length: 1200 }, (_, i) => reminderRow(`r-${i}`));
+    expect(await repo.insertMedicationRemindersPreservingIds(rows)).toEqual({ inserted: 1200, skipped: 0 });
+    expect(await repo.listAllMedicationReminders()).toHaveLength(1200);
   });
 });

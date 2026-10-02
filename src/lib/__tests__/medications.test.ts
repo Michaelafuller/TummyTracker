@@ -1,9 +1,22 @@
 import type { Medication, MedicationDose, MedicationEvent } from '@/db/schema';
 import {
+  MAX_REASON_LENGTH,
+  adherenceLine,
+  adherenceSummary,
+  adherenceWindow,
+  doseDayKeys,
+  doseDaysInMonth,
   filterDoseRecordsInRange,
   flattenDoseRecords,
+  formatDoseAmount,
+  formatDoseLabel,
   formatDoseSummary,
   groupDoseRecordsByMedication,
+  pastReasons,
+  reasonSuggestionsByMedication,
+  validateReason,
+  activeDefaultDose,
+  regularDoses,
   summarizeMedicationUse,
   validateMedication,
   wasTakenOn,
@@ -183,6 +196,7 @@ function makeDose(overrides: Partial<MedicationDose> = {}): MedicationDose {
     medicationId: 'med1',
     dose: 10,
     doseUnit: 'mg',
+    reason: null,
     createdAt: 0,
     updatedAt: 0,
     ...overrides,
@@ -205,6 +219,7 @@ describe('flattenDoseRecords', () => {
         timeKnown: false,
         dose: 5,
         doseUnit: 'mL',
+        reason: null,
         notes: 'with food',
         createdAt: 0,
         updatedAt: 0,
@@ -325,12 +340,63 @@ function makeMedication(overrides: Partial<Medication> = {}): Medication {
     startDate: null,
     endDate: null,
     isActive: true,
+    isRegular: false,
     notes: null,
     createdAt: 0,
     updatedAt: 0,
     ...overrides,
   };
 }
+
+describe('validateMedication — regular (GitHub #26)', () => {
+  it('requires a default dose when regular', () => {
+    const result = validateMedication(baseInput({ isRegular: true }));
+    expect(result.valid).toBe(false);
+    expect(result.errors.defaultDose).toBe('A regular medication needs a default dose and unit.');
+  });
+
+  it('requires a unit when regular with a dose', () => {
+    const result = validateMedication(baseInput({ isRegular: true, defaultDose: 5 }));
+    expect(result.valid).toBe(false);
+    expect(result.errors.doseUnit).toBeTruthy();
+  });
+
+  it('is valid when regular with a dose and unit, and not-regular needs neither', () => {
+    expect(validateMedication(baseInput({ isRegular: true, defaultDose: 5, doseUnit: 'mg' })).valid).toBe(true);
+    expect(validateMedication(baseInput({ isRegular: false })).valid).toBe(true);
+  });
+});
+
+describe('regularDoses', () => {
+  const reg = (id: string, overrides: Partial<Medication> = {}) =>
+    makeMedication({ id, name: id, isRegular: true, defaultDose: 10, doseUnit: 'mg', ...overrides });
+
+  it('returns only active, regular medications with a dose and unit, as dose inputs', () => {
+    const doses = regularDoses([reg('a'), reg('b', { defaultDose: 0.5, doseUnit: 'tablet' })]);
+    expect(doses).toEqual([
+      { medicationId: 'a', dose: 10, doseUnit: 'mg', reason: null },
+      { medicationId: 'b', dose: 0.5, doseUnit: 'tablet', reason: null },
+    ]);
+  });
+
+  it('skips inactive, not-regular, and dose/unit-less medications', () => {
+    const doses = regularDoses([
+      reg('inactive', { isActive: false }),
+      reg('notRegular', { isRegular: false }),
+      reg('noDose', { defaultDose: null }),
+      reg('zeroDose', { defaultDose: 0 }),
+      reg('noUnit', { doseUnit: null }),
+      reg('blankUnit', { doseUnit: '  ' }),
+      reg('ok'),
+    ]);
+    expect(doses.map((d) => d.medicationId)).toEqual(['ok']);
+  });
+
+  it('preserves the input order and returns [] for none', () => {
+    expect(regularDoses([reg('z'), reg('a'), reg('m')]).map((d) => d.medicationId)).toEqual(['z', 'a', 'm']);
+    expect(regularDoses([])).toEqual([]);
+  });
+});
 
 describe('summarizeMedicationUse', () => {
   it('counts only dose rows within the half-open range', () => {
@@ -523,6 +589,7 @@ describe('summarizeMedicationUse — end date on a DST day', () => {
       startDate: null,
       endDate: new Date(2026, 2, 8).getTime(),
       isActive: true,
+      isRegular: false,
       notes: null,
       createdAt: 0,
       updatedAt: 0,
@@ -530,5 +597,348 @@ describe('summarizeMedicationUse — end date on a DST day', () => {
     const range = { start: new Date(2026, 2, 6).getTime(), end: new Date(2026, 2, 13).getTime() };
     const [row] = summarizeMedicationUse([med], [], [], range);
     expect(row.daysInRange).toBe(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GitHub #28 — adherence view + as-needed reasons
+// ---------------------------------------------------------------------------
+
+const NOW = new Date(2026, 9, 15, 12, 0).getTime(); // Thu 2026-10-15 12:00 local
+const at = (y: number, m: number, d: number, h = 12, min = 0) => new Date(y, m - 1, d, h, min).getTime();
+/** Local time `daysAgo` days before NOW's date, at the given hour (Date arithmetic, DST-safe). */
+const daysAgoAt = (daysAgo: number, h = 12, min = 0) => new Date(2026, 9, 15 - daysAgo, h, min).getTime();
+
+let seq = 0;
+/** One event + one dose for `medicationId` at each timestamp. */
+function logDoses(
+  medicationId: string,
+  times: number[],
+  doseOverrides: Partial<MedicationDose> = {},
+): { events: MedicationEvent[]; doses: MedicationDose[] } {
+  const events: MedicationEvent[] = [];
+  const doses: MedicationDose[] = [];
+  for (const takenAt of times) {
+    const eventId = `ev${seq++}`;
+    events.push(makeEvent({ id: eventId, takenAt, createdAt: takenAt }));
+    doses.push(makeDose({ id: `do${seq++}`, eventId, medicationId, createdAt: takenAt, ...doseOverrides }));
+  }
+  return { events, doses };
+}
+
+describe('formatDoseLabel / formatDoseAmount', () => {
+  it('is the amount alone without a reason', () => {
+    expect(formatDoseLabel(200, 'mg')).toBe('200 mg');
+    expect(formatDoseLabel(200, 'mg', null)).toBe('200 mg');
+    expect(formatDoseLabel(200, 'mg', '   ')).toBe('200 mg');
+  });
+
+  it('appends " — reason" and drops trailing zeros', () => {
+    expect(formatDoseLabel(200, 'mg', 'headache')).toBe('200 mg — headache');
+    expect(formatDoseLabel(0.5, 'tablet', ' cramps ')).toBe('0.5 tablet — cramps');
+  });
+
+  it('formatDoseAmount never includes a reason', () => {
+    expect(formatDoseAmount(200, 'mg')).toBe('200 mg');
+  });
+});
+
+describe('validateReason', () => {
+  it('turns blank / missing into null and is valid', () => {
+    expect(validateReason('')).toEqual({ valid: true, value: null });
+    expect(validateReason('   ')).toEqual({ valid: true, value: null });
+    expect(validateReason(null)).toEqual({ valid: true, value: null });
+    expect(validateReason(undefined)).toEqual({ valid: true, value: null });
+  });
+
+  it('trims', () => {
+    expect(validateReason('  headache ')).toEqual({ valid: true, value: 'headache' });
+  });
+
+  it('accepts exactly the max length and rejects one more', () => {
+    expect(validateReason('a'.repeat(MAX_REASON_LENGTH)).valid).toBe(true);
+    const over = validateReason('a'.repeat(MAX_REASON_LENGTH + 1));
+    expect(over.valid).toBe(false);
+    expect(over.error).toMatch(/60/);
+  });
+
+  it('measures the trimmed length', () => {
+    expect(validateReason(` ${'a'.repeat(MAX_REASON_LENGTH)} `).valid).toBe(true);
+  });
+});
+
+describe('adherenceWindow', () => {
+  it('is the 30 local days ending today, today included', () => {
+    const w = adherenceWindow(NOW);
+    expect(w.start).toBe(at(2026, 9, 16, 0, 0));
+    expect(w.end).toBe(at(2026, 10, 16, 0, 0));
+  });
+
+  it('is still 30 local days across a DST change (no 24 h arithmetic)', () => {
+    // 2026-03-08 is US spring-forward; in a non-DST timezone this is simply 30 days too.
+    const now = at(2026, 3, 20, 9, 0);
+    const w = adherenceWindow(now);
+    expect(w.start).toBe(at(2026, 2, 19, 0, 0));
+    expect(w.end).toBe(at(2026, 3, 21, 0, 0));
+  });
+});
+
+describe('adherenceSummary — day counting', () => {
+  const med = makeMedication({ isRegular: false });
+
+  it('counts a dose at 00:00 today, 29 days ago 00:00 — and not 30 days ago or tomorrow', () => {
+    const { events, doses } = logDoses('med1', [
+      daysAgoAt(0, 0, 0), // today 00:00 — in
+      daysAgoAt(29, 0, 0), // window start — in
+      daysAgoAt(30, 23, 59), // the day before the window — out
+      at(2026, 10, 16, 0, 0), // tomorrow 00:00 — out
+    ]);
+    expect(adherenceSummary(med, events, doses, NOW)).toEqual({ daysWithDose: 2, denominator: null });
+  });
+
+  it('counts a day once however many doses it has', () => {
+    const { events, doses } = logDoses('med1', [daysAgoAt(3, 8), daysAgoAt(3, 14), daysAgoAt(3, 21), daysAgoAt(1, 9)]);
+    expect(adherenceSummary(med, events, doses, NOW).daysWithDose).toBe(2);
+  });
+
+  it("ignores other medications' doses", () => {
+    const mine = logDoses('med1', [daysAgoAt(2)]);
+    const other = logDoses('med2', [daysAgoAt(4), daysAgoAt(5)]);
+    const summary = adherenceSummary(med, [...mine.events, ...other.events], [...mine.doses, ...other.doses], NOW);
+    expect(summary.daysWithDose).toBe(1);
+  });
+
+  it('is 0 with no doses', () => {
+    expect(adherenceSummary(med, [], [], NOW)).toEqual({ daysWithDose: 0, denominator: null });
+  });
+});
+
+describe('adherenceSummary — regular medications', () => {
+  const regular = makeMedication({ isRegular: true, defaultDose: 20, doseUnit: 'mg' });
+
+  it('uses the full 30 days once the first dose is at or before the window start', () => {
+    const times = [daysAgoAt(45), daysAgoAt(29), daysAgoAt(20), daysAgoAt(0)];
+    const { events, doses } = logDoses('med1', times);
+    expect(adherenceSummary(regular, events, doses, NOW)).toEqual({ daysWithDose: 3, denominator: 30 });
+  });
+
+  it('starts counting at the first dose ever for a younger medication', () => {
+    // First dose 9 days ago -> today + 9 earlier days = 10 days.
+    const { events, doses } = logDoses('med1', [daysAgoAt(9), daysAgoAt(5), daysAgoAt(0)]);
+    expect(adherenceSummary(regular, events, doses, NOW)).toEqual({ daysWithDose: 3, denominator: 10 });
+  });
+
+  // Review 2026-10-01: the stated start/end dates are notes, not a schedule.
+  // Clipping by them made "of the last M days" false (an end date in the past)
+  // and counted doses outside the M days ("2 of the last 6" with 1 in range).
+  it('ignores a startDate later than the first dose: the days run from the first dose to today', () => {
+    const med = { ...regular, startDate: daysAgoAt(5, 0, 0) };
+    const { events, doses } = logDoses('med1', [daysAgoAt(20), daysAgoAt(2)]);
+    expect(adherenceSummary(med, events, doses, NOW)).toEqual({ daysWithDose: 2, denominator: 21 });
+  });
+
+  it('a regular medication whose end date has passed gets no denominator (its course is over)', () => {
+    const med = { ...regular, endDate: daysAgoAt(10, 0, 0) };
+    const { events, doses } = logDoses('med1', [daysAgoAt(40), daysAgoAt(25), daysAgoAt(11)]);
+    expect(adherenceSummary(med, events, doses, NOW)).toEqual({ daysWithDose: 2, denominator: null });
+    expect(adherenceLine(med, adherenceSummary(med, events, doses, NOW))).toBe('Logged on 2 days in the last 30');
+  });
+
+  it('an end date of today or later still counts the last days up to today', () => {
+    const med = { ...regular, endDate: daysAgoAt(0, 0, 0) };
+    const { events, doses } = logDoses('med1', [daysAgoAt(9), daysAgoAt(0)]);
+    expect(adherenceSummary(med, events, doses, NOW)).toEqual({ daysWithDose: 2, denominator: 10 });
+  });
+
+  it('the count never exceeds the days it is measured against', () => {
+    const med = { ...regular, startDate: daysAgoAt(3, 0, 0), endDate: daysAgoAt(1, 0, 0) };
+    const { events, doses } = logDoses('med1', [daysAgoAt(15), daysAgoAt(8), daysAgoAt(0)]);
+    const summary = adherenceSummary(med, events, doses, NOW);
+    expect(summary.denominator === null || summary.daysWithDose <= summary.denominator).toBe(true);
+  });
+
+  it('first dose today reads "Logged today", never "1 of the last 1 days"', () => {
+    const { events, doses } = logDoses('med1', [daysAgoAt(0)]);
+    const summary = adherenceSummary(regular, events, doses, NOW);
+    expect(summary).toEqual({ daysWithDose: 1, denominator: 1 });
+    expect(adherenceLine(regular, summary)).toBe('Logged today');
+  });
+
+  it('keeps 30 across a DST change (counts local days, not 24 h blocks)', () => {
+    const now = at(2026, 3, 20, 9, 0);
+    const { events, doses } = logDoses('med1', [at(2026, 2, 10), at(2026, 3, 20, 7)]);
+    expect(adherenceSummary(regular, events, doses, now)).toEqual({ daysWithDose: 1, denominator: 30 });
+  });
+
+  it('agrees with the report (summarizeMedicationUse) for the same window when nothing clips it', () => {
+    const { events, doses } = logDoses('med1', [daysAgoAt(35), daysAgoAt(29), daysAgoAt(12), daysAgoAt(12, 20), daysAgoAt(0)]);
+    const summary = adherenceSummary(regular, events, doses, NOW);
+    const [row] = summarizeMedicationUse([regular], events, doses, adherenceWindow(NOW));
+    expect(summary.daysWithDose).toBe(row.daysWithDose);
+    expect(summary.denominator).toBe(row.daysInRange);
+  });
+});
+
+describe('adherenceLine', () => {
+  const regular = { isRegular: true };
+  const asNeeded = { isRegular: false };
+
+  it('regular, full window: "Logged on N of the last 30 days"', () => {
+    expect(adherenceLine(regular, { daysWithDose: 26, denominator: 30 })).toBe('Logged on 26 of the last 30 days');
+  });
+
+  it('regular, younger medication: "Logged on N of the last M days"', () => {
+    expect(adherenceLine(regular, { daysWithDose: 4, denominator: 10 })).toBe('Logged on 4 of the last 10 days');
+  });
+
+  it('as-needed: "Logged on N days in the last 30", singular for 1', () => {
+    expect(adherenceLine(asNeeded, { daysWithDose: 4, denominator: null })).toBe('Logged on 4 days in the last 30');
+    expect(adherenceLine(asNeeded, { daysWithDose: 1, denominator: null })).toBe('Logged on 1 day in the last 30');
+  });
+
+  it('nothing logged: "No doses logged in the last 30 days" for both kinds', () => {
+    expect(adherenceLine(regular, { daysWithDose: 0, denominator: 30 })).toBe('No doses logged in the last 30 days');
+    expect(adherenceLine(asNeeded, { daysWithDose: 0, denominator: null })).toBe('No doses logged in the last 30 days');
+  });
+
+  it('uses neutral logged-days wording and no percentage', () => {
+    const lines = [
+      adherenceLine(regular, { daysWithDose: 26, denominator: 30 }),
+      adherenceLine(regular, { daysWithDose: 4, denominator: 10 }),
+      adherenceLine(asNeeded, { daysWithDose: 4, denominator: null }),
+      adherenceLine(asNeeded, { daysWithDose: 0, denominator: null }),
+    ];
+    for (const line of lines) expect(line).not.toMatch(/missed|skipped|%/i);
+  });
+
+  it('worked example: a regular and an as-needed medication', () => {
+    const reg = makeMedication({ id: 'reg', isRegular: true, defaultDose: 20, doseUnit: 'mg' });
+    const prn = makeMedication({ id: 'prn', isRegular: false });
+    const regDoses = logDoses('reg', [daysAgoAt(29), ...Array.from({ length: 25 }, (_, i) => daysAgoAt(i))]);
+    const prnDoses = logDoses('prn', [daysAgoAt(1), daysAgoAt(1, 20), daysAgoAt(6), daysAgoAt(12), daysAgoAt(30)]);
+    const events = [...regDoses.events, ...prnDoses.events];
+    const doses = [...regDoses.doses, ...prnDoses.doses];
+    expect(adherenceLine(reg, adherenceSummary(reg, events, doses, NOW))).toBe('Logged on 26 of the last 30 days');
+    expect(adherenceLine(prn, adherenceSummary(prn, events, doses, NOW))).toBe('Logged on 3 days in the last 30');
+  });
+});
+
+describe('doseDayKeys / doseDaysInMonth', () => {
+  it('lists the local days with a dose of this medication only', () => {
+    const mine = logDoses('med1', [at(2026, 10, 3, 8), at(2026, 10, 3, 20), at(2026, 9, 30, 23, 30)]);
+    const other = logDoses('med2', [at(2026, 10, 9)]);
+    const events = [...mine.events, ...other.events];
+    const doses = [...mine.doses, ...other.doses];
+    expect(Array.from(doseDayKeys('med1', events, doses)).sort()).toEqual(['2026-09-30', '2026-10-03']);
+  });
+
+  it('limits to the requested month (1-12)', () => {
+    const { events, doses } = logDoses('med1', [at(2026, 10, 3), at(2026, 9, 30), at(2025, 10, 4)]);
+    expect(Array.from(doseDaysInMonth('med1', events, doses, 2026, 10))).toEqual(['2026-10-03']);
+    expect(Array.from(doseDaysInMonth('med1', events, doses, 2026, 9))).toEqual(['2026-09-30']);
+    expect(doseDaysInMonth('med1', events, doses, 2026, 11).size).toBe(0);
+  });
+
+  it('keys a late-night dose by its local day', () => {
+    const { events, doses } = logDoses('med1', [at(2026, 10, 3, 23, 59)]);
+    expect(Array.from(doseDayKeys('med1', events, doses))).toEqual(['2026-10-03']);
+  });
+});
+
+describe('pastReasons', () => {
+  function withReasons(entries: [number, string | null][], medicationId = 'med1') {
+    const out = { events: [] as MedicationEvent[], doses: [] as MedicationDose[] };
+    for (const [takenAt, reason] of entries) {
+      const one = logDoses(medicationId, [takenAt], { reason });
+      out.events.push(...one.events);
+      out.doses.push(...one.doses);
+    }
+    return out;
+  }
+
+  it('lists distinct reasons, most recent first', () => {
+    const { events, doses } = withReasons([
+      [daysAgoAt(10), 'cramps'],
+      [daysAgoAt(2), 'headache'],
+      [daysAgoAt(5), 'back pain'],
+    ]);
+    expect(pastReasons('med1', events, doses)).toEqual(['headache', 'back pain', 'cramps']);
+  });
+
+  it('de-duplicates case-insensitively, keeping the most recent casing', () => {
+    const { events, doses } = withReasons([
+      [daysAgoAt(9), 'headache'],
+      [daysAgoAt(3), 'Headache'],
+      [daysAgoAt(1), 'nausea'],
+    ]);
+    expect(pastReasons('med1', events, doses)).toEqual(['nausea', 'Headache']);
+  });
+
+  it('is capped at 5', () => {
+    const { events, doses } = withReasons(Array.from({ length: 8 }, (_, i) => [daysAgoAt(i), `r${i}`] as [number, string]));
+    expect(pastReasons('med1', events, doses)).toEqual(['r0', 'r1', 'r2', 'r3', 'r4']);
+  });
+
+  it('skips doses without a reason and other medications', () => {
+    const mine = withReasons([
+      [daysAgoAt(1), null],
+      [daysAgoAt(2), 'cramps'],
+    ]);
+    const other = withReasons([[daysAgoAt(0), 'other med reason']], 'med2');
+    expect(pastReasons('med1', [...mine.events, ...other.events], [...mine.doses, ...other.doses])).toEqual(['cramps']);
+  });
+
+  it('is empty with no history', () => {
+    expect(pastReasons('med1', [], [])).toEqual([]);
+  });
+});
+
+describe('flattenDoseRecords — reason', () => {
+  it('carries the dose reason through', () => {
+    const events = [makeEvent({ id: 'evt1', takenAt: 5 })];
+    const doses = [makeDose({ eventId: 'evt1', reason: 'headache' })];
+    expect(flattenDoseRecords(events, doses)[0].reason).toBe('headache');
+  });
+});
+
+describe('summarizeMedicationUse — reasons never change the amounts', () => {
+  it('counts "200 mg" once whatever the reasons', () => {
+    const med = makeMedication({ isActive: true });
+    const { events, doses } = logDoses('med1', [daysAgoAt(1), daysAgoAt(2)], { dose: 200, doseUnit: 'mg' });
+    doses[0] = { ...doses[0], reason: 'headache' };
+    doses[1] = { ...doses[1], reason: 'cramps' };
+    const [row] = summarizeMedicationUse([med], events, doses, adherenceWindow(NOW));
+    expect(row.amounts).toEqual([{ label: '200 mg', count: 2 }]);
+  });
+});
+
+describe('reasonSuggestionsByMedication', () => {
+  it('maps non-regular medications that have past reasons, and leaves regular / reasonless ones out', () => {
+    const prn = makeMedication({ id: 'prn', isRegular: false });
+    const reg = makeMedication({ id: 'reg', isRegular: true });
+    const none = makeMedication({ id: 'none', isRegular: false });
+    const a = logDoses('prn', [daysAgoAt(2)], { reason: 'headache' });
+    const b = logDoses('reg', [daysAgoAt(2)], { reason: 'legacy' });
+    const c = logDoses('none', [daysAgoAt(2)]);
+    const map = reasonSuggestionsByMedication(
+      [prn, reg, none],
+      [...a.events, ...b.events, ...c.events],
+      [...a.doses, ...b.doses, ...c.doses],
+    );
+    expect(map).toEqual({ prn: ['headache'] });
+  });
+});
+
+describe('activeDefaultDose (GitHub #29)', () => {
+  it('returns the current default dose + trimmed unit for an active medication, regular or not', () => {
+    const med = makeMedication({ id: 'a', defaultDose: 0.5, doseUnit: ' tablet ', isRegular: false });
+    expect(activeDefaultDose(med)).toEqual({ medicationId: 'a', dose: 0.5, doseUnit: 'tablet', reason: null });
+  });
+
+  it('is null when inactive, or when the dose is missing / not positive or the unit is blank', () => {
+    expect(activeDefaultDose(makeMedication({ isActive: false, defaultDose: 1, doseUnit: 'mg' }))).toBeNull();
+    expect(activeDefaultDose(makeMedication({ defaultDose: null, doseUnit: 'mg' }))).toBeNull();
+    expect(activeDefaultDose(makeMedication({ defaultDose: 0, doseUnit: 'mg' }))).toBeNull();
+    expect(activeDefaultDose(makeMedication({ defaultDose: 1, doseUnit: '  ' }))).toBeNull();
   });
 });

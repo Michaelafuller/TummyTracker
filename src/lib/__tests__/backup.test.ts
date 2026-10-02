@@ -1,4 +1,16 @@
-import type { DayCheckIn, LogEntry, MealComponent, Medication, MedicationDose, MedicationEvent } from '@/db/schema';
+import type {
+  DayCheckIn,
+  DayFactor,
+  Experiment,
+  LogEntry,
+  MealComponent,
+  Medication,
+  MedicationDose,
+  MedicationEvent,
+  MedicationReminder,
+  SavedMeal,
+  SavedMealComponent,
+} from '@/db/schema';
 import { dosesForRestoredEvents, entriesToJson, parseBackupJson } from '../backup';
 
 const BASE_ENTRY: LogEntry = {
@@ -59,6 +71,7 @@ const BASE_MEDICATION: Medication = {
   startDate: 1700000000000,
   endDate: null,
   isActive: true,
+  isRegular: false,
   notes: 'with breakfast',
   createdAt: 1,
   updatedAt: 2,
@@ -79,6 +92,7 @@ const BASE_MEDICATION_DOSE: MedicationDose = {
   medicationId: 'med1',
   dose: 10,
   doseUnit: 'mg',
+  reason: null,
   createdAt: 5,
   updatedAt: 6,
 };
@@ -89,6 +103,33 @@ const BASE_DAY_CHECK_IN: DayCheckIn = {
   status: 'fine',
   createdAt: 7,
   updatedAt: 8,
+};
+
+const BASE_DAY_FACTOR: DayFactor = {
+  id: 'df1',
+  date: '2026-06-15',
+  sleep: 'poor',
+  stress: 4,
+  alcohol: 'a_lot',
+  caffeine: 'usual',
+  period: true,
+  createdAt: 11,
+  updatedAt: 12,
+};
+
+const BASE_EXPERIMENT: Experiment = {
+  id: 'exp1',
+  term: 'lactose',
+  startDate: '2026-04-01',
+  baselineDays: 14,
+  eliminationDays: 14,
+  challengeDays: 3,
+  observationDays: 3,
+  status: 'completed',
+  verdictJson: '{"kind":"likely-trigger","confidence":"high"}',
+  endedAt: 1700000200000,
+  createdAt: 9,
+  updatedAt: 10,
 };
 
 describe('entriesToJson / parseBackupJson roundtrip', () => {
@@ -142,9 +183,9 @@ describe('entriesToJson / parseBackupJson roundtrip', () => {
       [BASE_MEDICATION_EVENT],
       [BASE_MEDICATION_DOSE],
     );
-    // entriesToJson always writes the current version (4) — parseBackupJson
-    // separately still reads older v1/v2/v3 files (tested below).
-    expect(JSON.parse(json).version).toBe(4);
+    // entriesToJson always writes the current version (10) — parseBackupJson
+    // separately still reads older v1-v8 files (tested below).
+    expect(JSON.parse(json).version).toBe(10);
 
     const result = parseBackupJson(json);
     expect(result.ok).toBe(true);
@@ -155,7 +196,7 @@ describe('entriesToJson / parseBackupJson roundtrip', () => {
     expect(result.dayCheckIns).toEqual([]);
   });
 
-  it('roundtrips entries with day check-ins intact (v4)', () => {
+  it('roundtrips entries with day check-ins intact', () => {
     const json = entriesToJson(
       [BASE_ENTRY],
       [BASE_COMPONENT],
@@ -164,12 +205,108 @@ describe('entriesToJson / parseBackupJson roundtrip', () => {
       [BASE_MEDICATION_DOSE],
       [BASE_DAY_CHECK_IN],
     );
-    expect(JSON.parse(json).version).toBe(4);
 
     const result = parseBackupJson(json);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.dayCheckIns).toEqual([BASE_DAY_CHECK_IN]);
+    expect(result.experiments).toEqual([]);
+  });
+
+  it('roundtrips entries with elimination experiments intact (v5 data, now in a v9 file)', () => {
+    const json = entriesToJson(
+      [BASE_ENTRY],
+      [BASE_COMPONENT],
+      [BASE_MEDICATION],
+      [BASE_MEDICATION_EVENT],
+      [BASE_MEDICATION_DOSE],
+      [BASE_DAY_CHECK_IN],
+      [BASE_EXPERIMENT],
+    );
+    expect(JSON.parse(json).version).toBe(10);
+
+    const result = parseBackupJson(json);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.experiments).toEqual([BASE_EXPERIMENT]);
+  });
+
+  it('roundtrips an active experiment with a null verdictJson/endedAt', () => {
+    const active: Experiment = { ...BASE_EXPERIMENT, status: 'active', verdictJson: null, endedAt: null };
+    const json = entriesToJson([BASE_ENTRY], [], [], [], [], [], [active]);
+    const result = parseBackupJson(json);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.experiments).toEqual([active]);
+  });
+});
+
+describe('legacy v4 backup import (no experiments key)', () => {
+  it('imports a v4-shaped file with an empty experiments array', () => {
+    const legacy = {
+      version: 4,
+      entries: [BASE_ENTRY],
+      dayCheckIns: [BASE_DAY_CHECK_IN],
+    };
+    const result = parseBackupJson(JSON.stringify(legacy));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.dayCheckIns).toEqual([BASE_DAY_CHECK_IN]);
+    expect(result.experiments).toEqual([]);
+  });
+});
+
+describe('experiment validation', () => {
+  it('rejects an experiment missing an id', () => {
+    const bad = { ...BASE_EXPERIMENT, id: '' };
+    const result = parseBackupJson(JSON.stringify({ version: 5, entries: [BASE_ENTRY], experiments: [bad] }));
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBe('Experiment at index 0 has an invalid shape.');
+  });
+
+  it('rejects an experiment with a malformed startDate', () => {
+    const bad = { ...BASE_EXPERIMENT, startDate: '04/01/2026' };
+    const result = parseBackupJson(JSON.stringify({ version: 5, entries: [BASE_ENTRY], experiments: [bad] }));
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects an experiment with an invalid status', () => {
+    const bad = { ...BASE_EXPERIMENT, status: 'paused' };
+    const result = parseBackupJson(JSON.stringify({ version: 5, entries: [BASE_ENTRY], experiments: [bad] }));
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects an experiment with a non-positive day count', () => {
+    const bad = { ...BASE_EXPERIMENT, eliminationDays: 0 };
+    const result = parseBackupJson(JSON.stringify({ version: 5, entries: [BASE_ENTRY], experiments: [bad] }));
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects an experiment whose verdictJson is not a string or null', () => {
+    const bad = { ...BASE_EXPERIMENT, verdictJson: 42 };
+    const result = parseBackupJson(JSON.stringify({ version: 5, entries: [BASE_ENTRY], experiments: [bad] }));
+    expect(result.ok).toBe(false);
+  });
+
+  it('defaults verdictJson/endedAt to null when absent (an active experiment)', () => {
+    const minimal = {
+      id: 'e1',
+      term: 'gluten',
+      startDate: '2026-04-01',
+      baselineDays: 14,
+      eliminationDays: 14,
+      challengeDays: 3,
+      observationDays: 3,
+      status: 'active',
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const result = parseBackupJson(JSON.stringify({ version: 5, entries: [BASE_ENTRY], experiments: [minimal] }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.experiments[0].verdictJson).toBeNull();
+    expect(result.experiments[0].endedAt).toBeNull();
   });
 });
 
@@ -220,6 +357,80 @@ describe('legacy v3 backup import (no dayCheckIns key)', () => {
     if (!result.ok) return;
     expect(result.medications).toEqual([BASE_MEDICATION]);
     expect(result.dayCheckIns).toEqual([]);
+  });
+});
+
+describe('daily factors (GitHub #23, backup v6)', () => {
+  it('roundtrips daily factors intact (v6 data, now in a v9 file)', () => {
+    const json = entriesToJson([BASE_ENTRY], [], [], [], [], [], [], [BASE_DAY_FACTOR]);
+    expect(JSON.parse(json).version).toBe(10);
+
+    const result = parseBackupJson(json);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.dayFactors).toEqual([BASE_DAY_FACTOR]);
+  });
+
+  it('defaults dayFactors to [] for a v5 file (no key)', () => {
+    const result = parseBackupJson(JSON.stringify({ version: 5, entries: [BASE_ENTRY], experiments: [BASE_EXPERIMENT] }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.dayFactors).toEqual([]);
+    expect(result.experiments).toEqual([BASE_EXPERIMENT]);
+  });
+
+  it('defaults dayFactors to [] for a v1 file', () => {
+    const result = parseBackupJson(JSON.stringify({ version: 1, entries: [BASE_ENTRY] }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.dayFactors).toEqual([]);
+  });
+
+  it('accepts a row with only one factor, treating absent fields as null', () => {
+    const minimal = { id: 'df2', date: '2026-06-16', stress: 2, createdAt: 1, updatedAt: 2 };
+    const result = parseBackupJson(JSON.stringify({ version: 6, entries: [BASE_ENTRY], dayFactors: [minimal] }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.dayFactors[0]).toEqual({
+      id: 'df2',
+      date: '2026-06-16',
+      sleep: null,
+      stress: 2,
+      alcohol: null,
+      caffeine: null,
+      period: null,
+      createdAt: 1,
+      updatedAt: 2,
+    });
+  });
+
+  it.each([
+    ['a missing id', { id: '' }],
+    ['a malformed date', { date: '06/15/2026' }],
+    ['an unknown sleep level', { sleep: 'great' }],
+    ['an unknown alcohol level', { alcohol: 'lots' }],
+    ['an unknown caffeine level', { caffeine: 'decaf' }],
+    ['stress 0', { stress: 0 }],
+    ['stress 6', { stress: 6 }],
+    ['a fractional stress', { stress: 2.5 }],
+    ['a string stress', { stress: '3' }],
+    ['a non-boolean period', { period: 1 }],
+    ['a missing createdAt', { createdAt: undefined }],
+    ['a missing updatedAt', { updatedAt: undefined }],
+  ])('rejects a day factor with %s', (_label, override) => {
+    const bad = { ...BASE_DAY_FACTOR, ...override };
+    const result = parseBackupJson(JSON.stringify({ version: 6, entries: [BASE_ENTRY], dayFactors: [bad] }));
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBe('Day factor at index 0 has an invalid shape.');
+  });
+
+  it('accepts null in every factor field (a row whose chips were all cleared)', () => {
+    const cleared = { ...BASE_DAY_FACTOR, sleep: null, stress: null, alcohol: null, caffeine: null, period: null };
+    const result = parseBackupJson(JSON.stringify({ version: 6, entries: [BASE_ENTRY], dayFactors: [cleared] }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.dayFactors).toEqual([cleared]);
   });
 });
 
@@ -292,6 +503,71 @@ describe('medication validation', () => {
     expect(result.medications[0].isActive).toBe(true);
     expect(result.medications[0].defaultDose).toBeNull();
     expect(result.medications[0].doseUnit).toBeNull();
+  });
+
+  it('roundtrips isRegular (GitHub #26)', () => {
+    const regular: Medication = { ...BASE_MEDICATION, id: 'm-reg', isRegular: true };
+    const json = entriesToJson([BASE_ENTRY], [], [BASE_MEDICATION, regular]);
+    expect(JSON.parse(json).version).toBe(10);
+    const result = parseBackupJson(json);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.medications.map((m) => m.isRegular)).toEqual([false, true]);
+  });
+
+  it('imports a v7 medication (no isRegular) as not regular', () => {
+    const v7Medication = Object.fromEntries(
+      Object.entries(BASE_MEDICATION).filter(([key]) => key !== 'isRegular'),
+    );
+    const result = parseBackupJson(
+      JSON.stringify({ version: 7, entries: [BASE_ENTRY], medications: [v7Medication] }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.medications[0].isRegular).toBe(false);
+  });
+
+  it('treats a non-boolean isRegular as false', () => {
+    const odd = { ...BASE_MEDICATION, isRegular: 'yes' };
+    const result = parseBackupJson(
+      JSON.stringify({ version: 8, entries: [BASE_ENTRY], medications: [odd] }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.medications[0].isRegular).toBe(false);
+  });
+});
+
+describe('medication dose reason (GitHub #28, backup v9)', () => {
+  it('roundtrips a dose reason in a v9 file', () => {
+    const withReason: MedicationDose = { ...BASE_MEDICATION_DOSE, reason: 'headache' };
+    const json = entriesToJson([BASE_ENTRY], [], [BASE_MEDICATION], [BASE_MEDICATION_EVENT], [withReason]);
+    expect(JSON.parse(json).version).toBe(10);
+    const result = parseBackupJson(json);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.medicationDoses).toEqual([withReason]);
+  });
+
+  it('imports a v8 dose (no reason) with reason null', () => {
+    const v8Dose = Object.fromEntries(Object.entries(BASE_MEDICATION_DOSE).filter(([key]) => key !== 'reason'));
+    const result = parseBackupJson(
+      JSON.stringify({ version: 8, entries: [BASE_ENTRY], medicationDoses: [v8Dose] }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.medicationDoses[0].reason).toBeNull();
+  });
+
+  it('normalises a blank or non-string reason to null', () => {
+    const blank = { ...BASE_MEDICATION_DOSE, id: 'd-blank', reason: '   ' };
+    const odd = { ...BASE_MEDICATION_DOSE, id: 'd-odd', reason: 42 };
+    const result = parseBackupJson(
+      JSON.stringify({ version: 9, entries: [BASE_ENTRY], medicationDoses: [blank, odd] }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.medicationDoses.map((d) => d.reason)).toEqual([null, null]);
   });
 });
 
@@ -392,5 +668,168 @@ describe('dosesForRestoredEvents', () => {
 
   it('returns nothing for an empty backup', () => {
     expect(dosesForRestoredEvents([], ['e1'])).toEqual([]);
+  });
+});
+
+describe('saved meals (GitHub #25, backup v7)', () => {
+  const MEAL: SavedMeal = {
+    id: 'sm1',
+    name: 'Chicken Rice',
+    nameKey: 'chicken rice',
+    type: 'meal',
+    mealSlot: 'dinner',
+    createdAt: 10,
+    updatedAt: 11,
+  };
+  const COMPONENT: SavedMealComponent = {
+    id: 'smc1',
+    savedMealId: 'sm1',
+    name: 'Rice',
+    barcode: null,
+    servings: 1.5,
+    servingG: 150,
+    calories: 200,
+    fatG: 1,
+    saturatedFatG: null,
+    carbsG: 40,
+    proteinG: 4,
+    fiberG: 1,
+    sugarG: 0,
+    sodiumMg: 5,
+    ingredientsText: 'rice, water',
+    tagsJson: '["rice"]',
+    sortOrder: 0,
+    createdAt: 10,
+  };
+
+  it('roundtrips saved meals and their items in a v9 file', () => {
+    const json = entriesToJson([BASE_ENTRY], [], [], [], [], [], [], [], [MEAL], [COMPONENT]);
+    expect(JSON.parse(json).version).toBe(10);
+
+    const result = parseBackupJson(json);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.savedMeals).toEqual([MEAL]);
+    expect(result.savedMealComponents).toEqual([COMPONENT]);
+  });
+
+  it('defaults both saved-meal arrays to [] for a v6 file (no keys)', () => {
+    const result = parseBackupJson(JSON.stringify({ version: 6, entries: [BASE_ENTRY], dayFactors: [BASE_DAY_FACTOR] }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.savedMeals).toEqual([]);
+    expect(result.savedMealComponents).toEqual([]);
+  });
+
+  it('defaults both saved-meal arrays to [] for a v1 file', () => {
+    const result = parseBackupJson(JSON.stringify({ version: 1, entries: [BASE_ENTRY] }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.savedMeals).toEqual([]);
+    expect(result.savedMealComponents).toEqual([]);
+  });
+
+  it('re-derives nameKey from the name and trims it, never trusting the file', () => {
+    const result = parseBackupJson(
+      JSON.stringify({ version: 7, entries: [], savedMeals: [{ ...MEAL, name: '  Chicken RICE ', nameKey: 'whatever' }] }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.savedMeals[0]).toMatchObject({ name: 'Chicken RICE', nameKey: 'chicken rice' });
+  });
+
+  it('fills defaults for a minimal saved meal and component', () => {
+    const result = parseBackupJson(
+      JSON.stringify({
+        version: 7,
+        entries: [],
+        savedMeals: [{ id: 'a', name: 'Toast', type: 'snack', createdAt: 1, updatedAt: 1 }],
+        savedMealComponents: [{ id: 'b', savedMealId: 'a', name: 'Bread', createdAt: 1 }],
+      }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.savedMeals[0].mealSlot).toBeNull();
+    expect(result.savedMealComponents[0]).toMatchObject({ servings: 1, sortOrder: 0, calories: null, tagsJson: null });
+  });
+
+  it.each([
+    ['a blank name', { ...MEAL, name: '  ' }],
+    ['a bad type', { ...MEAL, type: 'symptom' }],
+    ['a bad meal slot', { ...MEAL, mealSlot: 'brunch' }],
+    ['no id', { ...MEAL, id: '' }],
+    ['a non-numeric createdAt', { ...MEAL, createdAt: 'x' }],
+  ])('rejects a saved meal with %s', (_label, bad) => {
+    const result = parseBackupJson(JSON.stringify({ version: 7, entries: [], savedMeals: [bad] }));
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toMatch(/saved meal at index 0/i);
+  });
+
+  it('rejects a saved-meal component without a savedMealId', () => {
+    const result = parseBackupJson(
+      JSON.stringify({ version: 7, entries: [], savedMealComponents: [{ ...COMPONENT, savedMealId: '' }] }),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toMatch(/saved meal component at index 0/i);
+  });
+});
+
+describe('medication reminders (GitHub #29, backup v10)', () => {
+  const REMINDER: MedicationReminder = {
+    id: 'r1',
+    medicationId: 'm1',
+    hour: 8,
+    minute: 30,
+    daysMask: 31,
+    enabled: false,
+    createdAt: 1,
+    updatedAt: 2,
+  };
+
+  it('roundtrips reminders through a v10 file, preserving ids and fields', () => {
+    const json = entriesToJson([BASE_ENTRY], [], [], [], [], [], [], [], [], [], [REMINDER]);
+    expect(JSON.parse(json).version).toBe(10);
+    const result = parseBackupJson(json);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.medicationReminders).toEqual([REMINDER]);
+  });
+
+  it('imports a v9 file (no medicationReminders key) with none', () => {
+    const result = parseBackupJson(JSON.stringify({ version: 9, entries: [BASE_ENTRY] }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.medicationReminders).toEqual([]);
+  });
+
+  it('drops rows with an out-of-range hour, minute or weekday mask, keeping the good ones', () => {
+    const bad = [
+      { ...REMINDER, id: 'bad-hour', hour: 24 },
+      { ...REMINDER, id: 'bad-hour-neg', hour: -1 },
+      { ...REMINDER, id: 'bad-minute', minute: 60 },
+      { ...REMINDER, id: 'bad-frac', minute: 1.5 },
+      { ...REMINDER, id: 'zero-mask', daysMask: 0 },
+      { ...REMINDER, id: 'big-mask', daysMask: 128 },
+      { ...REMINDER, id: 'no-med', medicationId: '' },
+      { ...REMINDER, id: 'str-hour', hour: '8' },
+    ];
+    const good = { ...REMINDER, id: 'good', daysMask: 127, enabled: true };
+    const result = parseBackupJson(
+      JSON.stringify({ version: 10, entries: [BASE_ENTRY], medicationReminders: [...bad, good] }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.medicationReminders.map((r) => r.id)).toEqual(['good']);
+  });
+
+  it('defaults a non-boolean enabled to true', () => {
+    const result = parseBackupJson(
+      JSON.stringify({ version: 10, entries: [BASE_ENTRY], medicationReminders: [{ ...REMINDER, enabled: 'no' }] }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.medicationReminders[0].enabled).toBe(true);
   });
 });

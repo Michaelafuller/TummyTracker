@@ -157,6 +157,9 @@ export const medication = sqliteTable('medication', {
   startDate: integer('start_date'),
   endDate: integer('end_date'),
   isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+  // Taken every day; powers the one-tap "Took my regular meds" (GitHub #26).
+  // A regular medication carries a default dose + unit (validated in the form).
+  isRegular: integer('is_regular', { mode: 'boolean' }).notNull().default(false),
   notes: text('notes'),
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
@@ -202,6 +205,9 @@ export const medicationDose = sqliteTable(
     // > 0 — partial doses allowed (e.g. 0.5).
     dose: real('dose').notNull(),
     doseUnit: text('dose_unit').notNull(),
+    // Why an as-needed dose was taken (GitHub #28): trimmed, <= 60 chars,
+    // null when blank. Additive column (migration 0015).
+    reason: text('reason'),
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
   },
@@ -213,6 +219,33 @@ export const medicationDose = sqliteTable(
 
 export type MedicationDose = typeof medicationDose.$inferSelect;
 export type NewMedicationDose = typeof medicationDose.$inferInsert;
+
+/**
+ * A scheduled medication reminder (GitHub #29). Several per medication. A
+ * reminder only ever schedules a local notification — it never writes a dose
+ * (invariant): only the notification's explicit "Took them" tap does, through
+ * `createMedicationEvent`. Rows are replaced wholesale with their medication's
+ * save (one sync transaction), so a row has no identity worth preserving
+ * across an edit beyond its id for backup restore.
+ */
+export const medicationReminder = sqliteTable(
+  'medication_reminder',
+  {
+    id: text('id').primaryKey(),
+    medicationId: text('medication_id').notNull(),
+    hour: integer('hour').notNull(), // 0-23
+    minute: integer('minute').notNull(), // 0-59
+    /** Bit 0 = Monday ... bit 6 = Sunday; 127 = every day. Never 0. */
+    daysMask: integer('days_mask').notNull().default(127),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [index('medication_reminder_medication_id_idx').on(table.medicationId)],
+);
+
+export type MedicationReminder = typeof medicationReminder.$inferSelect;
+export type NewMedicationReminder = typeof medicationReminder.$inferInsert;
 
 /**
  * A day check-in answer (GitHub #13, "fine day / rough day"). Invariants:
@@ -241,3 +274,142 @@ export const dayCheckIn = sqliteTable('day_check_in', {
 });
 export type DayCheckIn = typeof dayCheckIn.$inferSelect;
 export type NewDayCheckIn = typeof dayCheckIn.$inferInsert;
+
+/**
+ * Daily confounders (GitHub #23): sleep, stress, alcohol, caffeine, period.
+ * Invariants:
+ * - One row per local calendar day (`date`, 'YYYY-MM-DD', unique); every
+ *   factor column is nullable. Null means "not logged" — never a low value.
+ *   Nothing is inferred: only an explicit tap writes a value, and clearing a
+ *   chip writes null back.
+ * - A separate table from `day_check_in` because that table requires a
+ *   fine/rough answer and can't be relaxed additively.
+ * - Never an outcome and never a log entry — `isOutcome` does not read it.
+ *   A row only marks the day *covered* and feeds the daily-factor analysis
+ *   (`src/features/analysis/factors.ts`).
+ * - `stress` is an integer 1-5 (validated in the repository, not the DB).
+ * - `period` rows are kept when period tracking is turned off in Settings;
+ *   they are simply hidden and ignored until it is turned back on.
+ */
+export const SLEEP_LEVELS = ['poor', 'ok', 'good'] as const;
+export type SleepLevel = (typeof SLEEP_LEVELS)[number];
+export const ALCOHOL_LEVELS = ['none', 'some', 'a_lot'] as const;
+export type AlcoholLevel = (typeof ALCOHOL_LEVELS)[number];
+export const CAFFEINE_LEVELS = ['none', 'usual', 'more'] as const;
+export type CaffeineLevel = (typeof CAFFEINE_LEVELS)[number];
+
+export const dayFactor = sqliteTable('day_factor', {
+  id: text('id').primaryKey(),
+  // Local calendar day 'YYYY-MM-DD' (formatDateInput) — one row per day.
+  date: text('date').notNull().unique(),
+  sleep: text('sleep', { enum: SLEEP_LEVELS }),
+  stress: integer('stress'),
+  alcohol: text('alcohol', { enum: ALCOHOL_LEVELS }),
+  caffeine: text('caffeine', { enum: CAFFEINE_LEVELS }),
+  period: integer('period', { mode: 'boolean' }),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+export type DayFactor = typeof dayFactor.$inferSelect;
+export type NewDayFactor = typeof dayFactor.$inferInsert;
+
+/**
+ * An elimination experiment (GitHub #19, Cycle A). Invariants (see
+ * `src/features/experiments/engine.ts` for the schedule/verdict math this
+ * table drives):
+ * - `term` is a normalized watch term (`normalizeWatchTerm`) — starting an
+ *   experiment adds it to the watchlist if it isn't already watched.
+ * - `startDate` ('YYYY-MM-DD') is the first elimination day; the 14-day
+ *   baseline is read from existing logs BEFORE it, never a waiting period.
+ * - At most one `active` row at a time — enforced in the repository
+ *   (`startExperiment`), not just here.
+ * - `verdictJson` is null until `finishExperiment` freezes the evaluation's
+ *   verdict at that moment — later edits to old log entries must never
+ *   silently change a completed experiment's verdict.
+ * - `endedAt` is set by `finishExperiment` (completed) or `abandonExperiment`
+ *   (abandoned); null while `active`.
+ */
+export const EXPERIMENT_STATUSES = ['active', 'completed', 'abandoned'] as const;
+export type ExperimentStatus = (typeof EXPERIMENT_STATUSES)[number];
+
+export const experiment = sqliteTable('experiment', {
+  id: text('id').primaryKey(),
+  // Normalized (normalizeWatchTerm) suspect ingredient term.
+  term: text('term').notNull(),
+  // 'YYYY-MM-DD', local calendar day — first elimination day.
+  startDate: text('start_date').notNull(),
+  // Always 14 (DEFAULT_PROTOCOL) — stored per-row so a future protocol change
+  // never rewrites an in-progress experiment's own schedule.
+  baselineDays: integer('baseline_days').notNull(),
+  // User's choice: 7 | 14 | 21 | 28 (ELIMINATION_CHOICES).
+  eliminationDays: integer('elimination_days').notNull(),
+  // Always 3 (DEFAULT_PROTOCOL) — see baselineDays comment.
+  challengeDays: integer('challenge_days').notNull(),
+  // Always 3 (DEFAULT_PROTOCOL) — see baselineDays comment.
+  observationDays: integer('observation_days').notNull(),
+  status: text('status', { enum: EXPERIMENT_STATUSES }).notNull(),
+  // Frozen ExperimentVerdict (JSON) set once, at finish; null otherwise.
+  verdictJson: text('verdict_json'),
+  // Epoch ms — set by finishExperiment/abandonExperiment; null while active.
+  endedAt: integer('ended_at'),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+export type Experiment = typeof experiment.$inferSelect;
+export type NewExperiment = typeof experiment.$inferInsert;
+
+/**
+ * A saved meal / "My meal" template (GitHub #25). A template is NOT a log
+ * entry and never links to one: re-logging copies its components into the
+ * meal builder, and editing or deleting a template never touches past meals.
+ * - `nameKey` (trimmed, lowercased `name`) is unique — "Save as my meal" with
+ *   an existing name asks the user to Replace.
+ * - Date/time and notes are deliberately not stored; only what makes a meal
+ *   repeatable (name, type, slot, items).
+ */
+export const savedMeal = sqliteTable('saved_meal', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  // Trimmed, lowercased name — unique; the backfill and Replace match on it.
+  nameKey: text('name_key').notNull().unique(),
+  type: text('type', { enum: FOOD_TYPES }).notNull(),
+  mealSlot: text('meal_slot', { enum: MEAL_SLOTS }),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+export type SavedMeal = typeof savedMeal.$inferSelect;
+export type NewSavedMeal = typeof savedMeal.$inferInsert;
+
+/**
+ * One item of a saved meal — mirrors `mealComponent` (nutrition is PER ONE
+ * SERVING; `servings` is the multiplier) but belongs to a `savedMeal`.
+ */
+export const savedMealComponent = sqliteTable(
+  'saved_meal_component',
+  {
+    id: text('id').primaryKey(),
+    savedMealId: text('saved_meal_id').notNull(),
+    name: text('name').notNull(),
+    barcode: text('barcode'),
+    servings: real('servings').notNull().default(1),
+    servingG: real('serving_g'),
+    calories: real('calories'),
+    fatG: real('fat_g'),
+    saturatedFatG: real('saturated_fat_g'),
+    carbsG: real('carbs_g'),
+    proteinG: real('protein_g'),
+    fiberG: real('fiber_g'),
+    sugarG: real('sugar_g'),
+    sodiumMg: real('sodium_mg'),
+    ingredientsText: text('ingredients_text'),
+    tagsJson: text('tags_json'),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt: integer('created_at').notNull(),
+  },
+  (table) => [index('saved_meal_component_saved_meal_id_idx').on(table.savedMealId)],
+);
+
+export type SavedMealComponent = typeof savedMealComponent.$inferSelect;
+export type NewSavedMealComponent = typeof savedMealComponent.$inferInsert;

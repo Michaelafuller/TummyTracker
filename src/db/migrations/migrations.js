@@ -12,6 +12,12 @@ import m0007 from './0007_red_nico_minoru.sql';
 import m0008 from './0008_sticky_menace.sql';
 import m0009 from './0009_clear_maginty.sql';
 import m0010 from './0010_tense_trauma.sql';
+import m0011 from './0011_slow_drax.sql';
+import m0012 from './0012_heavy_night_nurse.sql';
+import m0013 from './0013_simple_mantis.sql';
+import m0014 from './0014_spicy_namor.sql';
+import m0015 from './0015_neat_mister_fear.sql';
+import m0016 from './0016_eager_matthew_murdock.sql';
 
   export default {
     journal,
@@ -26,7 +32,13 @@ m0006,
 m0007,
 m0008,
 m0009,
-m0010
+m0010,
+m0011,
+m0012,
+m0013,
+m0014,
+m0015,
+m0016
     }
   }
   

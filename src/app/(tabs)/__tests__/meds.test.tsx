@@ -1,3 +1,4 @@
+import { useEffect as mockUseEffect } from 'react';
 import { fireEvent, render } from '@testing-library/react-native';
 import { SafeAreaProvider, type Metrics } from 'react-native-safe-area-context';
 
@@ -14,8 +15,11 @@ function renderScreen(ui: import('react').ReactElement) {
 }
 
 const mockPush = jest.fn();
+// RegularMedsButton (#26) ends its Undo offer on blur via useFocusEffect; with
+// no NavigationContainer here, approximate it as "run on mount".
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush }),
+  useFocusEffect: (effect: () => void | (() => void)) => mockUseEffect(effect, []),
 }));
 
 let mockMedications: Medication[] = [];
@@ -25,6 +29,15 @@ jest.mock('@/features/medications/useMedicationData', () => ({
   useMedications: () => mockMedications,
   useMedicationEvents: () => mockEvents,
   useMedicationDoses: () => mockDoses,
+}));
+
+// RegularMedsButton (GitHub #26) imports the repository; the screen tests only
+// exercise it through the mocked medication data, so a stub is enough.
+const mockCreateMedicationEvent = jest.fn();
+const mockDeleteMedicationEvent = jest.fn();
+jest.mock('@/db/repository', () => ({
+  createMedicationEvent: (...args: unknown[]) => mockCreateMedicationEvent(...args),
+  deleteMedicationEvent: (...args: unknown[]) => mockDeleteMedicationEvent(...args),
 }));
 
 // See src/components/ui/__mocks__/collapsible.tsx for why this needs a stand-in
@@ -41,6 +54,7 @@ function makeMedication(overrides: Partial<Medication> = {}): Medication {
     startDate: null,
     endDate: null,
     isActive: true,
+    isRegular: false,
     notes: null,
     createdAt: 0,
     updatedAt: 0,
@@ -59,6 +73,7 @@ function makeDose(overrides: Partial<MedicationDose> = {}): MedicationDose {
     medicationId: 'med1',
     dose: 20,
     doseUnit: 'mg',
+    reason: null,
     createdAt: 0,
     updatedAt: 0,
     ...overrides,
@@ -172,5 +187,84 @@ describe('MedicationsScreen Recent doses (Cycle B, #6)', () => {
     const { findByLabelText } = await renderScreen(<MedicationsScreen />);
     await fireEvent.press(await findByLabelText('See all history'));
     expect(mockPush).toHaveBeenCalledWith('/medication/history');
+  });
+});
+
+describe('MedicationsScreen regular meds button (GitHub #26)', () => {
+  it('shows "Took my regular meds" when an active regular medication exists, and hides it otherwise', async () => {
+    mockMedications = [
+      makeMedication({ id: 'm1', name: 'Vitamin D', defaultDose: 1000, doseUnit: 'unit', isRegular: true }),
+    ];
+    const first = await renderScreen(<MedicationsScreen />);
+    expect(await first.findByTestId('regular-meds-log')).toBeTruthy();
+    expect(first.getByText('Vitamin D 1000 unit')).toBeTruthy();
+    await first.unmount();
+
+    mockMedications = [makeMedication({ id: 'm1', name: 'Vitamin D', isRegular: false })];
+    const second = await renderScreen(<MedicationsScreen />);
+    expect(second.queryByTestId('regular-meds-log')).toBeNull();
+  });
+});
+
+describe('MedicationsScreen adherence lines (GitHub #28)', () => {
+  const NOW = new Date(2026, 9, 15, 12, 0).getTime(); // Thu 2026-10-15
+  const daysAgoAt = (n: number, h = 12) => new Date(2026, 9, 15 - n, h, 0).getTime();
+
+  beforeEach(() => {
+    jest.spyOn(Date, 'now').mockReturnValue(NOW);
+  });
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  function logDays(medicationId: string, days: number[]) {
+    days.forEach((n, i) => {
+      const eventId = `ev-${medicationId}-${i}`;
+      mockEvents.push(makeEvent({ id: eventId, takenAt: daysAgoAt(n) }));
+      mockDoses.push(makeDose({ id: `do-${medicationId}-${i}`, eventId, medicationId }));
+    });
+  }
+
+  it('shows "Logged on N of the last 30 days" for a regular medication and "N days in the last 30" for an as-needed one', async () => {
+    mockMedications = [
+      makeMedication({ id: 'reg', name: 'Omeprazole', defaultDose: 20, doseUnit: 'mg', isRegular: true }),
+      makeMedication({ id: 'prn', name: 'Ibuprofen', isRegular: false }),
+    ];
+    // 26 distinct days incl. the window's first day (29 days ago) -> full 30-day denominator.
+    logDays('reg', [29, ...Array.from({ length: 25 }, (_, i) => i)]);
+    logDays('prn', [1, 6, 12]);
+
+    const { findByTestId } = await renderScreen(<MedicationsScreen />);
+
+    expect((await findByTestId('adherence-reg')).props.children).toBe('Logged on 26 of the last 30 days');
+    expect((await findByTestId('adherence-prn')).props.children).toBe('Logged on 3 days in the last 30');
+  });
+
+  it('says "No doses logged in the last 30 days" when a medication has none', async () => {
+    mockMedications = [makeMedication({ id: 'prn', name: 'Ibuprofen', isRegular: false })];
+    const { findByTestId } = await renderScreen(<MedicationsScreen />);
+    expect((await findByTestId('adherence-prn')).props.children).toBe('No doses logged in the last 30 days');
+  });
+
+  it('a younger regular medication is measured from its first logged dose', async () => {
+    mockMedications = [makeMedication({ id: 'reg', defaultDose: 20, doseUnit: 'mg', isRegular: true })];
+    logDays('reg', [9, 4, 0]);
+    const { findByTestId } = await renderScreen(<MedicationsScreen />);
+    expect((await findByTestId('adherence-reg')).props.children).toBe('Logged on 3 of the last 10 days');
+  });
+
+  it('inactive medications get no adherence line', async () => {
+    mockMedications = [makeMedication({ id: 'old', name: 'Old Med', isActive: false })];
+    logDays('old', [1]);
+    const { queryByTestId } = await renderScreen(<MedicationsScreen />);
+    expect(queryByTestId('adherence-old')).toBeNull();
+  });
+
+  it('Recent doses show a dose reason after the amount', async () => {
+    mockMedications = [makeMedication({ id: 'prn', name: 'Ibuprofen', isRegular: false })];
+    mockEvents = [makeEvent({ id: 'evt1', takenAt: daysAgoAt(1) })];
+    mockDoses = [makeDose({ id: 'd1', eventId: 'evt1', medicationId: 'prn', dose: 200, doseUnit: 'mg', reason: 'headache' })];
+    const { findByText } = await renderScreen(<MedicationsScreen />);
+    expect(await findByText('Ibuprofen 200 mg \u2014 headache')).toBeTruthy();
   });
 });

@@ -63,4 +63,53 @@ describe('migrations', () => {
     expect(sql).not.toMatch(/drop table/i);
     expect(sql).not.toMatch(/alter table `log_entry`/i);
   });
+
+  it('0011 creates the experiment table additively, touching no existing table (GitHub #19)', () => {
+    const sql = readMigration('0011');
+    expect(sql).toMatch(/create table `experiment`/i);
+    expect(sql).not.toMatch(/drop table/i);
+    expect(sql).not.toMatch(/alter table/i);
+  });
+
+  it('0012 creates the day_factor table and its unique date index, touching no existing table (GitHub #23)', () => {
+    const sql = readMigration('0012');
+    expect(sql).toMatch(/create table `day_factor`/i);
+    expect(sql).toMatch(/create unique index `day_factor_date_unique`/i);
+    expect(sql).not.toMatch(/drop table/i);
+    expect(sql).not.toMatch(/alter table/i);
+  });
+
+  it('0013 creates the saved_meal tables and indexes only, touching no existing table (GitHub #25)', () => {
+    const sql = readMigration('0013');
+    expect(sql).toMatch(/create table `saved_meal`/i);
+    expect(sql).toMatch(/create table `saved_meal_component`/i);
+    expect(sql).toMatch(/create unique index `saved_meal_name_key_unique`/i);
+    expect(sql).toMatch(/create index `saved_meal_component_saved_meal_id_idx`/i);
+    expect(sql).not.toMatch(/drop table/i);
+    expect(sql).not.toMatch(/alter table/i);
+  });
+
+  it('0014 adds medication.is_regular additively, touching nothing else (GitHub #26)', () => {
+    const sql = readMigration('0014');
+    expect(sql).toMatch(/alter table `medication` add `is_regular`/i);
+    expect(sql).toMatch(/default false/i);
+    expect(sql).not.toMatch(/drop table/i);
+    expect(sql).not.toMatch(/create table/i);
+  });
+
+  it('0015 adds medication_dose.reason additively, touching nothing else (GitHub #28)', () => {
+    const sql = readMigration('0015');
+    expect(sql).toMatch(/alter table `medication_dose` add `reason` text/i);
+    expect(sql).not.toMatch(/not null/i);
+    expect(sql).not.toMatch(/drop table/i);
+    expect(sql).not.toMatch(/create table/i);
+  });
+
+  it('0016 creates the medication_reminder table and its index, touching no existing table (GitHub #29)', () => {
+    const sql = readMigration('0016');
+    expect(sql).toMatch(/create table `medication_reminder`/i);
+    expect(sql).toMatch(/create index `medication_reminder_medication_id_idx`/i);
+    expect(sql).not.toMatch(/drop table/i);
+    expect(sql).not.toMatch(/alter table/i);
+  });
 });

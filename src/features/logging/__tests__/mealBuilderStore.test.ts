@@ -23,7 +23,7 @@ function draft(name: string, overrides: Partial<MealComponentDraft> = {}): MealC
 }
 
 beforeEach(() => {
-  useMealBuilderStore.setState({ components: [], reviewPrefill: null });
+  useMealBuilderStore.setState({ components: [], reviewPrefill: null, editingSavedMealId: null });
 });
 
 describe('mealBuilderStore', () => {
@@ -81,6 +81,43 @@ describe('mealBuilderStore', () => {
     it('sets reviewPrefill', () => {
       useMealBuilderStore.getState().load([draft('Peas')], { name: 'Peas', mealSlot: 'breakfast' });
       expect(useMealBuilderStore.getState().reviewPrefill).toEqual({ name: 'Peas', mealSlot: 'breakfast' });
+    });
+  });
+
+  describe('editingSavedMealId (GitHub #25)', () => {
+    it('defaults to null', () => {
+      expect(useMealBuilderStore.getState().editingSavedMealId).toBeNull();
+    });
+
+    it('loadSavedMealForEdit replaces the builder and sets the template id', () => {
+      useMealBuilderStore.getState().addComponent(draft('Stale'));
+      useMealBuilderStore
+        .getState()
+        .loadSavedMealForEdit('sm1', [draft('Oats'), draft('Milk')], { name: 'Oatmeal', type: 'meal', mealSlot: 'breakfast' });
+      const state = useMealBuilderStore.getState();
+      expect(state.components.map((c) => c.name)).toEqual(['Oats', 'Milk']);
+      expect(state.reviewPrefill).toEqual({ name: 'Oatmeal', type: 'meal', mealSlot: 'breakfast' });
+      expect(state.editingSavedMealId).toBe('sm1');
+    });
+
+    it('load resets template mode (re-logging a Recent never inherits it)', () => {
+      useMealBuilderStore.getState().loadSavedMealForEdit('sm1', [draft('Oats')], { name: 'Oatmeal' });
+      useMealBuilderStore.getState().load([draft('Peas')], { name: 'Peas' });
+      expect(useMealBuilderStore.getState().editingSavedMealId).toBeNull();
+    });
+
+    it('clear resets template mode', () => {
+      useMealBuilderStore.getState().loadSavedMealForEdit('sm1', [draft('Oats')], { name: 'Oatmeal' });
+      useMealBuilderStore.getState().clear();
+      expect(useMealBuilderStore.getState().editingSavedMealId).toBeNull();
+    });
+
+    it('add/update/remove leave template mode alone', () => {
+      useMealBuilderStore.getState().loadSavedMealForEdit('sm1', [draft('Oats')], { name: 'Oatmeal' });
+      useMealBuilderStore.getState().addComponent(draft('Milk'));
+      useMealBuilderStore.getState().updateComponent(0, { servings: 2 });
+      useMealBuilderStore.getState().removeComponent(1);
+      expect(useMealBuilderStore.getState().editingSavedMealId).toBe('sm1');
     });
   });
 });

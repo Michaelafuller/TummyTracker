@@ -1,5 +1,5 @@
-import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useMemo, useState } from 'react';
 import { StyleSheet } from 'react-native';
 
 import { FormScrollView } from '@/components/keyboard-aware-screen';
@@ -9,8 +9,13 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { createMedicationEvent } from '@/db/repository';
 import { MedicationEntryForm, type MedicationEntrySavePayload } from '@/features/medications/MedicationEntryForm';
-import { useMedications } from '@/features/medications/useMedicationData';
+import {
+  useMedicationDoses,
+  useMedicationEvents,
+  useMedications,
+} from '@/features/medications/useMedicationData';
 import { defaultEntryState } from '@/lib/medicationEntry';
+import { reasonSuggestionsByMedication } from '@/lib/medications';
 
 /**
  * Log a new medication entry (HANDOFF.md #7, #9). Only active medications get
@@ -21,7 +26,14 @@ import { defaultEntryState } from '@/lib/medicationEntry';
  */
 export default function NewMedicationEntryScreen() {
   const router = useRouter();
+  const { medicationIds } = useLocalSearchParams<{ medicationIds?: string }>();
   const medications = useMedications();
+  const allEvents = useMedicationEvents();
+  const allDoses = useMedicationDoses();
+  const reasonSuggestions = useMemo(
+    () => reasonSuggestionsByMedication(medications, allEvents, allDoses),
+    [medications, allEvents, allDoses],
+  );
   const [submitting, setSubmitting] = useState(false);
   // Captured once at mount — MedicationEntryForm only ever reads its `initial`
   // prop on its own first render, and re-deriving Date.now() on every render
@@ -29,6 +41,18 @@ export default function NewMedicationEntryScreen() {
   const [now] = useState(() => Date.now());
 
   const activeMeds = medications.filter((med) => med.isActive);
+
+  // From a medication reminder's tap (GitHub #29): those medications start
+  // ticked. Unknown or inactive ids are ignored (they never get a line);
+  // without the param the form is exactly as before. Selecting a line only
+  // pre-ticks it — nothing is saved until the user presses Save.
+  const preselected = new Set((medicationIds ?? '').split(',').filter((id) => id.length > 0));
+  const initialState = defaultEntryState(activeMeds, now);
+  if (preselected.size > 0) {
+    initialState.lines = initialState.lines.map((line) =>
+      preselected.has(line.medicationId) ? { ...line, selected: true } : line,
+    );
+  }
 
   async function handleSubmit({ event, doses }: MedicationEntrySavePayload) {
     setSubmitting(true);
@@ -57,7 +81,8 @@ export default function NewMedicationEntryScreen() {
     <FormScrollView>
       <MedicationEntryForm
         medications={medications}
-        initial={defaultEntryState(activeMeds, now)}
+        reasonSuggestions={reasonSuggestions}
+        initial={initialState}
         onSubmit={handleSubmit}
         submitLabel="Save"
         submitting={submitting}

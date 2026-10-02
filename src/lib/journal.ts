@@ -1,7 +1,7 @@
 // Pure helpers for browsing entries by day/week/month and grouping them by day.
 // All date math is local-time. Ranges are half-open: [start, end).
 import type { LogEntry, Medication, MedicationDose, MedicationEvent } from '@/db/schema';
-import { formatDoseNumber } from '@/lib/medications';
+import { formatDoseLabel } from '@/lib/medications';
 import { formatDateInput, MONTHS_LONG } from './datetime';
 
 export type CalendarMode = 'day' | 'week' | 'month';
@@ -198,7 +198,7 @@ export function medicationEventsToJournalItems(
     const summary = eventDoses
       .map((dose) => {
         const name = medsById.get(dose.medicationId)?.name ?? 'Unknown medication';
-        return `${name} ${formatDoseNumber(dose.dose)} ${dose.doseUnit}`;
+        return `${name} ${formatDoseLabel(dose.dose, dose.doseUnit, dose.reason)}`;
       })
       .join(' · ');
 
