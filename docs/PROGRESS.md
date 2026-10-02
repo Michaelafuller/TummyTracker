@@ -160,6 +160,16 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   Review fix: the suspect must have been eaten in the baseline, otherwise a
   "drop" while avoiding it proves nothing (new inconclusive rule + preview
   warning); the watchlist store now refreshes after a start.
+- **Medication adherence + as-needed reasons (GitHub #28):** "Logged on 26
+  of the last 30 days" for regular meds and "Logged on 4 days in the last
+  30" for as-needed ones on the Meds tab; a dose calendar on each
+  medication's screen; a reason on as-needed doses (chips from past
+  reasons) shown everywhere a dose is listed, PDF included. New column
+  `medication_dose.reason` (0015), backups v9. Review fix: the line clipped
+  by the medication's stated dates, so a finished course read "8 of the
+  last 10 days" about days that ended weeks ago, a later start date
+  counted doses outside the range, and day one read "1 of the last 1
+  days". Flow `zf-med-adherence`.
 - **Faster logging (GitHub #26):** a "Regular" switch on medications
   (0014, backups v8) and a one-tap "Took my regular meds" with Undo on the
   Meds tab; meal reminders now open a quick-log screen for that meal (meds
@@ -304,7 +314,7 @@ analysis.
 | 14 | ~~**Saved recipes / "my meals" with ingredients** (GH #25)~~ — *✅ 2026-09-30 (device check owed; on the #19 branch)* | Homemade and restaurant food has a name but no ingredients, blinding the ingredient engine where it matters most. | M | Re-used like Recent meals. |
 | 15 | ~~**Faster logging** (GH #26)~~ — *✅ 2026-10-01 (device check owed; on the #19 branch)* | Favourites ("usual breakfast"), log straight from the reminder notification (subsumes the reminder deep-link), one-tap "took my regular meds". Adherence and data quality die when logging is tedious. | M | |
 | 16 | **Optional app lock** (GH #27) — *⏸ deferred by the owner 2026-10-01 (decided so far: lock on open + after 1 min in the background; dependency not yet approved)* | Sensitive health data (BMs, symptoms, medications) with no lock. | S–M | ⚠ likely `expo-local-authentication` — owner approval + CVE check. |
-| 17 | **Medication adherence view + as-needed reason** (GH #28) | "Taken 26 of 30 days" calendar; a reason field for as-needed doses ("ibuprofen — headache"). | S–M | Builds on Cycle B history. |
+| 17 | ~~**Medication adherence view + as-needed reason** (GH #28)~~ — *✅ 2026-10-01 (device check owed; on the #19 branch)* | "Taken 26 of 30 days" calendar; a reason field for as-needed doses ("ibuprofen — headache"). | S–M | Builds on Cycle B history. |
 | 18 | **Medication reminders** (GH #29) | Owner-requested enhancement: local notifications from a structured schedule (times/days) via the approved `expo-notifications`. | M | A reminder must never become a dose record (#10/#11). Needs a structured schedule, not today's free-text frequency. |
 | 19 | **iOS pass** (GH #30) | Every device check so far is Android. Includes the #2 keyboard checks (Done on a number pad, tap-outside on Home, drag-to-dismiss), the iOS icon, time-picker feel. | M | Owner — no iOS device/Mac in this environment. |
 

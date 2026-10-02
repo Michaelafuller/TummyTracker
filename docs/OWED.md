@@ -15,13 +15,14 @@ Status at a glance (2026-09-30):
   `f6e6593`), but it can't conflict: RESUME_HERE.md is a new file — delete it
   in the merge.
 - Branch `worktree-agent-a93006f35a36fc943` (worktree
-  `.claude/worktrees/agent-a93006f35a36fc943`) = #19–#26 on top of
+  `.claude/worktrees/agent-a93006f35a36fc943`) = #19–#26 and #28 on top of
   `39224e7`, reviewed, **unmerged, unpushed**; adds migrations **0011**
   (`experiment`), **0012** (`day_factor`) and **0013** (`saved_meal`,
-  `saved_meal_component`), **0014** (`medication.is_regular`) and backups
-  **v5 → v8**.
+  `saved_meal_component`), **0014** (`medication.is_regular`), **0015**
+  (`medication_dose.reason`) and backups **v5 → v9**.
 - Device: Pixel 5, dev client = the 2026-08-29 EAS development build. All
-  #13–#26 work is JS + migrations — **no new build needed**.
+  #13–#28 work is JS + migrations — **no new build needed** (#27, which
+  would need one, is deferred).
 - Last device baseline: 34/34 Maestro on 2026-09-27. Last full Jest: 113 /
   1,168 on `main` (2026-09-27). The branch has only had targeted Jest since.
 
@@ -68,12 +69,12 @@ Then tell the orchestrator → it merges the branch into `main` (§2).
       `bundle:check` on `main`; record in `docs/RESULTS.md`.
 - [ ] Owner: **push** when happy.
 
-## 3. On the merged `main` — #19–#26
+## 3. On the merged `main` — #19–#28
 
 Flows:
 
 ```
-maestro test flows/z-experiment-start.yaml flows/zc-day-details.yaml flows/zd-my-meals.yaml flows/ze-faster-logging.yaml --format junit --output flows/results-19-26.xml
+maestro test flows/z-experiment-start.yaml flows/zc-day-details.yaml flows/zd-my-meals.yaml flows/ze-faster-logging.yaml flows/zf-med-adherence.yaml --format junit --output flows/results-19-28.xml
 ```
 
 Verdict path (backdated fixture — covers #19, #20, #21 and #23 in one import):
@@ -103,6 +104,11 @@ Manual:
       phase boundary falls, or temporarily set the device clock.)
 - [ ] **#19 PDF:** "Elimination experiments" table (term, dates, status,
       frozen verdict).
+- [ ] **#28 adherence, by eye:** your real medications' lines on the Meds
+      tab read sensibly (a regular med you've taken for months: "Logged on N
+      of the last 30 days"); the dose calendar on a medication's screen
+      (previous/next month, dots on the right days, light + dark); a PDF with
+      an as-needed dose that has a reason shows "— reason" in the Journal.
 - [ ] **#26 reminders, by hand:** Settings → a breakfast reminder 1–2 min
       ahead → tap the notification → "Log breakfast" opens; tap a saved
       meal → review shows Breakfast selected; "Add an entry manually" from
@@ -141,7 +147,8 @@ Manual:
 ## 5. GitHub housekeeping (owner-only — the agent never moves cards)
 
 - [ ] Close / move to Done: **#1, #2, #4–#11** (2026-09-26 session), **#12**,
-      **#13–#18** (after §1), **#19–#26** (after §3), and #27+ as they ship.
+      **#13–#18** (after §1), **#19–#26 and #28** (after §3), and #29+ as
+      they ship (#27 stays open — deferred).
 
 ## 6. Decisions the owner may want to revisit (made as plan defaults)
 
@@ -154,6 +161,9 @@ Manual:
   the next), "more" caffeine, period.
 - Slower patterns (#21): a key that was only a hidden low-confidence 24 h
   signal can appear as a 48 h slower pattern.
+- Adherence (#28): the 30-day window ends today; a regular med counts from
+  its first logged dose (not its stated start date); a finished course gets
+  the as-needed wording; reasons max 60 characters, up to 5 chips.
 - Faster logging (#26): time-of-day slots 05–11 breakfast, 11–16 lunch,
   16–22 dinner (none at night); a meal opened from a reminder's quick log
   takes that meal slot even if it was saved for another; "Took my regular

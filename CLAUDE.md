@@ -239,6 +239,19 @@
   med's default dose, on an explicit tap only; then "Logged at … · Undo"
   (Undo deletes that event). The Undo offer ends on **blur**, not unmount —
   tabs stay mounted (review 2026-10-01).
+- **Medication adherence + as-needed reasons (owner-decided 2026-10-01,
+  GitHub #28).** Logged days only — never "missed", "skipped" or a
+  percentage (a day without a log is unknown). Regular meds still in use:
+  "Logged on N of the last M days", M = local days from the later of the
+  30-day window start and the **first logged dose** up to today ("Logged
+  today" when M = 1). The stated start/end dates are notes and never clip
+  (review 2026-10-01: end-date clipping made "the last M days" false); a
+  regular med whose end date has passed, and every as-needed med, reads
+  "Logged on N days in the last 30". Lines on Meds tab rows + a dose
+  calendar on each medication's screen. `medication_dose.reason` (0015,
+  backups v9): asked on as-needed lines, chips from that med's past
+  reasons, shown as "Ibuprofen 200 mg — headache" via the one dose-label
+  formatter (the PDF amounts column stays amount-only).
 - **Real-SQLite repository tests (2026-09-27, GitHub #18).** `jest/expo-sqlite-node.ts`
   is a Jest-only fake `expo-sqlite` backed by Node's built-in `node:sqlite`
   (**Node ≥ 22.13 to run the tests**; no dependency). A DB test file starts
@@ -388,6 +401,11 @@ MVP entities:
     (`none|usual|more`), `period` (boolean; shown/analysed only when
     Track period is on) — all nullable (null = not logged), `createdAt`,
     `updatedAt`. Backups v6.
+
+- **medication** additions: `isRegular` (boolean, default false — migration
+  0014, GitHub #26; needs a default dose + unit). **medicationDose**
+  addition: `reason` (text, nullable — migration 0015, GitHub #28).
+  Backups v8 / v9.
 
 - **savedMeal** (`saved_meal`, migration 0013 — GitHub #25)
   - `id`, `name`, `nameKey` (trimmed lowercase, **unique**), `type`
