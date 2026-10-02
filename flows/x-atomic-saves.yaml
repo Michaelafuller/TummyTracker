@@ -96,6 +96,9 @@ appId: com.tummytracker.app.dev
     element:
       text: "200"
     direction: UP
+# The entry screen is pushed over the tabs (no tab bar) — back to the Journal tab first.
+- back
+- waitForAnimationToEnd
 
 # --- Medication entry: log Omeprazole 20 mg, then edit it to 40 mg ---
 - tapOn:

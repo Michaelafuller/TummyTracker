@@ -44,4 +44,7 @@ appId: com.tummytracker.app.dev
     id: "entry-row-wheat-bread"
     index: 0
 - waitForAnimationToEnd
-- assertVisible: "Save changes"
+# The meal's own edit screen (its Save button sits below the fold; the
+# Ingredients field exists only on a meal's screen, not the symptom's).
+- assertVisible: "Edit entry"
+- assertVisible: "Ingredients (optional)"
