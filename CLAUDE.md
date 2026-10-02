@@ -195,7 +195,10 @@
   and the next), "more" caffeine, period. Findings compare flagged days with
   days the factor was **logged and not flagged** (never "all other days");
   rough = `isOutcome` only. Caveats on food cards like #20's. A factor-only
-  day counts as covered (#13 line, #20 pools).
+  day counts as covered (#13 line, #20 pools). **The chips live on their own
+  screen** `/day-details?date=` (`DayFactorChips`), opened from the card's
+  details row (device run 2026-10-02: inline chips overflowed Home — which
+  doesn't scroll — and hid the Period row behind the tab bar).
 - **"By chance" check on findings (owner-decided 2026-09-30, GitHub #24).**
   `src/features/analysis/chance.ts`. Every Insights finding card gets one
   line: how many findings at that card's tier **or better** luck alone
@@ -211,6 +214,11 @@
   lists (no low-only fallback, no cap) on the real journal and on every
   slide alike. Display-only: no number, tier, order or visibility changes;
   Insights only (not the PDF or the detail screen). Deterministic.
+  **Look-alikes count once** (owner-decided 2026-10-02): candidates covering
+  exactly the same meals/days (a signature of sorted unit ids, returned
+  next to each family's candidates) are one finding at their best tier —
+  otherwise a meal tagged lactose+pasta+milk+cheese was four findings and
+  the warning depended on how many tags a meal carries.
 - **Saved meals / "My meals" (owner-decided 2026-09-30, GitHub #25).**
   Templates live in `saved_meal` + `saved_meal_component` (0013, backups
   v7) and never are, or link to, a log entry. Created with "Save as my
@@ -268,6 +276,11 @@
   repeating DAILY/WEEKLY trigger keeps its identifier, and keying on it
   alone ignored every later firing while Home stayed mounted (review
   2026-10-02; also fixed #26's meal-reminder tap).
+- **Watchlist in backups (owner-decided 2026-10-02, backup v11).** A restore
+  used to drop the watched ingredients. `watchlistItems` are exported and
+  restored (`insertWatchlistItemsPreservingIds`; terms re-normalised; the
+  device's own item wins an id or term clash), then the watchlist store
+  reloads.
 - **Real-SQLite repository tests (2026-09-27, GitHub #18).** `jest/expo-sqlite-node.ts`
   is a Jest-only fake `expo-sqlite` backed by Node's built-in `node:sqlite`
   (**Node ≥ 22.13 to run the tests**; no dependency). A DB test file starts

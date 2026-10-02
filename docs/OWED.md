@@ -21,8 +21,9 @@ Status at a glance (2026-10-01):
   one, is deferred).
 - Last device run: §1's 11/11 on 2026-10-01 (the 34/34 full baseline is from
   2026-09-27). Last full Jest: **144 / 2,035 on merged `main`** (2026-10-01).
-- **Next: §3** on the merged `main`, then the owner's two follow-up ideas
-  (check-in confirmation, Select all on med entries) as one small cycle.
+- **§3 flows all pass (2026-10-02).** Next: the owner's §3 hand checks,
+  then the owner's two follow-up ideas (check-in confirmation, Select all
+  on med entries) as one small cycle.
 
 ## 1. On `main`, before the merge — #13–#18 — ✅ DONE 2026-10-01
 
@@ -70,7 +71,11 @@ Then tell the orchestrator → it merges the branch into `main` (§2).
       `bundle:check` on `main`; record in `docs/RESULTS.md`.
 - [ ] Owner: **push** when happy.
 
-## 3. On the merged `main` — #19–#29
+## 3. On the merged `main` — #19–#29 — flows ✅ 2026-10-02 (hand checks below)
+
+All flows below pass on the device (`docs/RESULTS.md`), after flow-side
+fixes and three app fixes (day-details screen, chance look-alikes,
+watchlist in backups v11). What remains in §3 is the owner's hand checks.
 
 Flows:
 

@@ -1,5 +1,29 @@
 # RESULTS.md — Full regression 2026-09-27 (GitHub #12: re-baseline after the 2026-09-26 session + `hideKeyboard` audit)
 
+## Addendum — §3 device run on merged `main`, 2026-10-02 (OWED.md §3 flows)
+
+- **All §3 flows pass on the Pixel 5:** `z-experiment-start`,
+  `zc-day-details`, `zd-my-meals`, `ze-faster-logging`, `zf-med-adherence`,
+  `zg-med-reminders`, and the fixture path `za-experiment-fixture-import` →
+  `zb-experiment-verdict`.
+- **Flow-side fixes** (`0f699a4`, `c4c4a0d`, `f166684`): the servings stepper
+  moves in 0.5s; `tapOn "unit"` hit the "Unit" label (use mcg); scroll to
+  rows under the fold; the file picker opens in its last view (search for
+  the file instead); backups have no watchlist (watch lactose in-flow);
+  returning from Past experiments lands at the top of Insights.
+- **App bugs found and fixed** (each reviewed, full suite green):
+  1. Home's expanded day details overflowed — the Period row sat behind the
+     tab bar, unreachable → chips moved to a "Today's details" screen
+     (`3e892c7`); `zc-` verifies it.
+  2. #24 chance check counted always-co-occurring tags as separate findings
+     (the device's tag backfill gives the fixture lactose+pasta+milk+cheese)
+     → look-alikes count once (`ddf30cf`). The fixture's lactose line is now
+     "fewer than 1" both raw and backfilled (the old "about 1 … could
+     easily be chance" was inflated by rice+chicken double-counting).
+  3. Backups didn't carry the watchlist → backup v11 (`e1342de`).
+- **Full `npm test`: 146 suites / 2,064 tests**, typecheck, lint, `bundle:check`
+  clean.
+
 ## Addendum — §1 device run + merge, 2026-10-01 (OWED.md §1–§2)
 
 - **Device run of #13–#18 on `main` (`82b2593`): 11/11 flows pass** —
