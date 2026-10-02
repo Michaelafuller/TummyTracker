@@ -221,4 +221,38 @@ describe('repository transaction atomicity', () => {
     const reread = await repo.getMedicationEvent(event.id);
     expect(reread?.doses).toHaveLength(1);
   });
+
+  it('createMedication: rolls back the medication insert when the reminder insert fails (GitHub #29)', async () => {
+    armNextStatementFailure(/insert into "medication_reminder"/i);
+
+    await expect(
+      repo.createMedication({
+        name: 'Levothyroxine',
+        reminders: [{ hour: 8, minute: 0, daysMask: 127, enabled: true }],
+      }),
+    ).rejects.toThrow();
+
+    expect(await repo.listAllMedications()).toHaveLength(0);
+    expect(await repo.listAllMedicationReminders()).toHaveLength(0);
+  });
+
+  it('updateMedication: rolls back the medication update and reminder replacement when the new reminder insert fails (GitHub #29)', async () => {
+    const medication = await repo.createMedication({
+      name: 'Levothyroxine',
+      reminders: [{ hour: 8, minute: 0, daysMask: 127, enabled: true }],
+    });
+
+    armNextStatementFailure(/insert into "medication_reminder"/i);
+
+    await expect(
+      repo.updateMedication(medication.id, {
+        name: 'Renamed',
+        reminders: [{ hour: 21, minute: 0, daysMask: 1, enabled: true }],
+      }),
+    ).rejects.toThrow();
+
+    expect((await repo.getMedication(medication.id))?.name).toBe('Levothyroxine');
+    const reminders = await repo.listMedicationReminders(medication.id);
+    expect(reminders.map((r) => [r.hour, r.minute])).toEqual([[8, 0]]);
+  });
 });

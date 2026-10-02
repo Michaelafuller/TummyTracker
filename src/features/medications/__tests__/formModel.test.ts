@@ -1,5 +1,11 @@
-import type { Medication } from '@/db/schema';
-import { buildMedication, medicationToFormState, type MedicationFormState } from '../formModel';
+import type { Medication, MedicationReminder } from '@/db/schema';
+import {
+  buildMedication,
+  hasDefaultDoseAndUnit,
+  medicationToFormState,
+  newReminderDraft,
+  type MedicationFormState,
+} from '../formModel';
 
 function baseState(overrides: Partial<MedicationFormState> = {}): MedicationFormState {
   return {
@@ -12,6 +18,7 @@ function baseState(overrides: Partial<MedicationFormState> = {}): MedicationForm
     endDateInput: '',
     notes: '',
     isRegular: false,
+    reminders: [],
     ...overrides,
   };
 }
@@ -192,5 +199,71 @@ describe('medicationToFormState', () => {
     const result = buildMedication(baseState({ isRegular: true, defaultDose: '5' }));
     expect(result.valid).toBe(false);
     expect(result.errors.doseUnit).toBeTruthy();
+  });
+});
+
+describe('reminders in the form model (GitHub #29)', () => {
+  const row = (overrides: Partial<MedicationReminder> = {}): MedicationReminder => ({
+    id: 'r1',
+    medicationId: 'med1',
+    hour: 7,
+    minute: 5,
+    daysMask: 31,
+    enabled: false,
+    createdAt: 1,
+    updatedAt: 1,
+    ...overrides,
+  });
+
+  it('a new reminder draft is 08:00, every day, on', () => {
+    expect(newReminderDraft('k')).toEqual({ key: 'k', hour: 8, minute: 0, daysMask: 127, enabled: true });
+  });
+
+  it('seeds the edit form from the saved reminder rows and builds them back without the key', () => {
+    const seeded = medicationToFormState(baseMedication(), [row(), row({ id: 'r2', hour: 20, minute: 30, daysMask: 127, enabled: true })]);
+    expect(seeded.reminders.map((r) => r.key)).toEqual(['r1', 'r2']);
+
+    const built = buildMedication(seeded);
+    expect(built.valid).toBe(true);
+    expect(built.reminders).toEqual([
+      { hour: 7, minute: 5, daysMask: 31, enabled: false },
+      { hour: 20, minute: 30, daysMask: 127, enabled: true },
+    ]);
+  });
+
+  it('medicationToFormState without reminders seeds none', () => {
+    expect(medicationToFormState(baseMedication()).reminders).toEqual([]);
+  });
+
+  it('builds an empty reminder list when there are none (so a save clears the old rows)', () => {
+    expect(buildMedication(baseState()).reminders).toEqual([]);
+  });
+
+  it('fails with a per-row error when a reminder has no weekday, and keeps medication errors too', () => {
+    const state = baseState({
+      name: '',
+      reminders: [newReminderDraft('a'), { ...newReminderDraft('b'), daysMask: 0 }],
+    });
+    const result = buildMedication(state);
+    expect(result.valid).toBe(false);
+    expect(result.reminders).toBeUndefined();
+    expect(result.errors.reminders).toEqual({ 1: 'Pick at least one day.' });
+    expect(result.errors.name).toBeTruthy();
+  });
+
+  it('flags an out-of-range time on its row', () => {
+    const result = buildMedication(baseState({ reminders: [{ ...newReminderDraft('a'), hour: 24 }] }));
+    expect(result.valid).toBe(false);
+    expect(result.errors.reminders).toEqual({ 0: 'Pick a valid time.' });
+  });
+
+  it('hasDefaultDoseAndUnit needs a positive dose and a unit', () => {
+    expect(hasDefaultDoseAndUnit(baseState({ defaultDose: '10', unitChoice: 'mg' }))).toBe(true);
+    expect(hasDefaultDoseAndUnit(baseState({ defaultDose: '10', unitChoice: 'other', otherUnitText: 'sachet' }))).toBe(true);
+    expect(hasDefaultDoseAndUnit(baseState({ defaultDose: '', unitChoice: 'mg' }))).toBe(false);
+    expect(hasDefaultDoseAndUnit(baseState({ defaultDose: '10', unitChoice: null }))).toBe(false);
+    expect(hasDefaultDoseAndUnit(baseState({ defaultDose: '0', unitChoice: 'mg' }))).toBe(false);
+    expect(hasDefaultDoseAndUnit(baseState({ defaultDose: 'abc', unitChoice: 'mg' }))).toBe(false);
+    expect(hasDefaultDoseAndUnit(baseState({ defaultDose: '10', unitChoice: 'other', otherUnitText: ' ' }))).toBe(false);
   });
 });

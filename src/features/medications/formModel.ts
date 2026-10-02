@@ -3,14 +3,25 @@
 // features/symptoms/formModel.ts) makes the build/parse logic unit-testable
 // without rendering anything.
 
-import { DOSE_UNITS, type DoseUnit, type Medication } from '@/db/schema';
+import { DOSE_UNITS, type DoseUnit, type Medication, type MedicationReminder } from '@/db/schema';
 import { formatDateInput, parseDateTime } from '@/lib/datetime';
 import { validateMedication, type MedicationValidationErrors } from '@/lib/medications';
+import { ALL_DAYS_MASK, validateReminder, type ReminderInput } from './reminderModel';
 
 /** The unit chips: every fixed DOSE_UNITS value, plus "other" for the free-text field. */
 export type UnitChoice = DoseUnit | 'other';
 
 export const UNIT_CHOICES: readonly UnitChoice[] = [...DOSE_UNITS, 'other'];
+
+/** One reminder row in the form (GitHub #29). `key` is a stable React key only — never saved. */
+export interface ReminderDraft extends ReminderInput {
+  key: string;
+}
+
+/** A new reminder row: 08:00, every day, on. */
+export function newReminderDraft(key: string): ReminderDraft {
+  return { key, hour: 8, minute: 0, daysMask: ALL_DAYS_MASK, enabled: true };
+}
 
 export interface MedicationFormState {
   name: string;
@@ -27,9 +38,14 @@ export interface MedicationFormState {
   notes: string;
   /** Taken every day — powers "Took my regular meds" (GitHub #26). */
   isRegular: boolean;
+  /** Scheduled reminders (GitHub #29), in the order shown. */
+  reminders: ReminderDraft[];
 }
 
-export type MedicationFormErrors = MedicationValidationErrors;
+export type MedicationFormErrors = MedicationValidationErrors & {
+  /** Per-row reminder error keyed by row index (e.g. "Pick at least one day."). */
+  reminders?: Record<number, string>;
+};
 
 export interface BuiltMedication {
   name: string;
@@ -45,6 +61,8 @@ export interface BuiltMedication {
 export interface MedicationBuildResult {
   valid: boolean;
   medication?: BuiltMedication;
+  /** The validated reminder rows to save with the medication (replaces its existing rows). */
+  reminders?: ReminderInput[];
   errors: MedicationFormErrors;
 }
 
@@ -80,14 +98,22 @@ export function buildMedication(state: MedicationFormState): MedicationBuildResu
     isRegular: state.isRegular,
   });
 
-  if (!result.valid) {
-    return { valid: false, errors: result.errors };
+  const reminderErrors: Record<number, string> = {};
+  state.reminders.forEach((reminder, index) => {
+    const error = validateReminder(reminder);
+    if (error) reminderErrors[index] = error;
+  });
+  const hasReminderErrors = Object.keys(reminderErrors).length > 0;
+
+  if (!result.valid || hasReminderErrors) {
+    return { valid: false, errors: { ...result.errors, ...(hasReminderErrors ? { reminders: reminderErrors } : {}) } };
   }
 
   const trimmedNotes = state.notes.trim();
   return {
     valid: true,
     errors: {},
+    reminders: state.reminders.map(({ hour, minute, daysMask, enabled }) => ({ hour, minute, daysMask, enabled })),
     medication: {
       name: state.name.trim(),
       defaultDose: parsedDose,
@@ -101,8 +127,8 @@ export function buildMedication(state: MedicationFormState): MedicationBuildResu
   };
 }
 
-/** Seeds the edit-screen form from a saved medication row. */
-export function medicationToFormState(med: Medication): MedicationFormState {
+/** Seeds the edit-screen form from a saved medication row and its reminder rows. */
+export function medicationToFormState(med: Medication, reminders: readonly MedicationReminder[] = []): MedicationFormState {
   const isKnownUnit = med.doseUnit != null && (DOSE_UNITS as readonly string[]).includes(med.doseUnit);
   const unitChoice: UnitChoice | null =
     med.doseUnit == null ? null : isKnownUnit ? (med.doseUnit as DoseUnit) : 'other';
@@ -117,5 +143,21 @@ export function medicationToFormState(med: Medication): MedicationFormState {
     endDateInput: med.endDate != null ? formatDateInput(med.endDate) : '',
     notes: med.notes ?? '',
     isRegular: med.isRegular,
+    reminders: reminders.map((r) => ({
+      key: r.id,
+      hour: r.hour,
+      minute: r.minute,
+      daysMask: r.daysMask,
+      enabled: r.enabled,
+    })),
   };
+}
+
+/**
+ * True when the form has a default dose > 0 and a unit — what a reminder's
+ * "Took them" button needs. Drives the one-line hint in the Reminders block.
+ */
+export function hasDefaultDoseAndUnit(state: MedicationFormState): boolean {
+  const dose = Number(state.defaultDose.trim());
+  return state.defaultDose.trim().length > 0 && dose > 0 && resolvedUnit(state) !== null;
 }

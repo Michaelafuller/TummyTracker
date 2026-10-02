@@ -1,7 +1,7 @@
 import { useEffect as mockUseEffect } from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 
-import { getMedication, setMedicationActive, updateMedication } from '@/db/repository';
+import { getMedication, listMedicationReminders, setMedicationActive, updateMedication } from '@/db/repository';
 import type { Medication, MedicationDose, MedicationEvent } from '@/db/schema';
 import EditMedicationScreen from '../[id]';
 
@@ -15,6 +15,7 @@ jest.mock('expo-router', () => ({
 
 jest.mock('@/db/repository', () => ({
   getMedication: jest.fn(),
+  listMedicationReminders: jest.fn(),
   updateMedication: jest.fn(),
   setMedicationActive: jest.fn(),
 }));
@@ -52,6 +53,7 @@ function makeMedication(overrides: Partial<Medication> = {}): Medication {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  (listMedicationReminders as jest.Mock).mockResolvedValue([]);
   mockEvents = [];
   mockDoses = [];
 });
@@ -176,5 +178,42 @@ describe('EditMedicationScreen adherence view (GitHub #28)', () => {
 
     expect((await findByTestId('adherence-line')).props.children).toBe('No doses logged in the last 30 days');
     expect((await findByTestId('dose-calendar')).props.markedDates).toEqual({});
+  });
+});
+
+describe('EditMedicationScreen reminders (GitHub #29)', () => {
+  it('loads the medication reminders into the form and saves them back with the patch', async () => {
+    (getMedication as jest.Mock).mockResolvedValue(makeMedication());
+    (listMedicationReminders as jest.Mock).mockResolvedValue([
+      { id: 'r1', medicationId: 'med1', hour: 7, minute: 45, daysMask: 31, enabled: true, createdAt: 1, updatedAt: 1 },
+    ]);
+    (updateMedication as jest.Mock).mockResolvedValue(undefined);
+    const { findByLabelText, findByTestId } = await render(<EditMedicationScreen />);
+
+    expect(listMedicationReminders).toHaveBeenCalledWith('med1');
+    expect(await findByTestId('reminder-0')).toBeTruthy();
+    await fireEvent.press(await findByLabelText('Save changes'));
+
+    expect(updateMedication).toHaveBeenCalledWith(
+      'med1',
+      expect.objectContaining({
+        name: 'Omeprazole',
+        reminders: [{ hour: 7, minute: 45, daysMask: 31, enabled: true }],
+      }),
+    );
+  });
+
+  it('removing the only reminder saves an empty list so the old rows are cleared', async () => {
+    (getMedication as jest.Mock).mockResolvedValue(makeMedication());
+    (listMedicationReminders as jest.Mock).mockResolvedValue([
+      { id: 'r1', medicationId: 'med1', hour: 7, minute: 45, daysMask: 127, enabled: true, createdAt: 1, updatedAt: 1 },
+    ]);
+    (updateMedication as jest.Mock).mockResolvedValue(undefined);
+    const { findByLabelText, findByTestId } = await render(<EditMedicationScreen />);
+
+    await fireEvent.press(await findByTestId('reminder-0-remove'));
+    await fireEvent.press(await findByLabelText('Save changes'));
+
+    expect(updateMedication).toHaveBeenCalledWith('med1', expect.objectContaining({ reminders: [] }));
   });
 });

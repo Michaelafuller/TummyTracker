@@ -7,10 +7,11 @@ import { FormScrollView } from '@/components/keyboard-aware-screen';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
-import { getMedication, setMedicationActive, updateMedication } from '@/db/repository';
-import type { Medication } from '@/db/schema';
+import { getMedication, listMedicationReminders, setMedicationActive, updateMedication } from '@/db/repository';
+import type { Medication, MedicationReminder } from '@/db/schema';
 import { medicationToFormState, type BuiltMedication } from '@/features/medications/formModel';
 import { MedicationForm } from '@/features/medications/MedicationForm';
+import type { ReminderInput } from '@/features/medications/reminderModel';
 import { useMedicationDoses, useMedicationEvents } from '@/features/medications/useMedicationData';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDateInput } from '@/lib/datetime';
@@ -24,6 +25,7 @@ export default function EditMedicationScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [medication, setMedication] = useState<LoadState>(undefined);
+  const [reminders, setReminders] = useState<MedicationReminder[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [togglingActive, setTogglingActive] = useState(false);
   const theme = useTheme();
@@ -33,7 +35,8 @@ export default function EditMedicationScreen() {
   const [now, setNow] = useState(() => Date.now());
 
   const load = useCallback(async () => {
-    const found = await getMedication(id);
+    const [found, savedReminders] = await Promise.all([getMedication(id), listMedicationReminders(id)]);
+    setReminders(savedReminders);
     setMedication(found ?? null);
     setNow(Date.now());
   }, [id]);
@@ -61,10 +64,10 @@ export default function EditMedicationScreen() {
     }, [load]),
   );
 
-  async function handleSubmit(built: BuiltMedication) {
+  async function handleSubmit(built: BuiltMedication, builtReminders: ReminderInput[]) {
     setSubmitting(true);
     try {
-      await updateMedication(id, built);
+      await updateMedication(id, { ...built, reminders: builtReminders });
       router.back();
     } finally {
       setSubmitting(false);
@@ -116,7 +119,7 @@ export default function EditMedicationScreen() {
       />
       <MedicationForm
         key={String(medication.updatedAt)}
-        initial={medicationToFormState(medication)}
+        initial={medicationToFormState(medication, reminders)}
         onSubmit={handleSubmit}
         submitLabel="Save changes"
         submitting={submitting}

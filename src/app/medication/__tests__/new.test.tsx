@@ -12,6 +12,10 @@ jest.mock('@/db/repository', () => ({
   createMedication: jest.fn(),
 }));
 
+jest.mock('@/features/notifications/service', () => ({
+  ensureNotificationPermission: jest.fn().mockResolvedValue(true),
+}));
+
 beforeEach(() => {
   jest.clearAllMocks();
 });
@@ -29,6 +33,23 @@ describe('NewMedicationScreen', () => {
       expect.objectContaining({ name: 'Omeprazole', defaultDose: null, doseUnit: null }),
     );
     expect(mockBack).toHaveBeenCalled();
+  });
+
+  it('passes the reminders added in the form to createMedication (GitHub #29)', async () => {
+    (createMedication as jest.Mock).mockResolvedValue({});
+    const { getByLabelText, findByLabelText, findByTestId } = await render(<NewMedicationScreen />);
+
+    await fireEvent.changeText(getByLabelText('Medication name'), 'Vitamin D');
+    await fireEvent.press(await findByTestId('reminder-add'));
+    await findByTestId('reminder-0');
+    await fireEvent.press(await findByLabelText('Save'));
+
+    expect(createMedication).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Vitamin D',
+        reminders: [{ hour: 8, minute: 0, daysMask: 127, enabled: true }],
+      }),
+    );
   });
 
   it('does not call createMedication or navigate back when validation fails', async () => {

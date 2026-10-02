@@ -3,6 +3,7 @@
 // lib/ and features/logging/formModel; this module just persists.
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 
+import { validateReminder, type ReminderInput } from '@/features/medications/reminderModel';
 import { DEFAULT_PROTOCOL, type EliminationChoice, type ExperimentVerdict } from '@/features/experiments/engine';
 import { formatDateInput } from '@/lib/datetime';
 import { chunk } from '@/lib/array';
@@ -54,6 +55,7 @@ import {
   type NewMealComponent,
   type NewMedication,
   type NewMedicationDose,
+  type NewMedicationReminder,
   type NewMedicationEvent,
   type NewSavedMealComponent,
   type SavedMeal,
@@ -472,11 +474,22 @@ export async function removeGoal(nutrient: NutritionField): Promise<void> {
   await db.delete(goal).where(eq(goal.nutrient, nutrient));
 }
 
-/** Fields a caller supplies on create — id and timestamps are filled in here. */
-export type CreateMedicationInput = Omit<NewMedication, 'id' | 'createdAt' | 'updatedAt'>;
+/**
+ * Fields a caller supplies on create — id and timestamps are filled in here.
+ * `reminders` (GitHub #29) are written in the SAME transaction as the medication.
+ */
+export type CreateMedicationInput = Omit<NewMedication, 'id' | 'createdAt' | 'updatedAt'> & {
+  reminders?: readonly ReminderInput[];
+};
 
-/** Fields a caller may patch. id/createdAt are immutable; updatedAt is managed here. */
-export type UpdateMedicationInput = Partial<Omit<NewMedication, 'id' | 'createdAt' | 'updatedAt'>>;
+/**
+ * Fields a caller may patch. id/createdAt are immutable; updatedAt is managed
+ * here. `reminders`, when PRESENT (even empty), replaces this medication's
+ * reminder rows wholesale in the same transaction; when absent they are left alone.
+ */
+export type UpdateMedicationInput = Partial<Omit<NewMedication, 'id' | 'createdAt' | 'updatedAt'>> & {
+  reminders?: readonly ReminderInput[];
+};
 
 /** Every medication, active first, then alphabetical by name (HANDOFF.md #5 list order). */
 export async function listMedications(): Promise<Medication[]> {
@@ -488,28 +501,81 @@ export async function getMedication(id: string): Promise<Medication | undefined>
   return rows[0];
 }
 
+/** Builds the reminder rows for one medication; throws on an unusable reminder BEFORE any write starts. */
+function buildReminderRows(medicationId: string, reminders: readonly ReminderInput[], now: number): NewMedicationReminder[] {
+  return reminders.map((reminder) => {
+    const error = validateReminder(reminder);
+    if (error) throw new Error(`Invalid medication reminder: ${error}`);
+    return {
+      id: createId(),
+      medicationId,
+      hour: reminder.hour,
+      minute: reminder.minute,
+      daysMask: reminder.daysMask,
+      enabled: reminder.enabled,
+      createdAt: now,
+      updatedAt: now,
+    };
+  });
+}
+
 export async function createMedication(input: CreateMedicationInput): Promise<Medication> {
   const now = Date.now();
+  const { reminders, ...fields } = input;
   const row: NewMedication = {
-    ...input,
+    ...fields,
     id: createId(),
     createdAt: now,
     updatedAt: now,
   };
-  await db.insert(medication).values(row);
+  const reminderRows = buildReminderRows(row.id, reminders ?? [], now);
+
+  // Sync callback — see createLogEntries' comment above for why.
+  db.transaction((tx) => {
+    tx.insert(medication).values(row).run();
+    if (reminderRows.length > 0) {
+      tx.insert(medicationReminder).values(reminderRows).run();
+    }
+  });
   return row as Medication;
 }
 
 /**
  * Patches a medication's own fields. Never touches `medication_dose` rows
  * (invariant, HANDOFF.md §0) — a dose snapshots its own dose/unit at log time,
- * so editing the medication here can never rewrite history.
+ * so editing the medication here can never rewrite history. When `reminders`
+ * is given, that medication's reminder rows are replaced in the same
+ * transaction (GitHub #29).
  */
 export async function updateMedication(id: string, patch: UpdateMedicationInput): Promise<void> {
-  await db
-    .update(medication)
-    .set({ ...patch, updatedAt: Date.now() })
-    .where(eq(medication.id, id));
+  const now = Date.now();
+  const { reminders, ...fields } = patch;
+  const reminderRows = reminders ? buildReminderRows(id, reminders, now) : null;
+
+  // Sync callback — see createLogEntries' comment above for why.
+  db.transaction((tx) => {
+    tx.update(medication)
+      .set({ ...fields, updatedAt: now })
+      .where(eq(medication.id, id))
+      .run();
+    if (reminderRows) {
+      tx.delete(medicationReminder).where(eq(medicationReminder.medicationId, id)).run();
+      if (reminderRows.length > 0) {
+        tx.insert(medicationReminder).values(reminderRows).run();
+      }
+    }
+  });
+}
+
+/**
+ * Reminder rows (GitHub #29) — all of them, or one medication's — ordered by
+ * time of day, then creation. Inactive medications' rows are included: they
+ * are kept (just not scheduled).
+ */
+export async function listMedicationReminders(medicationId?: string): Promise<MedicationReminder[]> {
+  const query = db.select().from(medicationReminder);
+  const filtered = medicationId === undefined ? query : query.where(eq(medicationReminder.medicationId, medicationId));
+  return filtered.orderBy(asc(medicationReminder.hour), asc(medicationReminder.minute), asc(medicationReminder.createdAt));
 }
 
 /**
