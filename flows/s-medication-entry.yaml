@@ -8,6 +8,7 @@ appId: com.tummytracker.app.dev
 #   - Edit the entry's notes (#8), then delete it (confirm) → gone everywhere
 #   - The medications' defaults are unchanged throughout (#9)
 #   - Each ticked line shows its unit as text + "Change unit" (#16)
+#   - Both lines are ticked with "Select all", which then reads "Clear all"
 ---
 - launchApp:
     clearState: true
@@ -55,8 +56,9 @@ appId: com.tummytracker.app.dev
 # --- Log both; Ibuprofen at half (400 → 200) ---
 - tapOn: "Create entry"
 - waitForAnimationToEnd
-- tapOn: "Took Omeprazole"
-- tapOn: "Took Ibuprofen"
+# Select all ticks both lines at once (owner idea, 2026-10-02).
+- tapOn: "Select all medications"
+- assertVisible: "Clear all"
 # Units show as text with "Change unit", not a row of chips (GitHub #16).
 - assertVisible: "Change unit for Ibuprofen"
 - assertNotVisible: "capsule"

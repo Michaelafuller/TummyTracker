@@ -9,7 +9,8 @@ appId: com.tummytracker.app.dev
 # MANUAL (not driven here — Maestro can't reliably work the notification
 # shade): switch Day check-in on, set the time 1–2 min ahead, background the
 # app, tap "Rough day" on the notification → the app opens and Home shows
-# "Rough day noted."; the notification is gone from the shade.
+# "Rough day noted."; the notification is gone from the shade; a
+# "✓ Rough day recorded" banner shows at the top of Home for ~4 s.
 ---
 - launchApp:
     clearState: true

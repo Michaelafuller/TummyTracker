@@ -160,6 +160,12 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   Review fix: the suspect must have been eaten in the baseline, otherwise a
   "drop" while avoiding it proves nothing (new inconclusive rule + preview
   warning); the watchlist store now refreshes after a start.
+- **Owner ideas from the device run (2026-10-02):** a "✓ Rough day recorded"
+  banner on Home when the day check-in is answered from the notification;
+  "Select all / Clear all" on the medication entry form. Also from the run:
+  day details moved to their own screen (Period row was unreachable), the
+  chance check counts look-alike findings once, and backups carry the
+  watchlist (v11).
 - **Medication reminders (GitHub #29):** reminders per medication (times +
   weekdays) in its form; one notification per time listing every med due,
   with a "Took them" button (when they all have a default dose) that saves

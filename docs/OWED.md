@@ -22,8 +22,9 @@ Status at a glance (2026-10-01):
 - Last device run: §1's 11/11 on 2026-10-01 (the 34/34 full baseline is from
   2026-09-27). Last full Jest: **144 / 2,035 on merged `main`** (2026-10-01).
 - **§3 flows all pass (2026-10-02).** Next: the owner's §3 hand checks,
-  then the owner's two follow-up ideas (check-in confirmation, Select all
-  on med entries) as one small cycle.
+  The owner's two ideas are built (`6a07394` banner, `9f967a7` Select all;
+  147 / 2,088 green) — `s-medication-entry` (Select all) still to run on the
+  device; the banner is a hand check below.
 
 ## 1. On `main`, before the merge — #13–#18 — ✅ DONE 2026-10-01
 
@@ -125,6 +126,10 @@ Manual:
       of the last 30 days"); the dose calendar on a medication's screen
       (previous/next month, dots on the right days, light + dark); a PDF with
       an as-needed dose that has a reason shows "— reason" in the Journal.
+- [ ] **Owner ideas (2026-10-02), by hand:** answer **Rough day** from the
+      day check-in notification → Home shows "✓ Rough day recorded" for
+      ~4 s (with a buzz), tapping it hides it early. (Select all is covered
+      by `s-medication-entry`.)
 - [ ] **#26 reminders, by hand:** Settings → a breakfast reminder 1–2 min
       ahead → tap the notification → "Log breakfast" opens; tap a saved
       meal → review shows Breakfast selected; "Add an entry manually" from

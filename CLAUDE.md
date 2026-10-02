@@ -115,7 +115,10 @@
   Fine/Rough buttons use `opensAppToForeground: true` because there is no
   background task runner (`expo-task-manager` is not approved) — our JS only
   runs once the app opens. An answer is always recorded for the day the
-  notification asked about (`content.data.date`), never "now".
+  notification asked about (`content.data.date`), never "now". A notification
+  answer shows a 4 s "✓ Rough day recorded" banner on Home (+ success haptic;
+  `checkInFeedbackStore`, only after the write succeeded — owner idea
+  2026-10-02).
 - **Automatic backup = daily-on-open to a user-picked folder (2026-09-27,
   GitHub #14).** No background runner is approved, so on Android the app
   writes one backup per local day when it opens or resumes, into a folder
