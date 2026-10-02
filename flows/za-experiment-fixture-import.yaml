@@ -30,9 +30,22 @@ appId: com.tummytracker.app.dev
 - tapOn: "Import data"
 - waitForAnimationToEnd
 
-# DocumentsUI: open the roots drawer → Downloads → the pushed file.
-- tapOn: "Show roots"
-- tapOn: "Downloads"
+# DocumentsUI opens in whatever view it last used (Recent files on
+# 2026-10-02, so the roots-drawer → Downloads taps missed). Search instead:
+# the "Search this device" bar on the root view, or the search icon elsewhere.
+- runFlow:
+    when:
+      visible: "Search this device"
+    commands:
+      - tapOn: "Search this device"
+- runFlow:
+    when:
+      notVisible: "Search this device"
+    commands:
+      - tapOn:
+          text: "Search"
+- inputText: "experiment-ready"
+- pressKey: Enter
 - waitForAnimationToEnd
 - tapOn: "experiment-ready-backup.json"
 - waitForAnimationToEnd

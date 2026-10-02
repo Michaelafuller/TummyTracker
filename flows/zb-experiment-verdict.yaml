@@ -48,10 +48,19 @@ appId: com.tummytracker.app.dev
 - tapOn:
     id: "tab-insights"
 - waitForAnimationToEnd
+# Backups don't carry the watchlist, so the imported fixture has no watch
+# item yet: watch lactose from its finding card first (device run 2026-10-02).
+- scrollUntilVisible:
+    element:
+      text: "Watch lactose"
+    direction: DOWN
+    centerElement: true
+- tapOn: "Watch lactose"
+- waitForAnimationToEnd
 - scrollUntilVisible:
     element:
       text: "Last experiment: Likely a trigger.*"
-    direction: DOWN
+    direction: UP
     centerElement: true
 - scrollUntilVisible:
     element:
@@ -68,15 +77,17 @@ appId: com.tummytracker.app.dev
 - scrollUntilVisible:
     element:
       text: "7 of the 12 meals followed by a rough outcome were eaten while you were taking Ibuprofen\\."
-    direction: UP
+    # Back from Past experiments, Insights is at the top again.
+    direction: DOWN
     centerElement: true
 - assertVisible: "Usually about 3 h later"
-# --- #24: chance lines. Lactose sits in one 14-day block and the rough days in
-# one streak inside it, so luck lines a food up with a streak about as often:
-# the lactose card says it could easily be chance; ibuprofen and stress don't.
+# --- #24: chance lines. On the device the app's tag backfill adds pasta, milk
+# and cheese to the lactose meals (6 ingredients); look-alikes (identical meals)
+# count once, so luck alone gives fewer than 1 (device run 2026-10-02, pinned
+# in experimentFixture.test.ts).
 - scrollUntilVisible:
     element:
-      text: "Chance check: of 3 ingredients checked, luck alone would make about 1 look this strong\\. That's as many as you have, so this could easily be chance\\."
+      text: "Chance check: of 6 ingredients checked, luck alone would make fewer than 1 look this strong\\."
     direction: UP
     centerElement: true
 - scrollUntilVisible:
