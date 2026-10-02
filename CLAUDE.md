@@ -252,6 +252,22 @@
   backups v9): asked on as-needed lines, chips from that med's past
   reasons, shown as "Ibuprofen 200 mg — headache" via the one dose-label
   formatter (the PDF amounts column stays amount-only).
+- **Medication reminders (owner-decided 2026-10-01, GitHub #29).** Table
+  `medication_reminder` (0016, backups v10): medication, hour, minute,
+  `daysMask` (bit 0 = Monday … bit 6 = Sunday), enabled — edited in the
+  medication form and replaced in the same transaction as the medication.
+  Scheduling (`reminderService.ts`, serialized, own slot `med-reminder`
+  only): one WEEKLY trigger per (weekday, time) grouping every **active**
+  med due (expo weekday 1 = Sunday). The **"Took them"** button (only
+  when every med due has a default dose + unit; `opensAppToForeground`)
+  re-reads the meds at tap time and writes ONE event at current defaults,
+  then an Undo alert; a body tap opens `/medication/entry/new?medicationIds=`
+  with those lines ticked. A reminder never writes a dose by itself.
+  **Response guards key on the firing, not the identifier**
+  (`responseHandledKey`: identifier + delivery time + action) — a
+  repeating DAILY/WEEKLY trigger keeps its identifier, and keying on it
+  alone ignored every later firing while Home stayed mounted (review
+  2026-10-02; also fixed #26's meal-reminder tap).
 - **Real-SQLite repository tests (2026-09-27, GitHub #18).** `jest/expo-sqlite-node.ts`
   is a Jest-only fake `expo-sqlite` backed by Node's built-in `node:sqlite`
   (**Node ≥ 22.13 to run the tests**; no dependency). A DB test file starts
@@ -406,6 +422,11 @@ MVP entities:
   0014, GitHub #26; needs a default dose + unit). **medicationDose**
   addition: `reason` (text, nullable — migration 0015, GitHub #28).
   Backups v8 / v9.
+
+- **medicationReminder** (`medication_reminder`, migration 0016 — GitHub
+  #29): `id`, `medicationId`, `hour` (0–23), `minute`, `daysMask`
+  (1–127, bit 0 = Monday), `enabled`, `createdAt`, `updatedAt`. Backups
+  v10.
 
 - **savedMeal** (`saved_meal`, migration 0013 — GitHub #25)
   - `id`, `name`, `nameKey` (trimmed lowercase, **unique**), `type`

@@ -160,6 +160,15 @@ never run Metro, so bundler/Babel bugs hide from them; this catches them.
   Review fix: the suspect must have been eaten in the baseline, otherwise a
   "drop" while avoiding it proves nothing (new inconclusive rule + preview
   warning); the watchlist store now refreshes after a start.
+- **Medication reminders (GitHub #29):** reminders per medication (times +
+  weekdays) in its form; one notification per time listing every med due,
+  with a "Took them" button (when they all have a default dose) that saves
+  one dose entry with Undo, and a tap that opens the entry form with those
+  meds ticked. New table `medication_reminder` (0016), backups v10. Review
+  fix: the tap guards remembered a notification's identifier, which a
+  repeating reminder keeps forever — with the app left running, next
+  week's "Took them" (and #26's next-morning meal-reminder tap) did
+  nothing. Flow `zg-med-reminders` (form side).
 - **Medication adherence + as-needed reasons (GitHub #28):** "Logged on 26
   of the last 30 days" for regular meds and "Logged on 4 days in the last
   30" for as-needed ones on the Meds tab; a dose calendar on each
@@ -315,7 +324,7 @@ analysis.
 | 15 | ~~**Faster logging** (GH #26)~~ — *✅ 2026-10-01 (device check owed; on the #19 branch)* | Favourites ("usual breakfast"), log straight from the reminder notification (subsumes the reminder deep-link), one-tap "took my regular meds". Adherence and data quality die when logging is tedious. | M | |
 | 16 | **Optional app lock** (GH #27) — *⏸ deferred by the owner 2026-10-01 (decided so far: lock on open + after 1 min in the background; dependency not yet approved)* | Sensitive health data (BMs, symptoms, medications) with no lock. | S–M | ⚠ likely `expo-local-authentication` — owner approval + CVE check. |
 | 17 | ~~**Medication adherence view + as-needed reason** (GH #28)~~ — *✅ 2026-10-01 (device check owed; on the #19 branch)* | "Taken 26 of 30 days" calendar; a reason field for as-needed doses ("ibuprofen — headache"). | S–M | Builds on Cycle B history. |
-| 18 | **Medication reminders** (GH #29) | Owner-requested enhancement: local notifications from a structured schedule (times/days) via the approved `expo-notifications`. | M | A reminder must never become a dose record (#10/#11). Needs a structured schedule, not today's free-text frequency. |
+| 18 | ~~**Medication reminders** (GH #29)~~ — *✅ 2026-10-02 (device check owed; on the #19 branch)* | Owner-requested enhancement: local notifications from a structured schedule (times/days) via the approved `expo-notifications`. | M | A reminder must never become a dose record (#10/#11). Needs a structured schedule, not today's free-text frequency. |
 | 19 | **iOS pass** (GH #30) | Every device check so far is Android. Includes the #2 keyboard checks (Done on a number pad, tap-outside on Home, drag-to-dismiss), the iOS icon, time-picker feel. | M | Owner — no iOS device/Mac in this environment. |
 
 ## Tier 0 — Foundations · ✅ complete

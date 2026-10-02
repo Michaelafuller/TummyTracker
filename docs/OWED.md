@@ -15,13 +15,14 @@ Status at a glance (2026-09-30):
   `f6e6593`), but it can't conflict: RESUME_HERE.md is a new file — delete it
   in the merge.
 - Branch `worktree-agent-a93006f35a36fc943` (worktree
-  `.claude/worktrees/agent-a93006f35a36fc943`) = #19–#26 and #28 on top of
+  `.claude/worktrees/agent-a93006f35a36fc943`) = #19–#26, #28 and #29 on top of
   `39224e7`, reviewed, **unmerged, unpushed**; adds migrations **0011**
   (`experiment`), **0012** (`day_factor`) and **0013** (`saved_meal`,
   `saved_meal_component`), **0014** (`medication.is_regular`), **0015**
-  (`medication_dose.reason`) and backups **v5 → v9**.
+  (`medication_dose.reason`), **0016** (`medication_reminder`) and backups
+  **v5 → v10**.
 - Device: Pixel 5, dev client = the 2026-08-29 EAS development build. All
-  #13–#28 work is JS + migrations — **no new build needed** (#27, which
+  #13–#29 work is JS + migrations — **no new build needed** (#27, which
   would need one, is deferred).
 - Last device baseline: 34/34 Maestro on 2026-09-27. Last full Jest: 113 /
   1,168 on `main` (2026-09-27). The branch has only had targeted Jest since.
@@ -69,12 +70,12 @@ Then tell the orchestrator → it merges the branch into `main` (§2).
       `bundle:check` on `main`; record in `docs/RESULTS.md`.
 - [ ] Owner: **push** when happy.
 
-## 3. On the merged `main` — #19–#28
+## 3. On the merged `main` — #19–#29
 
 Flows:
 
 ```
-maestro test flows/z-experiment-start.yaml flows/zc-day-details.yaml flows/zd-my-meals.yaml flows/ze-faster-logging.yaml flows/zf-med-adherence.yaml --format junit --output flows/results-19-28.xml
+maestro test flows/z-experiment-start.yaml flows/zc-day-details.yaml flows/zd-my-meals.yaml flows/ze-faster-logging.yaml flows/zf-med-adherence.yaml flows/zg-med-reminders.yaml --format junit --output flows/results-19-29.xml
 ```
 
 Verdict path (backdated fixture — covers #19, #20, #21 and #23 in one import):
@@ -104,6 +105,16 @@ Manual:
       phase boundary falls, or temporarily set the device clock.)
 - [ ] **#19 PDF:** "Elimination experiments" table (term, dates, status,
       frozen verdict).
+- [ ] **#29 reminders, by hand (needs real time to pass):** two meds with
+      default doses, a reminder each at the same time 2 min ahead → ONE
+      notification "Time for A and B" with **Took them** → tap it → the app
+      opens, "Logged A …, B … at …" with Undo; the Meds tab shows one entry.
+      Tap Undo on a second try → the entry is gone. A med with no default
+      dose → its notification has no button; tapping it opens the entry form
+      with that med ticked. A weekday you unticked → no notification that
+      day. Mark a med inactive → its reminder stops. **Leave the app running
+      across two firings** (review fix): the second "Took them" must log
+      too, and a breakfast reminder must open the quick log on day two.
 - [ ] **#28 adherence, by eye:** your real medications' lines on the Meds
       tab read sensibly (a regular med you've taken for months: "Logged on N
       of the last 30 days"); the dose calendar on a medication's screen
@@ -147,8 +158,8 @@ Manual:
 ## 5. GitHub housekeeping (owner-only — the agent never moves cards)
 
 - [ ] Close / move to Done: **#1, #2, #4–#11** (2026-09-26 session), **#12**,
-      **#13–#18** (after §1), **#19–#26 and #28** (after §3), and #29+ as
-      they ship (#27 stays open — deferred).
+      **#13–#18** (after §1), **#19–#26, #28 and #29** (after §3); #27 stays
+      open (deferred); #30 is the iOS pass (§4).
 
 ## 6. Decisions the owner may want to revisit (made as plan defaults)
 
@@ -161,6 +172,10 @@ Manual:
   the next), "more" caffeine, period.
 - Slower patterns (#21): a key that was only a hidden low-confidence 24 h
   signal can appear as a 48 h slower pattern.
+- Medication reminders (#29): one notification per time for all meds due;
+  "Took them" logs at tap time with the meds' current default doses (not
+  the reminder's time); weekdays default to every day; inactive meds'
+  reminders are kept but silent.
 - Adherence (#28): the 30-day window ends today; a regular med counts from
   its first logged dose (not its stated start date); a finished course gets
   the as-needed wording; reasons max 60 characters, up to 5 chips.

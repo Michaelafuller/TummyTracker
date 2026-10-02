@@ -17,8 +17,8 @@
   - **Branch `worktree-agent-a93006f35a36fc943`** in the git worktree
     `C:\Users\E146796\projects\TummyTracker\.claude\worktrees\agent-a93006f35a36fc943`
     (its `node_modules` is a junction to the main checkout's) =
-    **#19 (A + B), #20, #21, #22, #23, #24, #25, #26, #28**, all reviewed, unmerged, unpushed.
-    Migrations 0011–0015; backups v9. **This is where the burn-down
+    **#19 (A + B), #20, #21, #22, #23, #24, #25, #26, #28, #29**, all reviewed, unmerged, unpushed.
+    Migrations 0011–0016; backups v10. **This is where the burn-down
     continues** — and where the newest `docs/` live (main's copies are
     stale; `docs/RESUME_HERE.md` on `main` points here).
 - **Owner's instruction (2026-09-30):** keep burning down the backlog on the
@@ -31,12 +31,12 @@
 ## 2. What's next
 
 Backlog: `docs/PROGRESS.md` → "Ranked backlog — continued" (GitHub #24–#30).
-Done so far this burn-down: #13–#26 and #28. #16 optional app lock (GH #27) is
+**The buildable backlog is done (2026-10-02):** #13–#26, #28 and #29. #16 optional app lock (GH #27) is
 **deferred by the owner (2026-10-01)** — `expo-local-authentication` 56.0.5
 had 0 advisories but needs a new dev build; they chose to skip for now (lock
-timing already decided: on open + after 1 min away). **Next: #18 medication
-reminders (GH #29)**, #19 iOS pass
-(GH #30 — owner-only, no Mac here; goes to OWED.md).
+timing already decided: on open + after 1 min away). #19 iOS pass (GH #30)
+is owner-only (no Mac here) — it's in OWED.md §4. **Next: walk the owner
+through `docs/OWED.md`** (below).
 
 When the backlog is done: walk the owner through `docs/OWED.md` in order
 (§1 on `main` → merge → §3 on merged `main`), fixing flow-side issues as
