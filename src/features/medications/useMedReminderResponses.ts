@@ -7,6 +7,7 @@ import { createMedicationEvent, deleteMedicationEvent, listMedications } from '@
 import type { Medication } from '@/db/schema';
 import { formatTime12h } from '@/lib/datetime';
 import { formatDoseAmount } from '@/lib/medications';
+import { responseHandledKey } from '@/features/notifications/model';
 import { parseMedReminderResponse, tookDoses } from './reminderModel';
 
 type Router = ReturnType<typeof useRouter>;
@@ -60,10 +61,11 @@ export function useMedReminderResponses(): void {
     const parsed = parseMedReminderResponse(response);
     if (!parsed) return;
 
-    // Once per (notification, action) pair — a relaunch or re-render must not
-    // log a second dose even before clearLastNotificationResponse takes effect.
+    // Once per (firing, action) — a relaunch or re-render must not log a second
+    // dose even before clearLastNotificationResponse takes effect, but next
+    // week's firing of the same WEEKLY reminder (same identifier) must log.
     const identifier = response.notification.request.identifier;
-    const key = `${identifier}:${response.actionIdentifier}`;
+    const key = responseHandledKey(response);
     if (handled.current.has(key)) return;
     handled.current.add(key);
 

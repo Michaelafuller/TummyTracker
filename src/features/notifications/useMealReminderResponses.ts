@@ -2,7 +2,7 @@ import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef } from 'react';
 
-import { parseMealReminderResponse } from './model';
+import { parseMealReminderResponse, responseHandledKey } from './model';
 
 /**
  * Opens the quick-log screen for a slot when the user taps one of our
@@ -24,9 +24,10 @@ export function useMealReminderResponses(): void {
 
     // Once per notification id — a re-render with the same response object
     // (before clearLastNotificationResponse takes effect) must not push twice.
-    const identifier = response.notification.request.identifier;
-    if (handled.current.has(identifier)) return;
-    handled.current.add(identifier);
+    // Per firing, not per identifier: a DAILY reminder keeps its identifier.
+    const key = responseHandledKey(response);
+    if (handled.current.has(key)) return;
+    handled.current.add(key);
 
     router.push({ pathname: '/quick-log', params: { slot: parsed.slot } });
     try {

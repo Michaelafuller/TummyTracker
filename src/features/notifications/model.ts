@@ -64,6 +64,23 @@ export function remindersFromScheduled(scheduled: readonly ScheduledLike[]): Rem
 /** `actionIdentifier` of a plain tap on a notification body (expo-notifications' `DEFAULT_ACTION_IDENTIFIER`). */
 export const DEFAULT_TAP_ACTION = 'expo.modules.notifications.actions.DEFAULT';
 
+/** The parts of a notification response the once-only guards read. */
+export interface HandledResponseLike {
+  actionIdentifier: string;
+  notification: { date?: number; request: { identifier: string } };
+}
+
+/**
+ * The key a response hook remembers so it handles each tap once. A repeating
+ * trigger (DAILY meal reminders, WEEKLY medication reminders) keeps the SAME
+ * request identifier on every firing, and Home can stay mounted for days, so
+ * the delivery time is part of the key — otherwise the next firing's tap was
+ * silently ignored (review 2026-10-02).
+ */
+export function responseHandledKey(r: HandledResponseLike): string {
+  return `${r.notification.request.identifier}:${r.notification.date ?? ''}:${r.actionIdentifier}`;
+}
+
 /** The minimal response shape we read (a subset of expo-notifications' `NotificationResponse`). */
 export interface MealReminderResponseLike {
   actionIdentifier: string;

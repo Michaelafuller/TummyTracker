@@ -20,8 +20,9 @@ function tap(
   identifier = 'notif-1',
   data: Record<string, unknown> = { slot: 'breakfast', hour: 8, minute: 0 },
   actionIdentifier = DEFAULT_TAP_ACTION,
+  date = 1_000,
 ) {
-  return { actionIdentifier, notification: { request: { identifier, content: { data } } } };
+  return { actionIdentifier, notification: { date, request: { identifier, content: { data } } } };
 }
 
 beforeEach(() => {
@@ -41,6 +42,18 @@ describe('useMealReminderResponses', () => {
     );
     expect(mockPush).toHaveBeenCalledTimes(1);
     expect(Notifications.clearLastNotificationResponse).toHaveBeenCalledTimes(1);
+  });
+
+  // Review 2026-10-02: a DAILY trigger keeps its identifier every day; Home can
+  // stay mounted for days, so the identifier alone ignored tomorrow's tap.
+  it('the same daily reminder tapped again the next day opens the quick log again', async () => {
+    mockResponse = tap('daily-breakfast', { slot: 'breakfast' }, DEFAULT_TAP_ACTION, 1_000);
+    const { rerender } = await renderHook(() => useMealReminderResponses());
+    expect(mockPush).toHaveBeenCalledTimes(1);
+
+    mockResponse = tap('daily-breakfast', { slot: 'breakfast' }, DEFAULT_TAP_ACTION, 1_000 + 24 * 60 * 60 * 1000);
+    await rerender({});
+    expect(mockPush).toHaveBeenCalledTimes(2);
   });
 
   it('handles a different notification identifier separately', async () => {

@@ -44,14 +44,21 @@ function med(id: string, name: string, overrides: Partial<Medication> = {}): Med
   };
 }
 
-function response(action: string, medicationIds: string[], identifier = 'notif-1', slot = MED_REMINDER_SLOT) {
+function response(
+  action: string,
+  medicationIds: string[],
+  identifier = 'notif-1',
+  slot = MED_REMINDER_SLOT,
+  date = 1_000,
+) {
   return {
     actionIdentifier: action,
-    notification: { request: { identifier, content: { data: { slot, medicationIds } } } },
+    notification: { date, request: { identifier, content: { data: { slot, medicationIds } } } },
   };
 }
 
-const tookResponse = (ids: string[], identifier = 'notif-1') => response(MED_REMINDER_TOOK_ACTION, ids, identifier);
+const tookResponse = (ids: string[], identifier = 'notif-1', date = 1_000) =>
+  response(MED_REMINDER_TOOK_ACTION, ids, identifier, MED_REMINDER_SLOT, date);
 
 let dateNowSpy: jest.SpyInstance | undefined;
 
@@ -95,6 +102,19 @@ describe('useMedReminderResponses — Took them', () => {
       'Logged Levothyroxine 50 mcg, Vitamin D 1000 unit at 8:02 AM.',
     );
     expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  // Review 2026-10-02: a WEEKLY trigger keeps its request identifier every
+  // week, and Home can stay mounted for days — keying on the identifier alone
+  // silently ignored next week's "Took them".
+  it('a repeating reminder firing again (same identifier, new delivery time) logs again', async () => {
+    mockResponse = tookResponse(['lev'], 'weekly-mon-0800', 1_000);
+    const { rerender } = await renderHook(() => useMedReminderResponses());
+    await waitFor(() => expect(createMedicationEvent).toHaveBeenCalledTimes(1));
+
+    mockResponse = tookResponse(['lev'], 'weekly-mon-0800', 1_000 + 7 * 24 * 60 * 60 * 1000);
+    await rerender({});
+    await waitFor(() => expect(createMedicationEvent).toHaveBeenCalledTimes(2));
   });
 
   it('logs exactly once even across re-renders with the same response', async () => {
