@@ -3,6 +3,7 @@ import { fireEvent, render, waitFor } from '@testing-library/react-native';
 
 import { getMedication, listMedicationReminders, setMedicationActive, updateMedication } from '@/db/repository';
 import type { Medication, MedicationDose, MedicationEvent } from '@/db/schema';
+import { requestMedicationReminderRefresh } from '@/features/medications/reminderService';
 import EditMedicationScreen from '../[id]';
 
 const mockBack = jest.fn();
@@ -27,6 +28,10 @@ let mockDoses: MedicationDose[] = [];
 jest.mock('@/features/medications/useMedicationData', () => ({
   useMedicationEvents: () => mockEvents,
   useMedicationDoses: () => mockDoses,
+}));
+
+jest.mock('@/features/medications/reminderService', () => ({
+  requestMedicationReminderRefresh: jest.fn(),
 }));
 
 jest.mock('react-native-calendars', () => ({
@@ -88,6 +93,7 @@ describe('EditMedicationScreen', () => {
       expect.objectContaining({ name: 'Omeprazole', frequency: 'twice daily' }),
     );
     expect(mockBack).toHaveBeenCalled();
+    expect(requestMedicationReminderRefresh).toHaveBeenCalledTimes(1);
   });
 
   it('shows "Mark inactive" for an active medication; pressing it calls setMedicationActive(id, false)', async () => {
@@ -102,6 +108,8 @@ describe('EditMedicationScreen', () => {
     await fireEvent.press(await findByLabelText('Mark inactive'));
 
     expect(setMedicationActive).toHaveBeenCalledWith('med1', false);
+    // Marking inactive stops its reminders (GitHub #29).
+    expect(requestMedicationReminderRefresh).toHaveBeenCalledTimes(1);
     await waitFor(async () => expect(await findByLabelText('Mark active')).toBeTruthy());
   });
 
@@ -116,6 +124,7 @@ describe('EditMedicationScreen', () => {
     await fireEvent.press(await findByLabelText('Mark active'));
 
     expect(setMedicationActive).toHaveBeenCalledWith('med1', true);
+    expect(requestMedicationReminderRefresh).toHaveBeenCalledTimes(1);
     await waitFor(async () => expect(await findByLabelText('Mark inactive')).toBeTruthy());
   });
 });

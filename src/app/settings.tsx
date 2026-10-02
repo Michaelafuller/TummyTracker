@@ -35,6 +35,7 @@ import {
 } from '@/features/backup/backupService';
 import { disableDayCheckIn, refreshDayCheckIn } from '@/features/checkin/dayCheckInService';
 import { requestExperimentNotificationRefresh } from '@/features/experiments/experimentNotifications';
+import { requestMedicationReminderRefresh } from '@/features/medications/reminderService';
 import {
   DEFAULT_REMINDERS,
   REMINDER_SLOTS,
@@ -235,6 +236,8 @@ export default function SettingsScreen() {
       // Medication reminder schedule (GitHub #29): ids preserved, an id that
       // already exists on the device is skipped.
       await insertMedicationRemindersPreservingIds(parsed.medicationReminders);
+      // Restored reminders (or restored medications) need arming — fire-and-forget, own slot only.
+      requestMedicationReminderRefresh();
 
       const medSummary =
         parsed.medications.length > 0

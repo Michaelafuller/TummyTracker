@@ -11,6 +11,7 @@ import { getMedication, listMedicationReminders, setMedicationActive, updateMedi
 import type { Medication, MedicationReminder } from '@/db/schema';
 import { medicationToFormState, type BuiltMedication } from '@/features/medications/formModel';
 import { MedicationForm } from '@/features/medications/MedicationForm';
+import { requestMedicationReminderRefresh } from '@/features/medications/reminderService';
 import type { ReminderInput } from '@/features/medications/reminderModel';
 import { useMedicationDoses, useMedicationEvents } from '@/features/medications/useMedicationData';
 import { useTheme } from '@/hooks/use-theme';
@@ -68,6 +69,7 @@ export default function EditMedicationScreen() {
     setSubmitting(true);
     try {
       await updateMedication(id, { ...built, reminders: builtReminders });
+      requestMedicationReminderRefresh();
       router.back();
     } finally {
       setSubmitting(false);
@@ -79,6 +81,8 @@ export default function EditMedicationScreen() {
     setTogglingActive(true);
     try {
       await setMedicationActive(id, !medication.isActive);
+      // An inactive medication's reminders stop; reactivating schedules them again.
+      requestMedicationReminderRefresh();
       await load();
     } finally {
       setTogglingActive(false);

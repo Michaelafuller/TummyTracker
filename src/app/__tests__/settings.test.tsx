@@ -21,6 +21,7 @@ import {
 } from '@/db/repository';
 import { disableDayCheckIn, refreshDayCheckIn } from '@/features/checkin/dayCheckInService';
 import { requestExperimentNotificationRefresh } from '@/features/experiments/experimentNotifications';
+import { requestMedicationReminderRefresh } from '@/features/medications/reminderService';
 import { DEFAULT_REMINDERS } from '@/features/notifications/model';
 import { ensureNotificationPermission, getReminders } from '@/features/notifications/service';
 import { usePrefsStore } from '@/features/prefs/prefsStore';
@@ -102,6 +103,10 @@ jest.mock('@/features/notifications/service', () => ({
 jest.mock('@/features/checkin/dayCheckInService', () => ({
   disableDayCheckIn: jest.fn(),
   refreshDayCheckIn: jest.fn(),
+}));
+
+jest.mock('@/features/medications/reminderService', () => ({
+  requestMedicationReminderRefresh: jest.fn(),
 }));
 
 jest.mock('@/features/experiments/experimentNotifications', () => ({
@@ -796,6 +801,8 @@ describe('SettingsScreen — Data section (medication reminders, GitHub #29)', (
       expect(Alert.alert).toHaveBeenCalledWith('Import complete', 'Imported 0 entries (0 already existed).'),
     );
     expect(insertMedicationRemindersPreservingIds).toHaveBeenCalledWith(backup.medicationReminders);
+    // Restored reminders get armed, after they were inserted.
+    expect(requestMedicationReminderRefresh).toHaveBeenCalledTimes(1);
     (Alert.alert as jest.Mock).mockRestore();
   });
 });
