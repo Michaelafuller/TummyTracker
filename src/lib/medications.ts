@@ -168,12 +168,24 @@ export function formatDoseSummary(med: DoseSummarySource): string {
 export function regularDoses(meds: readonly Medication[]): MedicationDoseInput[] {
   const doses: MedicationDoseInput[] = [];
   for (const med of meds) {
-    if (!med.isActive || !med.isRegular) continue;
-    const unit = med.doseUnit?.trim() ?? '';
-    if (med.defaultDose == null || !(med.defaultDose > 0) || unit.length === 0) continue;
-    doses.push({ medicationId: med.id, dose: med.defaultDose, doseUnit: unit, reason: null });
+    if (!med.isRegular) continue;
+    const dose = activeDefaultDose(med);
+    if (dose) doses.push(dose);
   }
   return doses;
+}
+
+/**
+ * One dose line at a medication's CURRENT default — null unless the medication
+ * is active with a default dose > 0 and a non-empty unit. The single rule
+ * shared by "Took my regular meds" (#26) and a medication reminder's "Took
+ * them" action (#29); `reason` is always null (an explicit tap, no free text).
+ */
+export function activeDefaultDose(med: Medication): MedicationDoseInput | null {
+  if (!med.isActive) return null;
+  const unit = med.doseUnit?.trim() ?? '';
+  if (med.defaultDose == null || !(med.defaultDose > 0) || unit.length === 0) return null;
+  return { medicationId: med.id, dose: med.defaultDose, doseUnit: unit, reason: null };
 }
 
 // Re-exported so callers only need one import for the fixed unit list.

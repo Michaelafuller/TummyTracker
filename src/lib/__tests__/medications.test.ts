@@ -15,6 +15,7 @@ import {
   pastReasons,
   reasonSuggestionsByMedication,
   validateReason,
+  activeDefaultDose,
   regularDoses,
   summarizeMedicationUse,
   validateMedication,
@@ -925,5 +926,19 @@ describe('reasonSuggestionsByMedication', () => {
       [...a.doses, ...b.doses, ...c.doses],
     );
     expect(map).toEqual({ prn: ['headache'] });
+  });
+});
+
+describe('activeDefaultDose (GitHub #29)', () => {
+  it('returns the current default dose + trimmed unit for an active medication, regular or not', () => {
+    const med = makeMedication({ id: 'a', defaultDose: 0.5, doseUnit: ' tablet ', isRegular: false });
+    expect(activeDefaultDose(med)).toEqual({ medicationId: 'a', dose: 0.5, doseUnit: 'tablet', reason: null });
+  });
+
+  it('is null when inactive, or when the dose is missing / not positive or the unit is blank', () => {
+    expect(activeDefaultDose(makeMedication({ isActive: false, defaultDose: 1, doseUnit: 'mg' }))).toBeNull();
+    expect(activeDefaultDose(makeMedication({ defaultDose: null, doseUnit: 'mg' }))).toBeNull();
+    expect(activeDefaultDose(makeMedication({ defaultDose: 0, doseUnit: 'mg' }))).toBeNull();
+    expect(activeDefaultDose(makeMedication({ defaultDose: 1, doseUnit: '  ' }))).toBeNull();
   });
 });
