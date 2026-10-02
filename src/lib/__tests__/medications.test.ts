@@ -727,26 +727,40 @@ describe('adherenceSummary — regular medications', () => {
     expect(adherenceSummary(regular, events, doses, NOW)).toEqual({ daysWithDose: 3, denominator: 10 });
   });
 
-  it('clips to a later startDate than the first dose', () => {
+  // Review 2026-10-01: the stated start/end dates are notes, not a schedule.
+  // Clipping by them made "of the last M days" false (an end date in the past)
+  // and counted doses outside the M days ("2 of the last 6" with 1 in range).
+  it('ignores a startDate later than the first dose: the days run from the first dose to today', () => {
     const med = { ...regular, startDate: daysAgoAt(5, 0, 0) };
     const { events, doses } = logDoses('med1', [daysAgoAt(20), daysAgoAt(2)]);
-    // Window clipped to start 5 days ago -> 6 days; the dose 20 days ago is still counted, and the
-    // denominator never drops below the days that have a dose.
-    expect(adherenceSummary(med, events, doses, NOW)).toEqual({ daysWithDose: 2, denominator: 6 });
+    expect(adherenceSummary(med, events, doses, NOW)).toEqual({ daysWithDose: 2, denominator: 21 });
   });
 
-  it('clips to an earlier endDate (inclusive of that day)', () => {
+  it('a regular medication whose end date has passed gets no denominator (its course is over)', () => {
     const med = { ...regular, endDate: daysAgoAt(10, 0, 0) };
     const { events, doses } = logDoses('med1', [daysAgoAt(40), daysAgoAt(25), daysAgoAt(11)]);
-    // Window start (29 ago) .. end date (10 ago) inclusive = 20 days.
-    expect(adherenceSummary(med, events, doses, NOW)).toEqual({ daysWithDose: 2, denominator: 20 });
+    expect(adherenceSummary(med, events, doses, NOW)).toEqual({ daysWithDose: 2, denominator: null });
+    expect(adherenceLine(med, adherenceSummary(med, events, doses, NOW))).toBe('Logged on 2 days in the last 30');
   });
 
-  it('never lets the denominator drop below the days with a dose (a dose after the endDate still counts)', () => {
-    const med = { ...regular, endDate: daysAgoAt(28, 0, 0) };
-    const { events, doses } = logDoses('med1', [daysAgoAt(40), daysAgoAt(10), daysAgoAt(5), daysAgoAt(0)]);
-    // Window start .. endDate = 2 days, but 3 days have doses.
-    expect(adherenceSummary(med, events, doses, NOW)).toEqual({ daysWithDose: 3, denominator: 3 });
+  it('an end date of today or later still counts the last days up to today', () => {
+    const med = { ...regular, endDate: daysAgoAt(0, 0, 0) };
+    const { events, doses } = logDoses('med1', [daysAgoAt(9), daysAgoAt(0)]);
+    expect(adherenceSummary(med, events, doses, NOW)).toEqual({ daysWithDose: 2, denominator: 10 });
+  });
+
+  it('the count never exceeds the days it is measured against', () => {
+    const med = { ...regular, startDate: daysAgoAt(3, 0, 0), endDate: daysAgoAt(1, 0, 0) };
+    const { events, doses } = logDoses('med1', [daysAgoAt(15), daysAgoAt(8), daysAgoAt(0)]);
+    const summary = adherenceSummary(med, events, doses, NOW);
+    expect(summary.denominator === null || summary.daysWithDose <= summary.denominator).toBe(true);
+  });
+
+  it('first dose today reads "Logged today", never "1 of the last 1 days"', () => {
+    const { events, doses } = logDoses('med1', [daysAgoAt(0)]);
+    const summary = adherenceSummary(regular, events, doses, NOW);
+    expect(summary).toEqual({ daysWithDose: 1, denominator: 1 });
+    expect(adherenceLine(regular, summary)).toBe('Logged today');
   });
 
   it('keeps 30 across a DST change (counts local days, not 24 h blocks)', () => {

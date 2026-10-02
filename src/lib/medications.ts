@@ -436,13 +436,17 @@ export interface AdherenceSummary {
 /**
  * "How many days did this medication get logged?" over the last 30 local days
  * (GitHub #28). A day counts once however many doses it has. For a regular
- * medication the denominator starts at the latest of the window start, the
- * medication's `startDate` and its first logged dose ever, and ends at its
- * `endDate` when that is earlier (the same clipping as the report's
- * `daysInRange`); as-needed medications have no denominator.
+ * medication still in use, the denominator is the local days from the later
+ * of the window start and its FIRST logged dose ever, up to today — so "of the
+ * last M days" is always literally true and every counted dose falls inside
+ * those M days. The medication's stated start/end dates are notes, not a
+ * schedule, and are not used to clip (review 2026-10-01: an end date in the
+ * past made "the last M days" false, and a later start date counted doses
+ * outside the M days). A regular medication whose end date has passed, and
+ * every as-needed medication, has no denominator.
  */
 export function adherenceSummary(
-  med: Pick<Medication, 'id' | 'startDate' | 'endDate' | 'isRegular'>,
+  med: Pick<Medication, 'id' | 'endDate' | 'isRegular'>,
   events: readonly MedicationEvent[],
   doses: readonly MedicationDose[],
   now: number,
@@ -453,36 +457,31 @@ export function adherenceSummary(
   const daysWithDose = new Set(inWindow.map((record) => formatDateInput(record.takenAt))).size;
 
   if (!med.isRegular) return { daysWithDose, denominator: null };
+  const todayStart = dayBounds(now).start;
+  if (med.endDate != null && med.endDate < todayStart) return { daysWithDose, denominator: null };
 
   let firstDoseDayStart: number | null = null;
   for (const record of records) {
     const dayStart = dayBounds(record.takenAt).start;
     if (firstDoseDayStart == null || dayStart < firstDoseDayStart) firstDoseDayStart = dayStart;
   }
-  const effectiveStart =
-    med.startDate != null && firstDoseDayStart != null
-      ? Math.max(med.startDate, firstDoseDayStart)
-      : (med.startDate ?? firstDoseDayStart);
-
-  return {
-    daysWithDose,
-    denominator: computeDaysInRange(window, { startDate: effectiveStart, endDate: med.endDate }, daysWithDose),
-  };
+  const start = firstDoseDayStart != null ? Math.max(window.start, firstDoseDayStart) : window.start;
+  return { daysWithDose, denominator: countLocalDays(start, window.end) };
 }
 
 /**
  * The adherence wording (GitHub #28): logged days only, never a
  * percentage. "Logged on 26 of the last 30 days", "Logged on 4 of the last 10
- * days" (a younger regular medication), "Logged on 4 days in the last 30"
- * (as-needed), or "No doses logged in the last 30 days".
+ * days" (a younger regular medication), "Logged today" (its first day),
+ * "Logged on 4 days in the last 30" (as-needed, or a finished course), or
+ * "No doses logged in the last 30 days".
  */
 export function adherenceLine(med: Pick<Medication, 'isRegular'>, summary: AdherenceSummary): string {
   const { daysWithDose, denominator } = summary;
   if (daysWithDose === 0) return `No doses logged in the last ${ADHERENCE_WINDOW_DAYS} days`;
   if (med.isRegular && denominator != null) {
-    return denominator === ADHERENCE_WINDOW_DAYS
-      ? `Logged on ${daysWithDose} of the last ${ADHERENCE_WINDOW_DAYS} days`
-      : `Logged on ${daysWithDose} of the last ${denominator} days`;
+    if (denominator === 1) return 'Logged today';
+    return `Logged on ${daysWithDose} of the last ${denominator} days`;
   }
   return `Logged on ${daysWithDose} ${daysWithDose === 1 ? 'day' : 'days'} in the last ${ADHERENCE_WINDOW_DAYS}`;
 }
