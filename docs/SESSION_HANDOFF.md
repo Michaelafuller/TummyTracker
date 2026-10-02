@@ -31,9 +31,11 @@
 ## 2. What's next
 
 Backlog: `docs/PROGRESS.md` → "Ranked backlog — continued" (GitHub #24–#30).
-Done so far this burn-down: #13–#26. **Next: #16 optional app lock (GH #27 — ⚠ likely a new dependency,
-`expo-local-authentication`: owner approval + CVE check)**, then #17 medication
-adherence view (GH #28), #18 medication reminders (GH #29), #19 iOS pass
+Done so far this burn-down: #13–#26. #16 optional app lock (GH #27) is
+**deferred by the owner (2026-10-01)** — `expo-local-authentication` 56.0.5
+had 0 advisories but needs a new dev build; they chose to skip for now (lock
+timing already decided: on open + after 1 min away). **Next: #17 medication
+adherence view (GH #28)**, #18 medication reminders (GH #29), #19 iOS pass
 (GH #30 — owner-only, no Mac here; goes to OWED.md).
 
 When the backlog is done: walk the owner through `docs/OWED.md` in order
