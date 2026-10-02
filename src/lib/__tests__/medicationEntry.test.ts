@@ -5,6 +5,8 @@ import {
   defaultEntryState,
   entryStateFromEvent,
   type MedicationEntryFormState,
+  allLinesSelected,
+  setAllLinesSelected,
 } from '../medicationEntry';
 
 function makeMedication(overrides: Partial<Medication> = {}): Medication {
@@ -347,5 +349,51 @@ describe('reason on a dose line (GitHub #28)', () => {
     const result = buildMedicationEntry(entryStateFromEvent(event, doses, meds));
     expect(result.valid).toBe(true);
     expect(result.doses).toEqual([{ medicationId: 'med1', dose: 200, doseUnit: 'mg', reason: 'headache' }]);
+  });
+});
+
+describe('allLinesSelected / setAllLinesSelected', () => {
+  const NOW = new Date(2026, 8, 26, 9, 0).getTime();
+  const meds = [
+    makeMedication({ id: 'a', defaultDose: 20, doseUnit: 'mg' }),
+    makeMedication({ id: 'b', defaultDose: 200, doseUnit: 'mg' }),
+  ];
+
+  it('is true only when there is at least one line and every line is selected', () => {
+    const state = defaultEntryState(meds, NOW);
+    expect(allLinesSelected(state)).toBe(false);
+    expect(allLinesSelected({ ...state, lines: [{ ...state.lines[0], selected: true }, state.lines[1]] })).toBe(false);
+    expect(allLinesSelected(setAllLinesSelected(state, true))).toBe(true);
+    expect(allLinesSelected({ ...state, lines: [] })).toBe(false);
+  });
+
+  it("selects every line, keeping each line's dose, unit and reason", () => {
+    const state = defaultEntryState(meds, NOW);
+    const edited: MedicationEntryFormState = {
+      ...state,
+      lines: [{ ...state.lines[0], doseInput: '10', reasonInput: 'headache' }, state.lines[1]],
+    };
+    const result = setAllLinesSelected(edited, true);
+    expect(result.lines.map((l) => l.selected)).toEqual([true, true]);
+    expect(result.lines[0]).toMatchObject({ doseInput: '10', doseUnit: 'mg', reasonInput: 'headache' });
+    expect(result.lines[1]).toMatchObject({ doseInput: '200', doseUnit: 'mg' });
+  });
+
+  it('from a mixed selection, selecting all ticks the rest; clearing all unticks every line with values kept', () => {
+    const state = defaultEntryState(meds, NOW);
+    const mixed: MedicationEntryFormState = { ...state, lines: [{ ...state.lines[0], selected: true }, state.lines[1]] };
+    expect(setAllLinesSelected(mixed, true).lines.map((l) => l.selected)).toEqual([true, true]);
+
+    const cleared = setAllLinesSelected(setAllLinesSelected(mixed, true), false);
+    expect(cleared.lines.map((l) => l.selected)).toEqual([false, false]);
+    expect(cleared.lines.map((l) => l.doseInput)).toEqual(['20', '200']);
+  });
+
+  it('does not mutate its input or touch the other fields', () => {
+    const state = { ...defaultEntryState(meds, NOW), notes: 'hello' };
+    const result = setAllLinesSelected(state, true);
+    expect(state.lines.every((l) => !l.selected)).toBe(true);
+    expect(result.notes).toBe('hello');
+    expect(result.dateInput).toBe(state.dateInput);
   });
 });

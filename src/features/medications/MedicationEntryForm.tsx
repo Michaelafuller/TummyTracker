@@ -10,12 +10,14 @@ import { Spacing } from '@/constants/theme';
 import type { Medication } from '@/db/schema';
 import { useTheme } from '@/hooks/use-theme';
 import {
+  allLinesSelected,
   buildMedicationEntry,
   type BuiltMedicationDose,
   type BuiltMedicationEvent,
   type DoseLineState,
   type MedicationEntryErrors,
   type MedicationEntryFormState,
+  setAllLinesSelected,
 } from '@/lib/medicationEntry';
 import { DOSE_UNITS, MAX_OTHER_UNIT_LENGTH, MAX_REASON_LENGTH } from '@/lib/medications';
 import { MAX_NOTES_LENGTH } from '@/lib/validation';
@@ -91,6 +93,8 @@ export function MedicationEntryForm({
     }));
   }
 
+  const everyLineSelected = allLinesSelected(state);
+
   function handleUnitChipChange(medicationId: string, value: UnitChip | null) {
     if (value === 'other') {
       setOtherUnitIds((prev) => new Set(prev).add(medicationId));
@@ -157,6 +161,16 @@ export function MedicationEntryForm({
 
       <FormField label="Medications" error={errors.lines}>
         <View style={styles.lines}>
+          {state.lines.length > 1 ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={everyLineSelected ? 'Clear all medications' : 'Select all medications'}
+              testID="select-all-medications"
+              onPress={() => setState((prev) => setAllLinesSelected(prev, !allLinesSelected(prev)))}
+              style={styles.selectAll}>
+              <ThemedText type="linkPrimary">{everyLineSelected ? 'Clear all' : 'Select all'}</ThemedText>
+            </Pressable>
+          ) : null}
           {state.lines.map((line) => {
             const med = medsById.get(line.medicationId);
             if (!med) return null;
@@ -327,6 +341,9 @@ const styles = StyleSheet.create({
   },
   lines: {
     gap: Spacing.two,
+  },
+  selectAll: {
+    alignSelf: 'flex-start',
   },
   lineCard: {
     gap: Spacing.two,

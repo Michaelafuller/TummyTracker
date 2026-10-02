@@ -136,6 +136,21 @@ export function entryStateFromEvent(
   };
 }
 
+/** True when the form has at least one line and every line is selected ("Select all" -> "Clear all"). */
+export function allLinesSelected(state: MedicationEntryFormState): boolean {
+  return state.lines.length > 0 && state.lines.every((line) => line.selected);
+}
+
+/**
+ * Ticks (or unticks) every line at once. Only `selected` changes — each line's
+ * dose, unit and reason stay as they are, exactly as a single tick/untick
+ * leaves them. Never writes a dose; saving still goes through
+ * `buildMedicationEntry`.
+ */
+export function setAllLinesSelected(state: MedicationEntryFormState, selected: boolean): MedicationEntryFormState {
+  return { ...state, lines: state.lines.map((line) => ({ ...line, selected })) };
+}
+
 /** `timeKnown: false` lands on local noon of the date (#10) — the right day in every timezone offset. */
 function parseTakenAt(state: MedicationEntryFormState) {
   return state.timeKnown ? parseDateTime(state.dateInput, state.timeInput) : parseDateTime(state.dateInput, '12:00');

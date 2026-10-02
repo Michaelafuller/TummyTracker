@@ -449,3 +449,91 @@ describe('MedicationEntryForm — reason on as-needed lines (GitHub #28)', () =>
     expect(await findByText(/Reason must be 60 characters or fewer/)).toBeTruthy();
   });
 });
+
+describe('MedicationEntryForm — Select all / Clear all', () => {
+  const meds = [
+    makeMedication({ id: 'med1', name: 'Omeprazole', defaultDose: 20, doseUnit: 'mg', isRegular: true }),
+    makeMedication({ id: 'med2', name: 'Ibuprofen', defaultDose: 200, doseUnit: 'mg', isRegular: false }),
+  ];
+
+  it('is hidden with a single medication line', async () => {
+    const one = [meds[0]];
+    const { queryByTestId } = await render(
+      <MedicationEntryForm medications={one} initial={defaultEntryState(one, NOW)} onSubmit={jest.fn()} />,
+    );
+    expect(queryByTestId('select-all-medications')).toBeNull();
+  });
+
+  it('Select all ticks every line (as-needed lines show their reason field), then reads Clear all', async () => {
+    const { findByTestId, findByLabelText, queryByLabelText, getByTestId } = await render(
+      <MedicationEntryForm medications={meds} initial={defaultEntryState(meds, NOW)} onSubmit={jest.fn()} />,
+    );
+    expect(queryByLabelText('Reason for Ibuprofen')).toBeNull();
+
+    await fireEvent.press(await findByLabelText('Select all medications'));
+
+    expect(getByTestId('dose-line-med1').props.accessibilityState.checked).toBe(true);
+    expect(getByTestId('dose-line-med2').props.accessibilityState.checked).toBe(true);
+    expect(await findByLabelText('Reason for Ibuprofen')).toBeTruthy();
+    expect(await findByLabelText('Clear all medications')).toBeTruthy();
+    expect(queryByLabelText('Select all medications')).toBeNull();
+    expect((await findByTestId('select-all-medications')).props.accessibilityLabel).toBe('Clear all medications');
+  });
+
+  it('Select all from a partly ticked form ticks the rest, keeping an edited dose', async () => {
+    const { findByTestId, findByLabelText, getByTestId } = await render(
+      <MedicationEntryForm medications={meds} initial={defaultEntryState(meds, NOW)} onSubmit={jest.fn()} />,
+    );
+    await fireEvent.press(await findByTestId('dose-line-med2'));
+    await fireEvent.changeText(await findByLabelText('Dose of Ibuprofen'), '100');
+
+    await fireEvent.press(await findByLabelText('Select all medications'));
+
+    expect(getByTestId('dose-line-med1').props.accessibilityState.checked).toBe(true);
+    expect((await findByLabelText('Dose of Ibuprofen')).props.defaultValue).toBe('100');
+  });
+
+  it('Clear all unticks every line and flips back to Select all, keeping values for a re-tick', async () => {
+    const { findByTestId, findByLabelText, queryByLabelText, getByTestId } = await render(
+      <MedicationEntryForm medications={meds} initial={defaultEntryState(meds, NOW)} onSubmit={jest.fn()} />,
+    );
+    await fireEvent.press(await findByLabelText('Select all medications'));
+    await fireEvent.changeText(await findByLabelText('Dose of Ibuprofen'), '100');
+
+    await fireEvent.press(await findByLabelText('Clear all medications'));
+
+    expect(getByTestId('dose-line-med1').props.accessibilityState.checked).toBe(false);
+    expect(getByTestId('dose-line-med2').props.accessibilityState.checked).toBe(false);
+    expect(queryByLabelText('Dose of Ibuprofen')).toBeNull();
+    expect(await findByLabelText('Select all medications')).toBeTruthy();
+
+    await fireEvent.press(await findByTestId('dose-line-med2'));
+    expect((await findByLabelText('Dose of Ibuprofen')).props.defaultValue).toBe('100');
+  });
+
+  it('unticking one line after Select all flips the link back to Select all', async () => {
+    const { findByTestId, findByLabelText } = await render(
+      <MedicationEntryForm medications={meds} initial={defaultEntryState(meds, NOW)} onSubmit={jest.fn()} />,
+    );
+    await fireEvent.press(await findByLabelText('Select all medications'));
+    await fireEvent.press(await findByTestId('dose-line-med1'));
+    expect(await findByLabelText('Select all medications')).toBeTruthy();
+  });
+
+  it('saving after Select all writes every medication with its default dose', async () => {
+    const onSubmit = jest.fn();
+    const { findByLabelText } = await render(
+      <MedicationEntryForm medications={meds} initial={defaultEntryState(meds, NOW)} onSubmit={onSubmit} />,
+    );
+
+    await fireEvent.press(await findByLabelText('Select all medications'));
+    await fireEvent.press(await findByLabelText('Save'));
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    const payload = onSubmit.mock.calls[0][0] as MedicationEntrySavePayload;
+    expect(payload.doses).toEqual([
+      { medicationId: 'med1', dose: 20, doseUnit: 'mg', reason: null },
+      { medicationId: 'med2', dose: 200, doseUnit: 'mg', reason: null },
+    ]);
+  });
+});
