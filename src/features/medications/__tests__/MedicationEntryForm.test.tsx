@@ -273,7 +273,7 @@ describe('MedicationEntryForm — edit entry', () => {
   it('shows an "inactive" tag for a medication that has since gone inactive', async () => {
     const event = { id: 'evt1', takenAt: NOW, timeKnown: true, notes: null, createdAt: 0, updatedAt: 0 };
     const doses = [
-      { id: 'd1', eventId: 'evt1', medicationId: 'med1', dose: 20, doseUnit: 'mg', createdAt: 0, updatedAt: 0 },
+      { id: 'd1', eventId: 'evt1', medicationId: 'med1', dose: 20, doseUnit: 'mg', reason: null, createdAt: 0, updatedAt: 0 },
     ];
     const meds = [makeMedication({ id: 'med1', name: 'Discontinued Med', isActive: false })];
     const onSubmit = jest.fn();
@@ -293,7 +293,7 @@ describe('MedicationEntryForm — edit entry', () => {
   it('pre-fills from the event and keeps the notes editable', async () => {
     const event = { id: 'evt1', takenAt: NOW, timeKnown: true, notes: 'with food', createdAt: 0, updatedAt: 0 };
     const doses = [
-      { id: 'd1', eventId: 'evt1', medicationId: 'med1', dose: 20, doseUnit: 'mg', createdAt: 0, updatedAt: 0 },
+      { id: 'd1', eventId: 'evt1', medicationId: 'med1', dose: 20, doseUnit: 'mg', reason: null, createdAt: 0, updatedAt: 0 },
     ];
     const meds = [makeMedication({ id: 'med1', name: 'Omeprazole' })];
     const onSubmit = jest.fn();

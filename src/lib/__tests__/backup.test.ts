@@ -91,6 +91,7 @@ const BASE_MEDICATION_DOSE: MedicationDose = {
   medicationId: 'med1',
   dose: 10,
   doseUnit: 'mg',
+  reason: null,
   createdAt: 5,
   updatedAt: 6,
 };
@@ -181,9 +182,9 @@ describe('entriesToJson / parseBackupJson roundtrip', () => {
       [BASE_MEDICATION_EVENT],
       [BASE_MEDICATION_DOSE],
     );
-    // entriesToJson always writes the current version (8) — parseBackupJson
-    // separately still reads older v1-v7 files (tested below).
-    expect(JSON.parse(json).version).toBe(8);
+    // entriesToJson always writes the current version (9) — parseBackupJson
+    // separately still reads older v1-v8 files (tested below).
+    expect(JSON.parse(json).version).toBe(9);
 
     const result = parseBackupJson(json);
     expect(result.ok).toBe(true);
@@ -211,7 +212,7 @@ describe('entriesToJson / parseBackupJson roundtrip', () => {
     expect(result.experiments).toEqual([]);
   });
 
-  it('roundtrips entries with elimination experiments intact (v5 data, now in a v8 file)', () => {
+  it('roundtrips entries with elimination experiments intact (v5 data, now in a v9 file)', () => {
     const json = entriesToJson(
       [BASE_ENTRY],
       [BASE_COMPONENT],
@@ -221,7 +222,7 @@ describe('entriesToJson / parseBackupJson roundtrip', () => {
       [BASE_DAY_CHECK_IN],
       [BASE_EXPERIMENT],
     );
-    expect(JSON.parse(json).version).toBe(8);
+    expect(JSON.parse(json).version).toBe(9);
 
     const result = parseBackupJson(json);
     expect(result.ok).toBe(true);
@@ -359,9 +360,9 @@ describe('legacy v3 backup import (no dayCheckIns key)', () => {
 });
 
 describe('daily factors (GitHub #23, backup v6)', () => {
-  it('roundtrips daily factors intact (v6 data, now in a v8 file)', () => {
+  it('roundtrips daily factors intact (v6 data, now in a v9 file)', () => {
     const json = entriesToJson([BASE_ENTRY], [], [], [], [], [], [], [BASE_DAY_FACTOR]);
-    expect(JSON.parse(json).version).toBe(8);
+    expect(JSON.parse(json).version).toBe(9);
 
     const result = parseBackupJson(json);
     expect(result.ok).toBe(true);
@@ -503,10 +504,10 @@ describe('medication validation', () => {
     expect(result.medications[0].doseUnit).toBeNull();
   });
 
-  it('roundtrips isRegular in a v8 file (GitHub #26)', () => {
+  it('roundtrips isRegular in a v9 file (GitHub #26)', () => {
     const regular: Medication = { ...BASE_MEDICATION, id: 'm-reg', isRegular: true };
     const json = entriesToJson([BASE_ENTRY], [], [BASE_MEDICATION, regular]);
-    expect(JSON.parse(json).version).toBe(8);
+    expect(JSON.parse(json).version).toBe(9);
     const result = parseBackupJson(json);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -533,6 +534,39 @@ describe('medication validation', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.medications[0].isRegular).toBe(false);
+  });
+});
+
+describe('medication dose reason (GitHub #28, backup v9)', () => {
+  it('roundtrips a dose reason in a v9 file', () => {
+    const withReason: MedicationDose = { ...BASE_MEDICATION_DOSE, reason: 'headache' };
+    const json = entriesToJson([BASE_ENTRY], [], [BASE_MEDICATION], [BASE_MEDICATION_EVENT], [withReason]);
+    expect(JSON.parse(json).version).toBe(9);
+    const result = parseBackupJson(json);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.medicationDoses).toEqual([withReason]);
+  });
+
+  it('imports a v8 dose (no reason) with reason null', () => {
+    const v8Dose = Object.fromEntries(Object.entries(BASE_MEDICATION_DOSE).filter(([key]) => key !== 'reason'));
+    const result = parseBackupJson(
+      JSON.stringify({ version: 8, entries: [BASE_ENTRY], medicationDoses: [v8Dose] }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.medicationDoses[0].reason).toBeNull();
+  });
+
+  it('normalises a blank or non-string reason to null', () => {
+    const blank = { ...BASE_MEDICATION_DOSE, id: 'd-blank', reason: '   ' };
+    const odd = { ...BASE_MEDICATION_DOSE, id: 'd-odd', reason: 42 };
+    const result = parseBackupJson(
+      JSON.stringify({ version: 9, entries: [BASE_ENTRY], medicationDoses: [blank, odd] }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.medicationDoses.map((d) => d.reason)).toEqual([null, null]);
   });
 });
 
@@ -667,9 +701,9 @@ describe('saved meals (GitHub #25, backup v7)', () => {
     createdAt: 10,
   };
 
-  it('roundtrips saved meals and their items in a v8 file', () => {
+  it('roundtrips saved meals and their items in a v9 file', () => {
     const json = entriesToJson([BASE_ENTRY], [], [], [], [], [], [], [], [MEAL], [COMPONENT]);
-    expect(JSON.parse(json).version).toBe(8);
+    expect(JSON.parse(json).version).toBe(9);
 
     const result = parseBackupJson(json);
     expect(result.ok).toBe(true);

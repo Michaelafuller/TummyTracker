@@ -205,6 +205,9 @@ export const medicationDose = sqliteTable(
     // > 0 — partial doses allowed (e.g. 0.5).
     dose: real('dose').notNull(),
     doseUnit: text('dose_unit').notNull(),
+    // Why an as-needed dose was taken (GitHub #28): trimmed, <= 60 chars,
+    // null when blank. Additive column (migration 0015).
+    reason: text('reason'),
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
   },

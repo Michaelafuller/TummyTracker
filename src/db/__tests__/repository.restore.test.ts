@@ -56,6 +56,7 @@ function medicationDoseRow(id: string, eventId: string, medicationId: string): M
     medicationId,
     dose: 1,
     doseUnit: 'mg',
+    reason: null,
     createdAt: 1000,
     updatedAt: 1000,
   };
@@ -137,7 +138,17 @@ describe('insertMedicationDosesPreservingIds', () => {
     expect(await repo.listAllMedicationDoses()).toHaveLength(3);
   });
 
-  it('succeeds inserting 5,000 dose rows in one call (above the 32,766 bound-variable cap at 7 cols/row unchunked)', async () => {
+  it('preserves a dose reason on restore, and a null reason stays null (GitHub #28)', async () => {
+    await repo.insertMedicationDosesPreservingIds([
+      { ...medicationDoseRow('d1', 'e1', 'm1'), reason: 'headache' },
+      medicationDoseRow('d2', 'e1', 'm1'),
+    ]);
+    const byId = new Map((await repo.listAllMedicationDoses()).map((dose) => [dose.id, dose.reason]));
+    expect(byId.get('d1')).toBe('headache');
+    expect(byId.get('d2')).toBeNull();
+  });
+
+  it('succeeds inserting 5,000 dose rows in one call (above the 32,766 bound-variable cap at 8 cols/row unchunked)', async () => {
     const rows: MedicationDose[] = Array.from({ length: 5000 }, (_, i) => medicationDoseRow(`dose-${i}`, 'e1', 'm1'));
 
     const start = Date.now();

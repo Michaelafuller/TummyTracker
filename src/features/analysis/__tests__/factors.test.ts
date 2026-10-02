@@ -521,6 +521,7 @@ describe('analyzeMedicationDays — factor rows only widen the covered pools', (
       medicationId: 'm1',
       dose: 1,
       doseUnit: 'tablet',
+      reason: null,
       createdAt: 0,
       updatedAt: 0,
     }));

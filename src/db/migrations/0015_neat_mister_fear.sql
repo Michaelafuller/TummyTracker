@@ -1,0 +1,1 @@
+ALTER TABLE `medication_dose` ADD `reason` text;

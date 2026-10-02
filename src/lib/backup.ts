@@ -48,8 +48,9 @@ export interface BackupFile {
  * history, the day check-in answers, and the elimination experiments (GitHub
  * #19 backup v5), the daily factors (GitHub #23 backup v6), and the saved meals
  * with their items (GitHub #25 backup v7), and each medication's `isRegular`
- * flag (GitHub #26 backup v8). Version bumps to 8 but
- * `parseBackupJson` still reads v1–v7 files (missing keys) by
+ * flag (GitHub #26 backup v8), and each dose's optional `reason` (GitHub #28
+ * backup v9). Version bumps to 9 but
+ * `parseBackupJson` still reads v1–v8 files (missing keys) by
  * defaulting every new array to empty — old backups remain importable.
  */
 export function entriesToJson(
@@ -65,7 +66,7 @@ export function entriesToJson(
   savedMealComponents: SavedMealComponent[] = [],
 ): string {
   const payload: BackupFile = {
-    version: 8,
+    version: 9,
     entries,
     mealComponents,
     medications,
@@ -251,7 +252,11 @@ function isValidMedicationDose(v: unknown): v is MedicationDose {
   return true;
 }
 
-/** Normalises a medicationDose from the backup. Every field here is required (no nullable columns). */
+/**
+ * Normalises a medicationDose from the backup. Every field but `reason` is
+ * required; `reason` is absent before v9 (GitHub #28) and a missing,
+ * non-string or blank value becomes null.
+ */
 function normaliseMedicationDose(v: Record<string, unknown>): MedicationDose {
   return {
     id: v.id as string,
@@ -259,6 +264,7 @@ function normaliseMedicationDose(v: Record<string, unknown>): MedicationDose {
     medicationId: v.medicationId as string,
     dose: v.dose as number,
     doseUnit: v.doseUnit as string,
+    reason: typeof v.reason === 'string' && v.reason.trim().length > 0 ? v.reason.trim() : null,
     createdAt: v.createdAt as number,
     updatedAt: v.updatedAt as number,
   };

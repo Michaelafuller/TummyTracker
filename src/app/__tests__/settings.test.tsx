@@ -301,7 +301,7 @@ describe('SettingsScreen — Data section (day check-ins, GitHub #13)', () => {
     const [uri] = mockShareAsync.mock.calls[0];
     const { File } = jest.requireActual('expo-file-system');
     const written = JSON.parse(await new File(uri).text());
-    expect(written.version).toBe(8);
+    expect(written.version).toBe(9);
     expect(written.dayCheckIns).toEqual([
       { id: 'ci1', date: '2026-06-15', status: 'fine', createdAt: 1, updatedAt: 1 },
     ]);
@@ -450,7 +450,7 @@ describe('SettingsScreen — Data section (daily factors, GitHub #23)', () => {
     const [uri] = mockShareAsync.mock.calls[0];
     const { File } = jest.requireActual('expo-file-system');
     const written = JSON.parse(await new File(uri).text());
-    expect(written.version).toBe(8);
+    expect(written.version).toBe(9);
     expect(written.dayFactors).toEqual([row]);
   });
 

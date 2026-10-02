@@ -166,6 +166,7 @@ export function buildJournal(opts: JournalOptions): Journal {
         medicationId: id,
         dose: 1,
         doseUnit: 'tablet',
+        reason: null,
         createdAt: 0,
         updatedAt: 0,
       });

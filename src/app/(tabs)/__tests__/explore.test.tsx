@@ -166,6 +166,7 @@ function makeMedicationDose(overrides: Partial<MedicationDose> = {}): Medication
     medicationId: 'med1',
     dose: 20,
     doseUnit: 'mg',
+    reason: null,
     createdAt: 0,
     updatedAt: 0,
     ...overrides,

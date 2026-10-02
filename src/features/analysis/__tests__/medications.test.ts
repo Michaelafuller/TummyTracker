@@ -94,6 +94,7 @@ function dosesAt(medicationId: string, times: number[]): { events: MedicationEve
       medicationId,
       dose: 1,
       doseUnit: 'tablet',
+      reason: null,
       createdAt: 0,
       updatedAt: 0,
     });

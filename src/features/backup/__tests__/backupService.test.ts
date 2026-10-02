@@ -129,7 +129,7 @@ describe('buildBackupJson', () => {
     (listLogEntries as jest.Mock).mockResolvedValue([{ id: 'e1' }]);
     const json = await buildBackupJson();
     const parsed = JSON.parse(json);
-    expect(parsed.version).toBe(8);
+    expect(parsed.version).toBe(9);
     expect(parsed.entries).toEqual([{ id: 'e1' }]);
     expect(parsed).toHaveProperty('mealComponents');
     expect(parsed).toHaveProperty('medications');
@@ -180,7 +180,7 @@ describe('backUpToFolderNow', () => {
     expect(files).toHaveLength(1);
     expect(files[0].name).toMatch(/^tummytracker-auto-\d{4}-\d{2}-\d{2}-\d{6}\.json$/);
     const written = JSON.parse(await files[0].text());
-    expect(written.version).toBe(8);
+    expect(written.version).toBe(9);
     expect(usePrefsStore.getState().lastBackupAt).not.toBeNull();
     expect(usePrefsStore.getState().lastAutoBackupAt).toBe(usePrefsStore.getState().lastBackupAt);
     expect(usePrefsStore.getState().autoBackupError).toBeNull();

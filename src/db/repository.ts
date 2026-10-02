@@ -536,7 +536,7 @@ export async function listAllMedicationDoses(): Promise<MedicationDose[]> {
 /**
  * Bound-variable-safe batch size for the id-preserving restore helpers below
  * (HANDOFF.md §2). SQLite caps bound variables at 32,766 — `medication_dose`
- * (7 cols) hits it at ~4,700 rows on a single INSERT, and the existence
+ * (8 cols) hits it at ~4,000 rows on a single INSERT, and the existence
  * `inArray(...)` lookup faces the same cap on very large restores. 500 keeps
  * every statement well under that ceiling regardless of column count.
  */

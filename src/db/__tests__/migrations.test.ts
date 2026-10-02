@@ -96,4 +96,12 @@ describe('migrations', () => {
     expect(sql).not.toMatch(/drop table/i);
     expect(sql).not.toMatch(/create table/i);
   });
+
+  it('0015 adds medication_dose.reason additively, touching nothing else (GitHub #28)', () => {
+    const sql = readMigration('0015');
+    expect(sql).toMatch(/alter table `medication_dose` add `reason` text/i);
+    expect(sql).not.toMatch(/not null/i);
+    expect(sql).not.toMatch(/drop table/i);
+    expect(sql).not.toMatch(/create table/i);
+  });
 });
