@@ -13,6 +13,7 @@ import {
   formatDoseSummary,
   groupDoseRecordsByMedication,
   pastReasons,
+  reasonSuggestionsByMedication,
   validateReason,
   regularDoses,
   summarizeMedicationUse,
@@ -893,5 +894,22 @@ describe('summarizeMedicationUse — reasons never change the amounts', () => {
     doses[1] = { ...doses[1], reason: 'cramps' };
     const [row] = summarizeMedicationUse([med], events, doses, adherenceWindow(NOW));
     expect(row.amounts).toEqual([{ label: '200 mg', count: 2 }]);
+  });
+});
+
+describe('reasonSuggestionsByMedication', () => {
+  it('maps non-regular medications that have past reasons, and leaves regular / reasonless ones out', () => {
+    const prn = makeMedication({ id: 'prn', isRegular: false });
+    const reg = makeMedication({ id: 'reg', isRegular: true });
+    const none = makeMedication({ id: 'none', isRegular: false });
+    const a = logDoses('prn', [daysAgoAt(2)], { reason: 'headache' });
+    const b = logDoses('reg', [daysAgoAt(2)], { reason: 'legacy' });
+    const c = logDoses('none', [daysAgoAt(2)]);
+    const map = reasonSuggestionsByMedication(
+      [prn, reg, none],
+      [...a.events, ...b.events, ...c.events],
+      [...a.doses, ...b.doses, ...c.doses],
+    );
+    expect(map).toEqual({ prn: ['headache'] });
   });
 });

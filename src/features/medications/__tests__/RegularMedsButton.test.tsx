@@ -85,8 +85,8 @@ describe('RegularMedsButton', () => {
     expect(event).toMatchObject({ timeKnown: true, notes: null });
     expect(event.takenAt).toBeGreaterThanOrEqual(before);
     expect(doses).toEqual([
-      { medicationId: 'a', dose: 50, doseUnit: 'mcg' },
-      { medicationId: 'b', dose: 1000, doseUnit: 'unit' },
+      { medicationId: 'a', dose: 50, doseUnit: 'mcg', reason: null },
+      { medicationId: 'b', dose: 1000, doseUnit: 'unit', reason: null },
     ]);
   });
 

@@ -544,3 +544,18 @@ export function pastReasons(
   }
   return reasons;
 }
+
+/** {@link pastReasons} for every non-regular medication, keyed by medication id — the entry form's chips. */
+export function reasonSuggestionsByMedication(
+  meds: readonly Medication[],
+  events: readonly MedicationEvent[],
+  doses: readonly MedicationDose[],
+): Record<string, string[]> {
+  const byMedication: Record<string, string[]> = {};
+  for (const med of meds) {
+    if (med.isRegular) continue;
+    const reasons = pastReasons(med.id, events, doses);
+    if (reasons.length > 0) byMedication[med.id] = reasons;
+  }
+  return byMedication;
+}

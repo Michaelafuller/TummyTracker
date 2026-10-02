@@ -82,6 +82,7 @@ describe('defaultEntryState', () => {
       selected: false,
       doseInput: '10',
       doseUnit: 'mg',
+      reasonInput: '',
     });
   });
 
@@ -103,13 +104,13 @@ describe('defaultEntryState', () => {
 describe('entryStateFromEvent', () => {
   it('includes a selected line for every medication in the event, including an inactive one', () => {
     const event = makeEvent({ takenAt: 1_000, timeKnown: true, notes: 'with food' });
-    const doses = [makeDose({ medicationId: 'med1', dose: 20, doseUnit: 'mg' })];
+    const doses = [makeDose({ medicationId: 'med1', dose: 20, doseUnit: 'mg', reason: null })];
     const meds = [makeMedication({ id: 'med1', isActive: false, name: 'Old Med' })];
 
     const state = entryStateFromEvent(event, doses, meds);
 
     expect(state.lines).toEqual([
-      { medicationId: 'med1', selected: true, doseInput: '20', doseUnit: 'mg' },
+      { medicationId: 'med1', selected: true, doseInput: '20', doseUnit: 'mg', reasonInput: '' },
     ]);
     expect(state.notes).toBe('with food');
     expect(state.timeKnown).toBe(true);
@@ -127,7 +128,7 @@ describe('entryStateFromEvent', () => {
     const state = entryStateFromEvent(event, doses, meds);
 
     expect(state.lines.map((l) => l.medicationId)).toEqual(['med1', 'med2']);
-    expect(state.lines[1]).toEqual({ medicationId: 'med2', selected: false, doseInput: '5', doseUnit: 'mL' });
+    expect(state.lines[1]).toEqual({ medicationId: 'med2', selected: false, doseInput: '5', doseUnit: 'mL', reasonInput: '' });
   });
 
   it('sets timeKnown false and empty notes from the event', () => {
@@ -143,7 +144,7 @@ function baseState(overrides: Partial<MedicationEntryFormState> = {}): Medicatio
     dateInput: '2026-09-26',
     timeInput: '14:30',
     timeKnown: true,
-    lines: [{ medicationId: 'med1', selected: true, doseInput: '10', doseUnit: 'mg' }],
+    lines: [{ medicationId: 'med1', selected: true, doseInput: '10', doseUnit: 'mg', reasonInput: '' }],
     notes: '',
     ...overrides,
   };
@@ -159,26 +160,26 @@ describe('buildMedicationEntry', () => {
       timeKnown: true,
       notes: null,
     });
-    expect(result.doses).toEqual([{ medicationId: 'med1', dose: 10, doseUnit: 'mg' }]);
+    expect(result.doses).toEqual([{ medicationId: 'med1', dose: 10, doseUnit: 'mg', reason: null }]);
   });
 
   it('rejects when no line is selected', () => {
-    const result = buildMedicationEntry(baseState({ lines: [{ medicationId: 'med1', selected: false, doseInput: '10', doseUnit: 'mg' }] }));
+    const result = buildMedicationEntry(baseState({ lines: [{ medicationId: 'med1', selected: false, doseInput: '10', doseUnit: 'mg', reasonInput: '' }] }));
     expect(result.valid).toBe(false);
     expect(result.errors.lines).toBeTruthy();
   });
 
   it('accepts a partial dose like 0.5', () => {
     const result = buildMedicationEntry(
-      baseState({ lines: [{ medicationId: 'med1', selected: true, doseInput: '0.5', doseUnit: 'tablet' }] }),
+      baseState({ lines: [{ medicationId: 'med1', selected: true, doseInput: '0.5', doseUnit: 'tablet', reasonInput: '' }] }),
     );
     expect(result.valid).toBe(true);
-    expect(result.doses).toEqual([{ medicationId: 'med1', dose: 0.5, doseUnit: 'tablet' }]);
+    expect(result.doses).toEqual([{ medicationId: 'med1', dose: 0.5, doseUnit: 'tablet', reason: null }]);
   });
 
   it('rejects a selected line with a dose of 0', () => {
     const result = buildMedicationEntry(
-      baseState({ lines: [{ medicationId: 'med1', selected: true, doseInput: '0', doseUnit: 'mg' }] }),
+      baseState({ lines: [{ medicationId: 'med1', selected: true, doseInput: '0', doseUnit: 'mg', reasonInput: '' }] }),
     );
     expect(result.valid).toBe(false);
     expect(result.errors.doseErrors?.med1).toBeTruthy();
@@ -186,7 +187,7 @@ describe('buildMedicationEntry', () => {
 
   it('rejects a selected line with a non-numeric dose', () => {
     const result = buildMedicationEntry(
-      baseState({ lines: [{ medicationId: 'med1', selected: true, doseInput: 'abc', doseUnit: 'mg' }] }),
+      baseState({ lines: [{ medicationId: 'med1', selected: true, doseInput: 'abc', doseUnit: 'mg', reasonInput: '' }] }),
     );
     expect(result.valid).toBe(false);
     expect(result.errors.doseErrors?.med1).toBeTruthy();
@@ -194,7 +195,7 @@ describe('buildMedicationEntry', () => {
 
   it('rejects a selected line with an empty dose', () => {
     const result = buildMedicationEntry(
-      baseState({ lines: [{ medicationId: 'med1', selected: true, doseInput: '', doseUnit: 'mg' }] }),
+      baseState({ lines: [{ medicationId: 'med1', selected: true, doseInput: '', doseUnit: 'mg', reasonInput: '' }] }),
     );
     expect(result.valid).toBe(false);
     expect(result.errors.doseErrors?.med1).toBeTruthy();
@@ -202,7 +203,7 @@ describe('buildMedicationEntry', () => {
 
   it('rejects a selected line with a valid dose but missing unit', () => {
     const result = buildMedicationEntry(
-      baseState({ lines: [{ medicationId: 'med1', selected: true, doseInput: '10', doseUnit: '' }] }),
+      baseState({ lines: [{ medicationId: 'med1', selected: true, doseInput: '10', doseUnit: '', reasonInput: '' }] }),
     );
     expect(result.valid).toBe(false);
     expect(result.errors.doseErrors?.med1).toBeTruthy();
@@ -212,21 +213,21 @@ describe('buildMedicationEntry', () => {
     const result = buildMedicationEntry(
       baseState({
         lines: [
-          { medicationId: 'med1', selected: true, doseInput: '10', doseUnit: 'mg' },
-          { medicationId: 'med2', selected: false, doseInput: 'garbage', doseUnit: '' },
+          { medicationId: 'med1', selected: true, doseInput: '10', doseUnit: 'mg', reasonInput: '' },
+          { medicationId: 'med2', selected: false, doseInput: 'garbage', doseUnit: '', reasonInput: '' },
         ],
       }),
     );
     expect(result.valid).toBe(true);
-    expect(result.doses).toEqual([{ medicationId: 'med1', dose: 10, doseUnit: 'mg' }]);
+    expect(result.doses).toEqual([{ medicationId: 'med1', dose: 10, doseUnit: 'mg', reason: null }]);
   });
 
   it('reports every failing selected line at once', () => {
     const result = buildMedicationEntry(
       baseState({
         lines: [
-          { medicationId: 'med1', selected: true, doseInput: '', doseUnit: 'mg' },
-          { medicationId: 'med2', selected: true, doseInput: '10', doseUnit: '' },
+          { medicationId: 'med1', selected: true, doseInput: '', doseUnit: 'mg', reasonInput: '' },
+          { medicationId: 'med2', selected: true, doseInput: '10', doseUnit: '', reasonInput: '' },
         ],
       }),
     );
@@ -283,7 +284,68 @@ describe('buildMedicationEntry', () => {
     };
     const result = buildMedicationEntry(overridden);
 
-    expect(result.doses).toEqual([{ medicationId: 'med1', dose: 5, doseUnit: 'mg' }]);
+    expect(result.doses).toEqual([{ medicationId: 'med1', dose: 5, doseUnit: 'mg', reason: null }]);
     expect(meds).toEqual(before);
+  });
+});
+
+describe('reason on a dose line (GitHub #28)', () => {
+  const lineWith = (reasonInput: string, extra: Partial<MedicationEntryFormState['lines'][number]> = {}) => ({
+    medicationId: 'med1',
+    selected: true,
+    doseInput: '200',
+    doseUnit: 'mg',
+    reasonInput,
+    ...extra,
+  });
+
+  it('trims the reason and returns it on the dose; blank becomes null', () => {
+    const withReason = buildMedicationEntry(baseState({ lines: [lineWith('  headache  ')] }));
+    expect(withReason.valid).toBe(true);
+    expect(withReason.doses).toEqual([{ medicationId: 'med1', dose: 200, doseUnit: 'mg', reason: 'headache' }]);
+
+    const blank = buildMedicationEntry(baseState({ lines: [lineWith('   ')] }));
+    expect(blank.doses?.[0].reason).toBeNull();
+  });
+
+  it('rejects a reason over 60 characters on a selected line, keyed by medication id', () => {
+    const result = buildMedicationEntry(baseState({ lines: [lineWith('a'.repeat(61))] }));
+    expect(result.valid).toBe(false);
+    expect(result.errors.reasonErrors?.med1).toMatch(/60/);
+  });
+
+  it('accepts exactly 60 characters', () => {
+    expect(buildMedicationEntry(baseState({ lines: [lineWith('a'.repeat(60))] })).valid).toBe(true);
+  });
+
+  it('ignores a bad reason on an unselected line', () => {
+    const result = buildMedicationEntry(
+      baseState({ lines: [lineWith('', { medicationId: 'med1' }), lineWith('a'.repeat(99), { medicationId: 'med2', selected: false })] }),
+    );
+    expect(result.valid).toBe(true);
+  });
+
+  it('new-entry lines start with an empty reason', () => {
+    const state = defaultEntryState([makeMedication({ id: 'med1' })], 1_000);
+    expect(state.lines[0].reasonInput).toBe('');
+  });
+
+  it('entryStateFromEvent fills the reason back in (and an other-active line starts empty)', () => {
+    const event = makeEvent();
+    const doses = [makeDose({ medicationId: 'med1', reason: 'headache' })];
+    const meds = [makeMedication({ id: 'med1' }), makeMedication({ id: 'med2' })];
+    const state = entryStateFromEvent(event, doses, meds);
+    expect(state.lines.map((l) => l.reasonInput)).toEqual(['headache', '']);
+  });
+
+  it('round trips: a saved reason survives edit -> build unchanged, even for a regular medication', () => {
+    const event = makeEvent({ takenAt: new Date(2026, 8, 26, 9, 0).getTime() });
+    // The medication became regular after the dose was logged — the form hides the
+    // field, but nothing here clears it.
+    const meds = [makeMedication({ id: 'med1', isRegular: true, defaultDose: 200, doseUnit: 'mg' })];
+    const doses = [makeDose({ medicationId: 'med1', dose: 200, doseUnit: 'mg', reason: 'headache' })];
+    const result = buildMedicationEntry(entryStateFromEvent(event, doses, meds));
+    expect(result.valid).toBe(true);
+    expect(result.doses).toEqual([{ medicationId: 'med1', dose: 200, doseUnit: 'mg', reason: 'headache' }]);
   });
 });

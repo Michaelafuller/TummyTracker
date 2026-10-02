@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { StyleSheet } from 'react-native';
 
 import { FormScrollView } from '@/components/keyboard-aware-screen';
@@ -9,8 +9,13 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { createMedicationEvent } from '@/db/repository';
 import { MedicationEntryForm, type MedicationEntrySavePayload } from '@/features/medications/MedicationEntryForm';
-import { useMedications } from '@/features/medications/useMedicationData';
+import {
+  useMedicationDoses,
+  useMedicationEvents,
+  useMedications,
+} from '@/features/medications/useMedicationData';
 import { defaultEntryState } from '@/lib/medicationEntry';
+import { reasonSuggestionsByMedication } from '@/lib/medications';
 
 /**
  * Log a new medication entry (HANDOFF.md #7, #9). Only active medications get
@@ -22,6 +27,12 @@ import { defaultEntryState } from '@/lib/medicationEntry';
 export default function NewMedicationEntryScreen() {
   const router = useRouter();
   const medications = useMedications();
+  const allEvents = useMedicationEvents();
+  const allDoses = useMedicationDoses();
+  const reasonSuggestions = useMemo(
+    () => reasonSuggestionsByMedication(medications, allEvents, allDoses),
+    [medications, allEvents, allDoses],
+  );
   const [submitting, setSubmitting] = useState(false);
   // Captured once at mount — MedicationEntryForm only ever reads its `initial`
   // prop on its own first render, and re-deriving Date.now() on every render
@@ -57,6 +68,7 @@ export default function NewMedicationEntryScreen() {
     <FormScrollView>
       <MedicationEntryForm
         medications={medications}
+        reasonSuggestions={reasonSuggestions}
         initial={defaultEntryState(activeMeds, now)}
         onSubmit={handleSubmit}
         submitLabel="Save"

@@ -101,6 +101,31 @@ describe('medication events + doses', () => {
     expect(allDoses).toHaveLength(2);
   });
 
+  it('create and update keep each dose reason; a dose without one stores null (GitHub #28)', async () => {
+    const med1 = await repo.createMedication({ name: 'Ibuprofen' });
+    const med2 = await repo.createMedication({ name: 'Omeprazole', isRegular: true });
+
+    const { event, doses } = await repo.createMedicationEvent({ takenAt: 1000 }, [
+      { medicationId: med1.id, dose: 200, doseUnit: 'mg', reason: 'headache' },
+      { medicationId: med2.id, dose: 20, doseUnit: 'mg' },
+    ]);
+    expect(doses.map((d) => d.reason)).toEqual(['headache', null]);
+
+    const created = await repo.getMedicationEvent(event.id);
+    const byMed = new Map(created?.doses.map((d) => [d.medicationId, d.reason]));
+    expect(byMed.get(med1.id)).toBe('headache');
+    expect(byMed.get(med2.id)).toBeNull();
+
+    await repo.updateMedicationEvent(event.id, { takenAt: 2000 }, [
+      { medicationId: med1.id, dose: 200, doseUnit: 'mg', reason: 'back pain' },
+      { medicationId: med2.id, dose: 20, doseUnit: 'mg', reason: null },
+    ]);
+    const updated = await repo.getMedicationEvent(event.id);
+    const updatedByMed = new Map(updated?.doses.map((d) => [d.medicationId, d.reason]));
+    expect(updatedByMed.get(med1.id)).toBe('back pain');
+    expect(updatedByMed.get(med2.id)).toBeNull();
+  });
+
   it('delete removes the event and its dose rows together', async () => {
     const med = await repo.createMedication({ name: 'Med1' });
     const { event } = await repo.createMedicationEvent({ takenAt: Date.now() }, [

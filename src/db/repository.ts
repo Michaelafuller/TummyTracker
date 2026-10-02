@@ -645,6 +645,7 @@ export async function createMedicationEvent(
   };
   const doseRows: NewMedicationDose[] = doses.map((dose) => ({
     ...dose,
+    reason: dose.reason ?? null,
     id: createId(),
     eventId: eventRow.id,
     createdAt: now,
@@ -676,6 +677,7 @@ export async function updateMedicationEvent(
   const now = Date.now();
   const doseRows: NewMedicationDose[] = doses.map((dose) => ({
     ...dose,
+    reason: dose.reason ?? null,
     id: createId(),
     eventId: id,
     createdAt: now,

@@ -1,5 +1,5 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet } from 'react-native';
 
 import { FormScrollView } from '@/components/keyboard-aware-screen';
@@ -9,8 +9,13 @@ import { Spacing } from '@/constants/theme';
 import { deleteMedicationEvent, getMedicationEvent, updateMedicationEvent } from '@/db/repository';
 import type { MedicationDose, MedicationEvent } from '@/db/schema';
 import { MedicationEntryForm, type MedicationEntrySavePayload } from '@/features/medications/MedicationEntryForm';
-import { useMedications } from '@/features/medications/useMedicationData';
+import {
+  useMedicationDoses,
+  useMedicationEvents,
+  useMedications,
+} from '@/features/medications/useMedicationData';
 import { entryStateFromEvent } from '@/lib/medicationEntry';
+import { reasonSuggestionsByMedication } from '@/lib/medications';
 
 // undefined = still loading, null = not found (already deleted).
 type LoadState = { event: MedicationEvent; doses: MedicationDose[] } | null | undefined;
@@ -27,6 +32,12 @@ export default function EditMedicationEntryScreen() {
   // medication the event logged a dose for, even one since marked inactive
   // (#11 invariant: never deleted, still shown).
   const medications = useMedications();
+  const allEvents = useMedicationEvents();
+  const allDoses = useMedicationDoses();
+  const reasonSuggestions = useMemo(
+    () => reasonSuggestionsByMedication(medications, allEvents, allDoses),
+    [medications, allEvents, allDoses],
+  );
   const [loaded, setLoaded] = useState<LoadState>(undefined);
   const [submitting, setSubmitting] = useState(false);
 
@@ -90,6 +101,7 @@ export default function EditMedicationEntryScreen() {
       <MedicationEntryForm
         key={String(loaded.event.updatedAt)}
         medications={medications}
+        reasonSuggestions={reasonSuggestions}
         initial={entryStateFromEvent(loaded.event, loaded.doses, medications)}
         onSubmit={handleSubmit}
         submitLabel="Save changes"

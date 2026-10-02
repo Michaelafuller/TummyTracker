@@ -10,7 +10,7 @@
 
 import type { Medication, MedicationDose, MedicationEvent } from '@/db/schema';
 import { formatDateInput, formatTimeInput, parseDateTime } from '@/lib/datetime';
-import { formatDoseNumber } from '@/lib/medications';
+import { formatDoseNumber, validateReason } from '@/lib/medications';
 import { validateNotes } from '@/lib/validation';
 
 /** One medication row in the entry form — selected lines are the ones that get saved. */
@@ -20,6 +20,12 @@ export interface DoseLineState {
   /** Raw numeric text; '' means "no dose entered". */
   doseInput: string;
   doseUnit: string;
+  /**
+   * Raw reason text (GitHub #28); '' means none. Only as-needed (non-regular)
+   * lines expose a field for it, but a reason already saved on an edited dose
+   * is carried here either way so a save never clears it.
+   */
+  reasonInput: string;
 }
 
 export interface MedicationEntryFormState {
@@ -36,6 +42,8 @@ export interface MedicationEntryErrors {
   lines?: string;
   /** Per-medicationId dose/unit error, only for lines that are selected. */
   doseErrors?: Record<string, string>;
+  /** Per-medicationId reason error (too long), only for lines that are selected. */
+  reasonErrors?: Record<string, string>;
   loggedAt?: string;
   notes?: string;
 }
@@ -50,6 +58,8 @@ export interface BuiltMedicationDose {
   medicationId: string;
   dose: number;
   doseUnit: string;
+  /** Trimmed reason, null when none (GitHub #28). */
+  reason: string | null;
 }
 
 export interface MedicationEntryBuildResult {
@@ -79,6 +89,7 @@ export function defaultEntryState(activeMeds: readonly Medication[], now: number
       selected: false,
       doseInput: defaultDoseInput(med),
       doseUnit: med.doseUnit ?? '',
+      reasonInput: '',
     })),
     notes: '',
   };
@@ -103,6 +114,7 @@ export function entryStateFromEvent(
     selected: true,
     doseInput: formatDoseNumber(dose.dose),
     doseUnit: dose.doseUnit,
+    reasonInput: dose.reason ?? '',
   }));
 
   const otherActiveLines: DoseLineState[] = meds
@@ -112,6 +124,7 @@ export function entryStateFromEvent(
       selected: false,
       doseInput: defaultDoseInput(med),
       doseUnit: med.doseUnit ?? '',
+      reasonInput: '',
     }));
 
   return {
@@ -133,7 +146,8 @@ function parseTakenAt(state: MedicationEntryFormState) {
  * least one line must be selected; every selected line's dose must parse as
  * a number > 0 (partial doses like 0.5 are fine) and have a non-empty unit;
  * the date (+ time when `timeKnown`) must be valid; notes reuse the shared
- * 500-char rule. Never mutates any medication — only ever reads `state`.
+ * 500-char rule; a reason (optional) is trimmed, blank -> null, max 60 chars.
+ * Never mutates any medication — only ever reads `state`.
  */
 export function buildMedicationEntry(state: MedicationEntryFormState): MedicationEntryBuildResult {
   const errors: MedicationEntryErrors = {};
@@ -159,6 +173,17 @@ export function buildMedicationEntry(state: MedicationEntryFormState): Medicatio
     errors.doseErrors = doseErrors;
   }
 
+  const reasonErrors: Record<string, string> = {};
+  for (const line of selectedLines) {
+    const reasonResult = validateReason(line.reasonInput);
+    if (!reasonResult.valid) {
+      reasonErrors[line.medicationId] = reasonResult.error ?? 'Invalid reason.';
+    }
+  }
+  if (Object.keys(reasonErrors).length > 0) {
+    errors.reasonErrors = reasonErrors;
+  }
+
   const parsedDate = parseTakenAt(state);
   if (parsedDate.ms == null) {
     errors.loggedAt = parsedDate.error ?? 'Invalid date or time.';
@@ -169,7 +194,7 @@ export function buildMedicationEntry(state: MedicationEntryFormState): Medicatio
     errors.notes = notesResult.error;
   }
 
-  if (errors.lines || errors.doseErrors || errors.loggedAt || errors.notes) {
+  if (errors.lines || errors.doseErrors || errors.reasonErrors || errors.loggedAt || errors.notes) {
     return { valid: false, errors };
   }
 
@@ -187,6 +212,7 @@ export function buildMedicationEntry(state: MedicationEntryFormState): Medicatio
       medicationId: line.medicationId,
       dose: Number(line.doseInput.trim()),
       doseUnit: line.doseUnit.trim(),
+      reason: validateReason(line.reasonInput).value,
     })),
   };
 }
