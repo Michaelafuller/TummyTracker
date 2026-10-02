@@ -21,8 +21,10 @@ import {
   type MedicationReminder,
   type SavedMeal,
   type SavedMealComponent,
+  type WatchlistItem,
 } from '@/db/schema';
 import { savedMealNameKey } from '@/lib/savedMeals';
+import { normalizeWatchTerm } from '@/lib/watchlist';
 
 export interface BackupFile {
   version: number;
@@ -44,6 +46,8 @@ export interface BackupFile {
   savedMealComponents?: SavedMealComponent[];
   /** Absent before v10 (pre medication-reminders, GitHub #29) and treated as [] on import. */
   medicationReminders?: MedicationReminder[];
+  /** Absent before v11 (watched ingredients were not backed up) and treated as [] on import. */
+  watchlistItems?: WatchlistItem[];
 }
 
 /**
@@ -52,8 +56,9 @@ export interface BackupFile {
  * #19 backup v5), the daily factors (GitHub #23 backup v6), and the saved meals
  * with their items (GitHub #25 backup v7), and each medication's `isRegular`
  * flag (GitHub #26 backup v8), and each dose's optional `reason` (GitHub #28
- * backup v9), and the medication reminder schedule (GitHub #29 backup v10).
- * Version bumps to 10 but `parseBackupJson` still reads v1–v9 files (missing keys) by
+ * backup v9), the medication reminder schedule (GitHub #29 backup v10), and the
+ * watched ingredients (backup v11).
+ * Version bumps to 11 but `parseBackupJson` still reads v1–v10 files (missing keys) by
  * defaulting every new array to empty — old backups remain importable.
  */
 export function entriesToJson(
@@ -68,9 +73,10 @@ export function entriesToJson(
   savedMeals: SavedMeal[] = [],
   savedMealComponents: SavedMealComponent[] = [],
   medicationReminders: MedicationReminder[] = [],
+  watchlistItems: WatchlistItem[] = [],
 ): string {
   const payload: BackupFile = {
-    version: 10,
+    version: 11,
     entries,
     mealComponents,
     medications,
@@ -82,6 +88,7 @@ export function entriesToJson(
     savedMeals,
     savedMealComponents,
     medicationReminders,
+    watchlistItems,
   };
   return JSON.stringify(payload, null, 2);
 }
@@ -154,6 +161,7 @@ export type ParseResult =
       savedMeals: SavedMeal[];
       savedMealComponents: SavedMealComponent[];
       medicationReminders: MedicationReminder[];
+      watchlistItems: WatchlistItem[];
     }
   | { ok: false; error: string };
 
@@ -306,6 +314,18 @@ function normaliseDayCheckIn(v: Record<string, unknown>): DayCheckIn {
  * which is why this is a predicate over the raw row and the parse loop below
  * skips rather than rejects.
  */
+/** A watchlist row, or null when its id, term or createdAt is unusable (the row is dropped). */
+function normaliseWatchlistItem(v: unknown): WatchlistItem | null {
+  if (!v || typeof v !== 'object') return null;
+  const r = v as Record<string, unknown>;
+  if (!isString(r.id) || r.id.length === 0) return null;
+  if (!isString(r.term)) return null;
+  const term = normalizeWatchTerm(r.term);
+  if (term === null) return null;
+  if (typeof r.createdAt !== 'number' || !Number.isFinite(r.createdAt)) return null;
+  return { id: r.id, term, createdAt: r.createdAt };
+}
+
 function isValidMedicationReminder(v: unknown): v is MedicationReminder {
   if (!v || typeof v !== 'object') return false;
   const r = v as Record<string, unknown>;
@@ -615,6 +635,20 @@ export function parseBackupJson(text: string): ParseResult {
     }
   }
 
+  // Absent before v11 — default to [] so v1–v10 backups remain importable.
+  // Bad rows are dropped, not fatal; terms are re-normalised with the
+  // watchlist's own normaliser and de-duplicated (first wins), since `term` is
+  // unique in the table.
+  const rawWatchlistItems: unknown[] = Array.isArray(root.watchlistItems) ? (root.watchlistItems as unknown[]) : [];
+  const watchlistItems: WatchlistItem[] = [];
+  const seenTerms = new Set<string>();
+  for (const raw of rawWatchlistItems) {
+    const item = normaliseWatchlistItem(raw);
+    if (item === null || seenTerms.has(item.term)) continue;
+    seenTerms.add(item.term);
+    watchlistItems.push(item);
+  }
+
   return {
     ok: true,
     entries,
@@ -628,6 +662,7 @@ export function parseBackupJson(text: string): ParseResult {
     savedMeals,
     savedMealComponents,
     medicationReminders,
+    watchlistItems,
   };
 }
 

@@ -22,6 +22,7 @@ import {
   listAllSavedMealComponents,
   listAllSavedMeals,
   listLogEntries,
+  listWatchlistItems,
 } from '@/db/repository';
 import { usePrefsStore } from '@/features/prefs/prefsStore';
 import { autoBackupFileName, autoBackupsToPrune, isAutoBackupDue } from '@/lib/autoBackup';
@@ -32,7 +33,7 @@ import { loadPrefs, savePrefs, type AppPrefs } from '@/lib/prefs';
  * revoked, storage-provider quirk, etc.) is deliberately kept out of the UI. */
 const FOLDER_ERROR_MESSAGE = "Couldn't write to the backup folder. Choose it again in Settings.";
 
-/** Gathers every backed-up table and serializes it in the existing v10 format
+/** Gathers every backed-up table and serializes it in the existing v11 format
  * (src/lib/backup.ts) — the one source both the share-sheet export and the
  * folder backups use, so they can never drift apart. */
 export async function buildBackupJson(): Promise<string> {
@@ -47,6 +48,7 @@ export async function buildBackupJson(): Promise<string> {
   const savedMeals = await listAllSavedMeals();
   const savedMealComponents = await listAllSavedMealComponents();
   const medicationReminders = await listAllMedicationReminders();
+  const watchlistItems = await listWatchlistItems();
   return entriesToJson(
     entries,
     mealComponents,
@@ -59,6 +61,7 @@ export async function buildBackupJson(): Promise<string> {
     savedMeals,
     savedMealComponents,
     medicationReminders,
+    watchlistItems,
   );
 }
 

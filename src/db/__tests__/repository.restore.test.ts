@@ -1,6 +1,13 @@
 // Repository tests: backup-restore id-preserving inserts (docs/HANDOFF.md §3
 // "Restore" — the 2026-09-26 bound-variable class + skip-if-exists semantics).
-import type { DayCheckIn, Medication, MedicationDose, MedicationEvent, MedicationReminder } from '../schema';
+import type {
+  DayCheckIn,
+  Medication,
+  MedicationDose,
+  MedicationEvent,
+  MedicationReminder,
+  WatchlistItem,
+} from '../schema';
 import * as repo from '../repository';
 import { closeTestDb, migrateTestDb, resetTestDb } from '../testUtils/testDb';
 
@@ -246,5 +253,53 @@ describe('insertMedicationRemindersPreservingIds (GitHub #29)', () => {
     const rows = Array.from({ length: 1200 }, (_, i) => reminderRow(`r-${i}`));
     expect(await repo.insertMedicationRemindersPreservingIds(rows)).toEqual({ inserted: 1200, skipped: 0 });
     expect(await repo.listAllMedicationReminders()).toHaveLength(1200);
+  });
+});
+
+describe('insertWatchlistItemsPreservingIds (backup v11)', () => {
+  const item = (id: string, term: string, createdAt = 1000): WatchlistItem => ({ id, term, createdAt });
+
+  it('inserts new rows preserving id and createdAt', async () => {
+    expect(await repo.insertWatchlistItemsPreservingIds([item('w1', 'lactose', 7), item('w2', 'soy', 8)])).toEqual({
+      inserted: 2,
+      skipped: 0,
+    });
+    expect(await repo.listWatchlistItems()).toEqual([item('w1', 'lactose', 7), item('w2', 'soy', 8)]);
+  });
+
+  it("skips a row whose id already exists, keeping the device's own entry", async () => {
+    await repo.insertWatchlistItemsPreservingIds([item('w1', 'lactose', 7)]);
+    const result = await repo.insertWatchlistItemsPreservingIds([item('w1', 'gluten', 9), item('w3', 'egg')]);
+    expect(result).toEqual({ inserted: 1, skipped: 1 });
+    const all = await repo.listWatchlistItems();
+    expect(all.map((r) => [r.id, r.term])).toEqual([
+      ['w1', 'lactose'],
+      ['w3', 'egg'],
+    ]);
+  });
+
+  it("skips a row whose term already exists under another id, keeping the device's row and createdAt", async () => {
+    await repo.insertWatchlistItemsPreservingIds([item('device-1', 'lactose', 7)]);
+    const result = await repo.insertWatchlistItemsPreservingIds([item('backup-1', 'lactose', 99), item('backup-2', 'soy')]);
+    expect(result).toEqual({ inserted: 1, skipped: 1 });
+    const all = await repo.listWatchlistItems();
+    expect(all.find((r) => r.term === 'lactose')).toEqual(item('device-1', 'lactose', 7));
+    expect(all.map((r) => r.id).sort()).toEqual(['backup-2', 'device-1']);
+  });
+
+  it('de-duplicates by term within the input batch, keeping the first, without violating the unique index', async () => {
+    const result = await repo.insertWatchlistItemsPreservingIds([item('a', 'milk'), item('b', 'milk'), item('c', 'egg')]);
+    expect(result).toEqual({ inserted: 2, skipped: 1 });
+    expect((await repo.listWatchlistItems()).map((r) => r.id).sort()).toEqual(['a', 'c']);
+  });
+
+  it('is a no-op for an empty array', async () => {
+    expect(await repo.insertWatchlistItemsPreservingIds([])).toEqual({ inserted: 0, skipped: 0 });
+  });
+
+  it('chunks a large restore without dropping or duplicating rows', async () => {
+    const rows = Array.from({ length: 1200 }, (_, i) => item(`w-${i}`, `term ${i}`));
+    expect(await repo.insertWatchlistItemsPreservingIds(rows)).toEqual({ inserted: 1200, skipped: 0 });
+    expect(await repo.listWatchlistItems()).toHaveLength(1200);
   });
 });

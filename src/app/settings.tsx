@@ -16,6 +16,7 @@ import {
   insertDayFactorsPreservingIds,
   insertSavedMealsPreservingIds,
   insertExperimentsPreservingIds,
+  insertWatchlistItemsPreservingIds,
   insertMealComponents,
   insertMedicationDosesPreservingIds,
   insertMedicationEventsPreservingIds,
@@ -44,6 +45,7 @@ import {
 } from '@/features/notifications/model';
 import { disableReminder, enableReminder, ensureNotificationPermission, getReminders } from '@/features/notifications/service';
 import { usePrefsStore } from '@/features/prefs/prefsStore';
+import { useWatchlistStore } from '@/features/watchlist/watchlistStore';
 import { useTheme } from '@/hooks/use-theme';
 import { lastBackupLabel } from '@/lib/autoBackup';
 import { dosesForRestoredEvents, parseBackupJson } from '@/lib/backup';
@@ -269,6 +271,16 @@ export default function SettingsScreen() {
           ? ` Imported ${savedMealResult.inserted} ${savedMealResult.inserted === 1 ? 'saved meal' : 'saved meals'} (${savedMealResult.skipped} already existed).`
           : '';
 
+      // Watched ingredients (backup v11): ids preserved; an id OR term already on
+      // the device is skipped (the device's own entry wins). The in-memory
+      // watchlist store is reloaded so the new terms show without a restart.
+      const watchlistResult = await insertWatchlistItemsPreservingIds(parsed.watchlistItems);
+      if (watchlistResult.inserted > 0) await useWatchlistStore.getState().load();
+      const watchlistSummary =
+        parsed.watchlistItems.length > 0
+          ? ` Imported ${watchlistResult.inserted} watched ${watchlistResult.inserted === 1 ? 'ingredient' : 'ingredients'} (${watchlistResult.skipped} already existed).`
+          : '';
+
       // Experiments (GitHub #19): ids preserved like medications; a restored
       // 'active' row is demoted to 'abandoned' rather than dropped when the
       // device already has (or this file already restored) an active one.
@@ -283,7 +295,7 @@ export default function SettingsScreen() {
 
       Alert.alert(
         'Import complete',
-        `Imported ${imported} ${imported === 1 ? 'entry' : 'entries'} (${skipped} already existed).${medSummary}${dayCheckInSummary}${dayFactorSummary}${savedMealSummary}${experimentSummary}`,
+        `Imported ${imported} ${imported === 1 ? 'entry' : 'entries'} (${skipped} already existed).${medSummary}${dayCheckInSummary}${dayFactorSummary}${savedMealSummary}${watchlistSummary}${experimentSummary}`,
       );
     } catch (e) {
       Alert.alert('Import failed', e instanceof Error ? e.message : String(e));

@@ -417,6 +417,46 @@ export async function addWatchlistItem(term: string): Promise<WatchlistItem> {
   return row;
 }
 
+/**
+ * Inserts watchlist rows from a backup PRESERVING their ids. A row is skipped
+ * when its id OR its term already exists on the device (the device's own entry
+ * wins; `term` is unique). Duplicate terms within `rows` keep the first.
+ * Chunked like the other restore helpers.
+ */
+export async function insertWatchlistItemsPreservingIds(
+  rows: WatchlistItem[],
+): Promise<{ inserted: number; skipped: number }> {
+  if (rows.length === 0) return { inserted: 0, skipped: 0 };
+
+  const seenTerms = new Set<string>();
+  const deduped: WatchlistItem[] = [];
+  for (const row of rows) {
+    if (seenTerms.has(row.term)) continue;
+    seenTerms.add(row.term);
+    deduped.push(row);
+  }
+
+  const existingIds = new Set<string>();
+  const existingTerms = new Set<string>();
+  for (const idBatch of chunk(deduped.map((row) => row.id), RESTORE_CHUNK_SIZE)) {
+    const existing = await db.select({ id: watchlistItem.id }).from(watchlistItem).where(inArray(watchlistItem.id, idBatch));
+    for (const row of existing) existingIds.add(row.id);
+  }
+  for (const termBatch of chunk(deduped.map((row) => row.term), RESTORE_CHUNK_SIZE)) {
+    const existing = await db
+      .select({ term: watchlistItem.term })
+      .from(watchlistItem)
+      .where(inArray(watchlistItem.term, termBatch));
+    for (const row of existing) existingTerms.add(row.term);
+  }
+
+  const toInsert = deduped.filter((row) => !existingIds.has(row.id) && !existingTerms.has(row.term));
+  for (const insertBatch of chunk(toInsert, RESTORE_CHUNK_SIZE)) {
+    await db.insert(watchlistItem).values(insertBatch);
+  }
+  return { inserted: toInsert.length, skipped: rows.length - toInsert.length };
+}
+
 export async function removeWatchlistItem(id: string): Promise<void> {
   await db.delete(watchlistItem).where(eq(watchlistItem.id, id));
 }

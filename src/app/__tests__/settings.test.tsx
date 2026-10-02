@@ -8,6 +8,8 @@ import {
   insertDayFactorsPreservingIds,
   insertExperimentsPreservingIds,
   insertMedicationRemindersPreservingIds,
+  insertWatchlistItemsPreservingIds,
+  listWatchlistItems,
   insertSavedMealsPreservingIds,
   listAllDayCheckIns,
   listAllDayFactors,
@@ -25,6 +27,7 @@ import { requestMedicationReminderRefresh } from '@/features/medications/reminde
 import { DEFAULT_REMINDERS } from '@/features/notifications/model';
 import { ensureNotificationPermission, getReminders } from '@/features/notifications/service';
 import { usePrefsStore } from '@/features/prefs/prefsStore';
+import { useWatchlistStore } from '@/features/watchlist/watchlistStore';
 import SettingsScreen from '../settings';
 
 // The gathering/export path (exportBackupViaShare/buildBackupJson) is kept
@@ -91,6 +94,8 @@ jest.mock('@/db/repository', () => ({
   insertSavedMealsPreservingIds: jest.fn(),
   listAllMedicationReminders: jest.fn(),
   insertMedicationRemindersPreservingIds: jest.fn(),
+  listWatchlistItems: jest.fn(),
+  insertWatchlistItemsPreservingIds: jest.fn(),
 }));
 
 jest.mock('@/features/notifications/service', () => ({
@@ -160,6 +165,8 @@ beforeEach(() => {
   (listAllSavedMealComponents as jest.Mock).mockResolvedValue([]);
   (insertSavedMealsPreservingIds as jest.Mock).mockResolvedValue({ inserted: 0, skipped: 0 });
   (insertMedicationRemindersPreservingIds as jest.Mock).mockResolvedValue({ inserted: 0, skipped: 0 });
+  (listWatchlistItems as jest.Mock).mockResolvedValue([]);
+  (insertWatchlistItemsPreservingIds as jest.Mock).mockResolvedValue({ inserted: 0, skipped: 0 });
   (ensureNotificationPermission as jest.Mock).mockResolvedValue(true);
 });
 
@@ -310,7 +317,7 @@ describe('SettingsScreen — Data section (day check-ins, GitHub #13)', () => {
     const [uri] = mockShareAsync.mock.calls[0];
     const { File } = jest.requireActual('expo-file-system');
     const written = JSON.parse(await new File(uri).text());
-    expect(written.version).toBe(10);
+    expect(written.version).toBe(11);
     expect(written.dayCheckIns).toEqual([
       { id: 'ci1', date: '2026-06-15', status: 'fine', createdAt: 1, updatedAt: 1 },
     ]);
@@ -459,7 +466,7 @@ describe('SettingsScreen — Data section (daily factors, GitHub #23)', () => {
     const [uri] = mockShareAsync.mock.calls[0];
     const { File } = jest.requireActual('expo-file-system');
     const written = JSON.parse(await new File(uri).text());
-    expect(written.version).toBe(10);
+    expect(written.version).toBe(11);
     expect(written.dayFactors).toEqual([row]);
   });
 
@@ -803,6 +810,56 @@ describe('SettingsScreen — Data section (medication reminders, GitHub #29)', (
     expect(insertMedicationRemindersPreservingIds).toHaveBeenCalledWith(backup.medicationReminders);
     // Restored reminders get armed, after they were inserted.
     expect(requestMedicationReminderRefresh).toHaveBeenCalledTimes(1);
+    (Alert.alert as jest.Mock).mockRestore();
+  });
+});
+
+describe('SettingsScreen — Data section (watched ingredients, backup v11)', () => {
+  const WATCH_ROWS = [
+    { id: 'w1', term: 'lactose', createdAt: 5 },
+    { id: 'w2', term: 'soy', createdAt: 6 },
+  ];
+
+  it('import passes the backup watchlist through, reports it, and reloads the watchlist store', async () => {
+    (insertWatchlistItemsPreservingIds as jest.Mock).mockResolvedValue({ inserted: 1, skipped: 1 });
+    (listWatchlistItems as jest.Mock).mockResolvedValue([WATCH_ROWS[0]]);
+    mockPickFileAsync.mockResolvedValue({
+      canceled: false,
+      result: { text: async () => JSON.stringify({ version: 11, entries: [], watchlistItems: WATCH_ROWS }) },
+    });
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+
+    const { findByLabelText } = await renderScreen(<SettingsScreen />);
+    await fireEvent.press(await findByLabelText('Import data'));
+
+    await waitFor(() =>
+      expect(Alert.alert).toHaveBeenCalledWith(
+        'Import complete',
+        'Imported 0 entries (0 already existed). Imported 1 watched ingredient (1 already existed).',
+      ),
+    );
+    expect(insertWatchlistItemsPreservingIds).toHaveBeenCalledWith(WATCH_ROWS);
+    expect(useWatchlistStore.getState().items).toEqual([WATCH_ROWS[0]]);
+    (Alert.alert as jest.Mock).mockRestore();
+  });
+
+  it('a v10 file without a watchlist adds no sentence and leaves the store alone', async () => {
+    useWatchlistStore.setState({ items: [], loaded: false });
+    mockPickFileAsync.mockResolvedValue({
+      canceled: false,
+      result: { text: async () => JSON.stringify({ version: 10, entries: [] }) },
+    });
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+
+    const { findByLabelText } = await renderScreen(<SettingsScreen />);
+    await fireEvent.press(await findByLabelText('Import data'));
+
+    await waitFor(() =>
+      expect(Alert.alert).toHaveBeenCalledWith('Import complete', 'Imported 0 entries (0 already existed).'),
+    );
+    expect(insertWatchlistItemsPreservingIds).toHaveBeenCalledWith([]);
+    expect(listWatchlistItems).not.toHaveBeenCalled();
+    expect(useWatchlistStore.getState().loaded).toBe(false);
     (Alert.alert as jest.Mock).mockRestore();
   });
 });

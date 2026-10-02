@@ -10,6 +10,7 @@ import type {
   MedicationReminder,
   SavedMeal,
   SavedMealComponent,
+  WatchlistItem,
 } from '@/db/schema';
 import { dosesForRestoredEvents, entriesToJson, parseBackupJson } from '../backup';
 
@@ -183,9 +184,9 @@ describe('entriesToJson / parseBackupJson roundtrip', () => {
       [BASE_MEDICATION_EVENT],
       [BASE_MEDICATION_DOSE],
     );
-    // entriesToJson always writes the current version (10) — parseBackupJson
+    // entriesToJson always writes the current version (11) — parseBackupJson
     // separately still reads older v1-v8 files (tested below).
-    expect(JSON.parse(json).version).toBe(10);
+    expect(JSON.parse(json).version).toBe(11);
 
     const result = parseBackupJson(json);
     expect(result.ok).toBe(true);
@@ -223,7 +224,7 @@ describe('entriesToJson / parseBackupJson roundtrip', () => {
       [BASE_DAY_CHECK_IN],
       [BASE_EXPERIMENT],
     );
-    expect(JSON.parse(json).version).toBe(10);
+    expect(JSON.parse(json).version).toBe(11);
 
     const result = parseBackupJson(json);
     expect(result.ok).toBe(true);
@@ -363,7 +364,7 @@ describe('legacy v3 backup import (no dayCheckIns key)', () => {
 describe('daily factors (GitHub #23, backup v6)', () => {
   it('roundtrips daily factors intact (v6 data, now in a v9 file)', () => {
     const json = entriesToJson([BASE_ENTRY], [], [], [], [], [], [], [BASE_DAY_FACTOR]);
-    expect(JSON.parse(json).version).toBe(10);
+    expect(JSON.parse(json).version).toBe(11);
 
     const result = parseBackupJson(json);
     expect(result.ok).toBe(true);
@@ -508,7 +509,7 @@ describe('medication validation', () => {
   it('roundtrips isRegular (GitHub #26)', () => {
     const regular: Medication = { ...BASE_MEDICATION, id: 'm-reg', isRegular: true };
     const json = entriesToJson([BASE_ENTRY], [], [BASE_MEDICATION, regular]);
-    expect(JSON.parse(json).version).toBe(10);
+    expect(JSON.parse(json).version).toBe(11);
     const result = parseBackupJson(json);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -542,7 +543,7 @@ describe('medication dose reason (GitHub #28, backup v9)', () => {
   it('roundtrips a dose reason in a v9 file', () => {
     const withReason: MedicationDose = { ...BASE_MEDICATION_DOSE, reason: 'headache' };
     const json = entriesToJson([BASE_ENTRY], [], [BASE_MEDICATION], [BASE_MEDICATION_EVENT], [withReason]);
-    expect(JSON.parse(json).version).toBe(10);
+    expect(JSON.parse(json).version).toBe(11);
     const result = parseBackupJson(json);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -704,7 +705,7 @@ describe('saved meals (GitHub #25, backup v7)', () => {
 
   it('roundtrips saved meals and their items in a v9 file', () => {
     const json = entriesToJson([BASE_ENTRY], [], [], [], [], [], [], [], [MEAL], [COMPONENT]);
-    expect(JSON.parse(json).version).toBe(10);
+    expect(JSON.parse(json).version).toBe(11);
 
     const result = parseBackupJson(json);
     expect(result.ok).toBe(true);
@@ -788,9 +789,9 @@ describe('medication reminders (GitHub #29, backup v10)', () => {
     updatedAt: 2,
   };
 
-  it('roundtrips reminders through a v10 file, preserving ids and fields', () => {
+  it('roundtrips reminders through a v11 file, preserving ids and fields', () => {
     const json = entriesToJson([BASE_ENTRY], [], [], [], [], [], [], [], [], [], [REMINDER]);
-    expect(JSON.parse(json).version).toBe(10);
+    expect(JSON.parse(json).version).toBe(11);
     const result = parseBackupJson(json);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -831,5 +832,63 @@ describe('medication reminders (GitHub #29, backup v10)', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.medicationReminders[0].enabled).toBe(true);
+  });
+});
+
+describe('watched ingredients (backup v11)', () => {
+  const ITEM: WatchlistItem = { id: 'w1', term: 'lactose', createdAt: 5000 };
+
+  it('roundtrips the watchlist through a v11 file, preserving ids and createdAt', () => {
+    const json = entriesToJson([BASE_ENTRY], [], [], [], [], [], [], [], [], [], [], [
+      ITEM,
+      { id: 'w2', term: 'soy lecithin', createdAt: 6000 },
+    ]);
+    expect(JSON.parse(json).version).toBe(11);
+    const result = parseBackupJson(json);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.watchlistItems).toEqual([ITEM, { id: 'w2', term: 'soy lecithin', createdAt: 6000 }]);
+  });
+
+  it('writes an empty watchlist by default', () => {
+    expect(JSON.parse(entriesToJson([BASE_ENTRY])).watchlistItems).toEqual([]);
+  });
+
+  it('imports a v10 file (no watchlistItems key) with none', () => {
+    const result = parseBackupJson(JSON.stringify({ version: 10, entries: [BASE_ENTRY] }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.watchlistItems).toEqual([]);
+  });
+
+  it('re-normalises each term with the watchlist normaliser', () => {
+    const result = parseBackupJson(
+      JSON.stringify({ version: 11, entries: [BASE_ENTRY], watchlistItems: [{ ...ITEM, term: '  Soy  Lecithin!! ' }] }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.watchlistItems).toEqual([{ id: 'w1', term: 'soy lecithin', createdAt: 5000 }]);
+  });
+
+  it('drops bad rows (no id, too-short term, bad createdAt) and de-dupes by term, first wins', () => {
+    const rows = [
+      { ...ITEM, id: '' },
+      { ...ITEM, id: 'short', term: 'a' },
+      { ...ITEM, id: 'symbols', term: '!!!' },
+      { ...ITEM, id: 'no-term', term: undefined },
+      { ...ITEM, id: 'bad-time', createdAt: '5000' },
+      'not an object',
+      null,
+      { id: 'first', term: 'Milk', createdAt: 1 },
+      { id: 'second', term: 'milk', createdAt: 2 },
+      { id: 'other', term: 'egg', createdAt: 3 },
+    ];
+    const result = parseBackupJson(JSON.stringify({ version: 11, entries: [BASE_ENTRY], watchlistItems: rows }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.watchlistItems).toEqual([
+      { id: 'first', term: 'milk', createdAt: 1 },
+      { id: 'other', term: 'egg', createdAt: 3 },
+    ]);
   });
 });
