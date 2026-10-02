@@ -69,3 +69,20 @@ export function parseDayCheckInResponse(r: ResponseLike): { date: string; status
 
   return { date, status };
 }
+
+const BANNER_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * Text of the Home confirmation banner shown after a check-in is answered from
+ * the notification: "✓ Rough day recorded", plus " for Sep 3" when the
+ * answered day isn't today (a late tap on yesterday's notification). `date`
+ * and `todayKey` are local 'YYYY-MM-DD' keys.
+ */
+export function recordedBannerText(status: DayStatus, date: string, todayKey: string): string {
+  const base = `✓ ${status === 'rough' ? 'Rough' : 'Fine'} day recorded`;
+  if (date === todayKey) return base;
+  const month = BANNER_MONTHS[Number(date.slice(5, 7)) - 1];
+  const day = Number(date.slice(8, 10));
+  if (!month || !Number.isFinite(day)) return base;
+  return `${base} for ${month} ${day}`;
+}

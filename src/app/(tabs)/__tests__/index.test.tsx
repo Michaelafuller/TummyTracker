@@ -4,6 +4,7 @@ import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 
 import { getMealComponents, hasAnyLogEntry, listRecentFoodEntries } from '@/db/repository';
 import type { LogEntry, MealComponent, SavedMeal, SavedMealComponent } from '@/db/schema';
+import { useCheckInFeedbackStore } from '@/features/checkin/checkInFeedbackStore';
 import { useMealBuilderStore } from '@/features/logging/mealBuilderStore';
 import type { MealComponentDraft } from '@/lib/mealAggregate';
 import { groupSavedMeals, type SavedMealWithComponents } from '@/lib/savedMeals';
@@ -160,6 +161,7 @@ beforeEach(() => {
   (hasAnyLogEntry as jest.Mock).mockResolvedValue(false);
   mockSavedMeals = [];
   useMealBuilderStore.setState({ components: [], reviewPrefill: null, editingSavedMealId: null });
+  useCheckInFeedbackStore.setState({ recorded: null });
 });
 
 describe('HomeScreen', () => {
@@ -176,6 +178,22 @@ describe('HomeScreen', () => {
     expect(mockUseDayCheckInResponses).toHaveBeenCalled();
     expect(mockUseExperimentNotificationResponses).toHaveBeenCalled();
     expect(getByTestId('day-check-in-card').props.children).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('shows no check-in confirmation banner until an answer was recorded from the notification', async () => {
+    (listRecentFoodEntries as jest.Mock).mockResolvedValue([]);
+    const { queryByTestId } = await render(<HomeScreen />);
+    expect(queryByTestId('check-in-recorded-banner')).toBeNull();
+  });
+
+  it('renders the check-in confirmation banner at the top of Home when the store holds a recorded answer', async () => {
+    (listRecentFoodEntries as jest.Mock).mockResolvedValue([]);
+    useCheckInFeedbackStore.setState({
+      recorded: { date: '2026-09-02', status: 'rough', at: new Date(2026, 8, 3, 8, 0).getTime() },
+    });
+    const { getByTestId, getByText } = await render(<HomeScreen />);
+    expect(getByTestId('check-in-recorded-banner')).toBeTruthy();
+    expect(getByText('✓ Rough day recorded for Sep 2')).toBeTruthy();
   });
 
   it('mounts the medication-reminder response hook (GitHub #29)', async () => {

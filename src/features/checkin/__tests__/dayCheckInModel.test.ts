@@ -3,6 +3,7 @@ import {
   DAY_CHECK_IN_SLOT,
   dayCheckInFireDates,
   parseDayCheckInResponse,
+  recordedBannerText,
   type ResponseLike,
 } from '../dayCheckInModel';
 
@@ -126,5 +127,20 @@ describe('parseDayCheckInResponse', () => {
       }),
     );
     expect(result).toBeNull();
+  });
+});
+
+describe('recordedBannerText', () => {
+  it('reads "Rough day recorded" for today', () => {
+    expect(recordedBannerText('rough', '2026-09-03', '2026-09-03')).toBe('✓ Rough day recorded');
+  });
+
+  it('reads "Fine day recorded" for today', () => {
+    expect(recordedBannerText('fine', '2026-09-03', '2026-09-03')).toBe('✓ Fine day recorded');
+  });
+
+  it('adds the date when the answered day is not today', () => {
+    expect(recordedBannerText('rough', '2026-09-02', '2026-09-03')).toBe('✓ Rough day recorded for Sep 2');
+    expect(recordedBannerText('fine', '2025-12-31', '2026-01-01')).toBe('✓ Fine day recorded for Dec 31');
   });
 });

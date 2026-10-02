@@ -1,6 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { renderHook, waitFor } from '@testing-library/react-native';
 
+import { useCheckInFeedbackStore } from '../checkInFeedbackStore';
 import { DAY_CHECK_IN_ACTIONS, DAY_CHECK_IN_SLOT } from '../dayCheckInModel';
 import { recordDayCheckIn } from '../dayCheckInService';
 import { useDayCheckInResponses } from '../useDayCheckInResponses';
@@ -27,6 +28,8 @@ function fineResponse(identifier = 'notif-1', date = '2026-06-14') {
 beforeEach(() => {
   mockResponse = null;
   jest.clearAllMocks();
+  (recordDayCheckIn as jest.Mock).mockResolvedValue(undefined);
+  useCheckInFeedbackStore.setState({ recorded: null });
 });
 
 describe('useDayCheckInResponses', () => {
@@ -90,5 +93,44 @@ describe('useDayCheckInResponses', () => {
 
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(recordDayCheckIn).not.toHaveBeenCalled();
+  });
+
+  it('shows the confirmation for the recorded date and status after a successful record', async () => {
+    mockResponse = {
+      actionIdentifier: DAY_CHECK_IN_ACTIONS.rough,
+      notification: { request: { identifier: 'notif-6', content: { data: { slot: DAY_CHECK_IN_SLOT, date: '2026-06-14' } } } },
+    };
+    const { rerender } = await renderHook(() => useDayCheckInResponses());
+    rerender({});
+
+    await waitFor(() => expect(useCheckInFeedbackStore.getState().recorded).not.toBeNull());
+    expect(useCheckInFeedbackStore.getState().recorded).toEqual({
+      date: '2026-06-14',
+      status: 'rough',
+      at: expect.any(Number),
+    });
+  });
+
+  it('does not show the confirmation when the record fails (and still dismisses the notification)', async () => {
+    (recordDayCheckIn as jest.Mock).mockRejectedValueOnce(new Error('db down'));
+    mockResponse = fineResponse('notif-7', '2026-06-14');
+    const { rerender } = await renderHook(() => useDayCheckInResponses());
+    rerender({});
+
+    await waitFor(() => expect(Notifications.dismissNotificationAsync).toHaveBeenCalledWith('notif-7'));
+    expect(recordDayCheckIn).toHaveBeenCalledTimes(1);
+    expect(useCheckInFeedbackStore.getState().recorded).toBeNull();
+  });
+
+  it('does not show a confirmation for a plain body tap', async () => {
+    mockResponse = {
+      actionIdentifier: 'expo.modules.notifications.actions.DEFAULT',
+      notification: { request: { identifier: 'notif-8', content: { data: { slot: DAY_CHECK_IN_SLOT, date: '2026-06-14' } } } },
+    };
+    const { rerender } = await renderHook(() => useDayCheckInResponses());
+    rerender({});
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(useCheckInFeedbackStore.getState().recorded).toBeNull();
   });
 });

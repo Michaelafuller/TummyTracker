@@ -10,6 +10,7 @@ import { BottomTabInset, Spacing } from '@/constants/theme';
 import type { LogEntry } from '@/db/schema';
 import { hasAnyLogEntry, listRecentFoodEntries } from '@/db/repository';
 import { BackupNudge } from '@/features/backup/BackupNudge';
+import { CheckInRecordedBanner } from '@/features/checkin/CheckInRecordedBanner';
 import { DayCheckInCard } from '@/features/checkin/DayCheckInCard';
 import { useDayCheckInResponses } from '@/features/checkin/useDayCheckInResponses';
 import { ExperimentHomeCard } from '@/features/experiments/ExperimentHomeCard';
@@ -90,6 +91,8 @@ export default function HomeScreen() {
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
         <KeyboardShiftView testID="home-keyboard-shift" style={styles.content}>
+          <CheckInRecordedBanner />
+
           <ThemedView style={styles.hero}>
             {/* Reserves room under the gear overlay (SettingsButton, rendered
              * above every tab in (tabs)/_layout.tsx — HANDOFF.md §5): the

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import * as Notifications from 'expo-notifications';
 
+import { useCheckInFeedbackStore } from './checkInFeedbackStore';
 import { parseDayCheckInResponse } from './dayCheckInModel';
 import { recordDayCheckIn } from './dayCheckInService';
 
@@ -33,6 +34,8 @@ export function useDayCheckInResponses(): void {
     (async () => {
       try {
         await recordDayCheckIn(parsed.date, parsed.status);
+        // Only after the record resolved — a failed write shows nothing new.
+        useCheckInFeedbackStore.getState().show({ date: parsed.date, status: parsed.status, at: Date.now() });
       } catch {
         // A failed record must not crash the screen.
       }
