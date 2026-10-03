@@ -23,8 +23,8 @@ Status at a glance (2026-10-01):
   2026-09-27). Last full Jest: **144 / 2,035 on merged `main`** (2026-10-01).
 - **§3 flows all pass (2026-10-02).** Next: the owner's §3 hand checks,
   The owner's two ideas are built (`6a07394` banner, `9f967a7` Select all;
-  147 / 2,088 green) — `s-medication-entry` (Select all) still to run on the
-  device; the banner is a hand check below.
+  147 / 2,088 green); `s-medication-entry` with Select all passes on the
+  device (2026-10-02); the banner is a hand check below.
 
 ## 1. On `main`, before the merge — #13–#18 — ✅ DONE 2026-10-01
 

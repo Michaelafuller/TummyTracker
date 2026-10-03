@@ -23,6 +23,9 @@
   3. Backups didn't carry the watchlist → backup v11 (`e1342de`).
 - **Full `npm test`: 146 suites / 2,064 tests**, typecheck, lint, `bundle:check`
   clean.
+- **Owner ideas built** (`6a07394` check-in banner, `9f967a7` Select all):
+  full `npm test` **147 / 2,088**; `s-medication-entry` (now ticking both meds
+  with Select all) passes on the device.
 
 ## Addendum — §1 device run + merge, 2026-10-01 (OWED.md §1–§2)
 
